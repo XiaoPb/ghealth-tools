@@ -38,7 +38,7 @@ fun WorkModeDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onSelect(mode) }
-                            .padding(vertical = 4.dp),
+                            .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
@@ -77,7 +77,7 @@ fun FunctionSelectDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 2.dp),
+                        .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(
@@ -98,7 +98,7 @@ fun FunctionSelectDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 2.dp),
+                            .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
