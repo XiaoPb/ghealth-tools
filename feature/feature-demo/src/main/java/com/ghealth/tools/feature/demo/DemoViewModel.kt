@@ -1,7 +1,6 @@
 package com.ghealth.tools.feature.demo
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.protocol.GhFuncFrame
 import com.ghealth.tools.ble.protocol.GhFuncId
 import com.ghealth.tools.core.model.FunctionMode
@@ -12,10 +11,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
+data class FunctionData(
+    val function: FunctionMode,
+    val algorithmResult: String = "--",
+    val frameCount: Int = 0
+)
+
 data class DemoUiState(
-    val availableFunctions: List<FunctionMode> = FunctionMode.entries,
+    val functionDataMap: Map<FunctionMode, FunctionData> = emptyMap(),
     val selectedFunction: FunctionMode? = null,
-    val latestFrame: GhFuncFrame? = null,
     val waveformData: List<Float> = emptyList(),
     val isRecording: Boolean = false
 )
@@ -34,11 +38,24 @@ class DemoViewModel @Inject constructor() : ViewModel() {
     }
 
     fun onFrameReceived(frame: GhFuncFrame) {
-        _uiState.update { it.copy(latestFrame = frame) }
-        if (frame.rawdata.isNotEmpty()) {
+        val funcMode = frame.funcId.toFunctionMode() ?: return
+        _uiState.update { state ->
+            val current = state.functionDataMap[funcMode] ?: FunctionData(funcMode)
+            val updated = current.copy(
+                frameCount = current.frameCount + 1,
+                algorithmResult = extractAlgorithmResult(frame)
+            )
+            state.copy(functionDataMap = state.functionDataMap + (funcMode to updated))
+        }
+
+        if (_uiState.value.selectedFunction == funcMode && frame.rawdata.isNotEmpty()) {
             waveformBuffer.add(frame.rawdata[0].toFloat())
             _uiState.update { it.copy(waveformData = waveformBuffer.toList()) }
         }
+    }
+
+    private fun extractAlgorithmResult(frame: GhFuncFrame): String {
+        return if (frame.rawdata.isNotEmpty()) frame.rawdata[0].toString() else "--"
     }
 
     fun toggleRecording() {
@@ -48,6 +65,22 @@ class DemoViewModel @Inject constructor() : ViewModel() {
     fun goBack() {
         _uiState.update { it.copy(selectedFunction = null, waveformData = emptyList()) }
         waveformBuffer.clear()
+    }
+
+    private fun GhFuncId.toFunctionMode(): FunctionMode? = when (this) {
+        GhFuncId.ADT -> FunctionMode.ADT
+        GhFuncId.HR -> FunctionMode.HR
+        GhFuncId.HRV -> FunctionMode.HRV
+        GhFuncId.SPO2 -> FunctionMode.SPO2
+        GhFuncId.NADT_GREEN -> FunctionMode.NADT_GREEN
+        GhFuncId.NADT_IR -> FunctionMode.NADT_IR
+        GhFuncId.TEST1 -> FunctionMode.TEST1
+        GhFuncId.TEST2 -> FunctionMode.TEST2
+        GhFuncId.EVK -> FunctionMode.EVK
+        GhFuncId.ECG -> FunctionMode.ECG
+        GhFuncId.GSR -> FunctionMode.GSR
+        GhFuncId.BIA -> FunctionMode.BIA
+        else -> null
     }
 }
 

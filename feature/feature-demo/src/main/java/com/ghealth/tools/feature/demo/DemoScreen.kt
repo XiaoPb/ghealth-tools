@@ -3,22 +3,27 @@ package com.ghealth.tools.feature.demo
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,13 +38,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ghealth.tools.core.model.FunctionMode
+import com.ghealth.tools.core.ui.component.EmptyStateView
 import com.ghealth.tools.core.ui.component.GHealthTopAppBar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,7 +55,7 @@ fun DemoScreen(viewModel: DemoViewModel = hiltViewModel()) {
 
     if (state.selectedFunction == null) {
         FunctionListScreen(
-            functions = state.availableFunctions,
+            functionDataMap = state.functionDataMap,
             onSelect = viewModel::selectFunction
         )
     } else {
@@ -65,47 +71,90 @@ fun DemoScreen(viewModel: DemoViewModel = hiltViewModel()) {
 
 @Composable
 private fun FunctionListScreen(
-    functions: List<FunctionMode>,
+    functionDataMap: Map<FunctionMode, FunctionData>,
     onSelect: (FunctionMode) -> Unit
 ) {
     Scaffold(
         topBar = { GHealthTopAppBar(title = "数据演示") }
     ) { padding ->
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(padding)
-        ) {
-            items(functions) { func ->
-                Card(
-                    onClick = { onSelect(func) },
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+        if (functionDataMap.isEmpty()) {
+            EmptyStateView(
+                icon = Icons.Default.ShowChart,
+                title = "等待数据",
+                subtitle = "连接设备并开始采集后，功能数据将显示在此处"
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(functionDataMap.values.toList(), key = { it.function }) { data ->
+                    FunctionRow(
+                        data = data,
+                        onClick = { onSelect(data.function) }
                     )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Default.ShowChart,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = func.displayName,
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FunctionRow(data: FunctionData, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = data.function.icon(),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = data.function.displayName,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = data.algorithmResult,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "${data.frameCount} 帧",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private fun FunctionMode.icon(): ImageVector = when (this) {
+    FunctionMode.HR -> Icons.Default.Favorite
+    FunctionMode.HRV -> Icons.Default.MonitorHeart
+    FunctionMode.SPO2 -> Icons.Default.WaterDrop
+    FunctionMode.ECG -> Icons.Default.MonitorHeart
+    FunctionMode.ADT -> Icons.Default.Sensors
+    FunctionMode.GSR -> Icons.Default.Thermostat
+    FunctionMode.BIA -> Icons.Default.Speed
+    else -> Icons.Default.ShowChart
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

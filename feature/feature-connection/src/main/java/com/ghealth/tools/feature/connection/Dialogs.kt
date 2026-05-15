@@ -65,12 +65,33 @@ fun FunctionSelectDialog(
     onDismiss: () -> Unit
 ) {
     val checkedItems = remember(selected) { selected.toMutableStateList() }
+    val allSelected = checkedItems.size == FunctionMode.entries.size
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择功能") },
         text = {
             Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = allSelected,
+                        onCheckedChange = { checked ->
+                            checkedItems.clear()
+                            if (checked) checkedItems.addAll(FunctionMode.entries)
+                        }
+                    )
+                    Text(
+                        text = "全选",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 FunctionMode.entries.forEach { func ->
                     Row(
                         modifier = Modifier
