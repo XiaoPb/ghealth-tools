@@ -1,5 +1,6 @@
 package com.ghealth.tools.feature.connection
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,12 +37,13 @@ fun WorkModeDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable { onSelect(mode) }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
                             selected = false,
-                            onClick = { onSelect(mode) }
+                            onClick = null
                         )
                         Text(
                             text = mode.displayName,
