@@ -255,7 +255,7 @@ private fun ParamInputField(
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
                     ) {
-                        param.options.forEach { option ->
+                        param.options!!.forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option.label) },
                                 onClick = {
