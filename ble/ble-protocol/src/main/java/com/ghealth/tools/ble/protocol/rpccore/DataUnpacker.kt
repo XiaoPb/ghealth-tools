@@ -374,64 +374,46 @@ fun unpack(data: ByteArray, format: String): Result<UnpackValue> {
 }
 
 fun unpackU8Array(data: ByteArray): UByteArray {
-    return when (val result = unpack(data, "<u8*>")) {
-        is Result.Success -> (result.value as? UnpackValue.U8Array)?.value ?: UByteArray(0)
-        else -> UByteArray(0)
-    }
+    val result = unpack(data, "<u8*>").getOrNull()
+    return (result as? UnpackValue.U8Array)?.value ?: UByteArray(0)
 }
 
 fun unpackU16Array(data: ByteArray): UShortArray {
-    return when (val result = unpack(data, "<u16*>")) {
-        is Result.Success -> (result.value as? UnpackValue.U16Array)?.value ?: UShortArray(0)
-        else -> UShortArray(0)
-    }
+    val result = unpack(data, "<u16*>").getOrNull()
+    return (result as? UnpackValue.U16Array)?.value ?: UShortArray(0)
 }
 
 fun unpackU32Array(data: ByteArray): UIntArray {
-    return when (val result = unpack(data, "<u32*>")) {
-        is Result.Success -> (result.value as? UnpackValue.U32Array)?.value ?: UIntArray(0)
-        else -> UIntArray(0)
-    }
+    val result = unpack(data, "<u32*>").getOrNull()
+    return (result as? UnpackValue.U32Array)?.value ?: UIntArray(0)
 }
 
 fun unpackU64Array(data: ByteArray): ULongArray {
-    return when (val result = unpack(data, "<u64*>")) {
-        is Result.Success -> (result.value as? UnpackValue.U64Array)?.value ?: ULongArray(0)
-        else -> ULongArray(0)
-    }
+    val result = unpack(data, "<u64*>").getOrNull()
+    return (result as? UnpackValue.U64Array)?.value ?: ULongArray(0)
 }
 
 fun unpackI8Array(data: ByteArray): ByteArray {
-    return when (val result = unpack(data, "<i8*>")) {
-        is Result.Success -> (result.value as? UnpackValue.I8Array)?.value ?: ByteArray(0)
-        else -> ByteArray(0)
-    }
+    val result = unpack(data, "<i8*>").getOrNull()
+    return (result as? UnpackValue.I8Array)?.value ?: ByteArray(0)
 }
 
 fun unpackI16Array(data: ByteArray): ShortArray {
-    return when (val result = unpack(data, "<i16*>")) {
-        is Result.Success -> (result.value as? UnpackValue.I16Array)?.value ?: ShortArray(0)
-        else -> ShortArray(0)
-    }
+    val result = unpack(data, "<i16*>").getOrNull()
+    return (result as? UnpackValue.I16Array)?.value ?: ShortArray(0)
 }
 
 fun unpackI32Array(data: ByteArray): IntArray {
-    return when (val result = unpack(data, "<i32*>")) {
-        is Result.Success -> (result.value as? UnpackValue.I32Array)?.value ?: IntArray(0)
-        else -> IntArray(0)
-    }
+    val result = unpack(data, "<i32*>").getOrNull()
+    return (result as? UnpackValue.I32Array)?.value ?: IntArray(0)
 }
 
 fun unpackI64Array(data: ByteArray): LongArray {
-    return when (val result = unpack(data, "<i64*>")) {
-        is Result.Success -> (result.value as? UnpackValue.I64Array)?.value ?: LongArray(0)
-        else -> LongArray(0)
-    }
+    val result = unpack(data, "<i64*>").getOrNull()
+    return (result as? UnpackValue.I64Array)?.value ?: LongArray(0)
 }
 
 fun unpackString(data: ByteArray): String {
-    return when (val result = unpack(data, "<s>")) {
-        is Result.Success -> (result.value as? UnpackValue.StringValue)?.value ?: ""
-        else -> ""
-    }
+    val result = unpack(data, "<s>").getOrNull()
+    return (result as? UnpackValue.StringValue)?.value ?: ""
 }

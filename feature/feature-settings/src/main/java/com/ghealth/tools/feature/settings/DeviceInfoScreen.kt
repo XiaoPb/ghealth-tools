@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
@@ -23,6 +24,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.ghealth.tools.core.ui.component.GHealthTopAppBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,9 +44,13 @@ fun DeviceInfoScreen(
 
     Scaffold(
         topBar = {
-            GHealthTopAppBar(
-                title = "设备信息",
-                onNavigateBack = onNavigateBack,
+            TopAppBar(
+                title = { Text("设备信息") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
                 actions = {
                     IconButton(onClick = { viewModel.refreshDeviceInfo() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")

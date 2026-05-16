@@ -4,6 +4,7 @@ import com.ghealth.tools.ble.protocol.rpccore.FrameBuilder
 import com.ghealth.tools.ble.protocol.rpccore.FrameParser
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.rpccore.ProtocolError
+import com.ghealth.tools.ble.protocol.rpccore.unpackU8Array
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -29,7 +30,7 @@ class Gh3036Executor(
     private val pendingCalls = ConcurrentHashMap<String, PendingCall>()
     private var sendFunction: SendFunction? = null
     private var frameCallback: FrameCallback? = null
-    private var invokeIndex: Byte = 1
+    private var invokeIdx: Byte = 1
 
     private val multiFrameBuffer = MultiFrameBuffer()
 
@@ -50,8 +51,8 @@ class Gh3036Executor(
     }
 
     private fun handleGData(data: ByteArray) {
-        val unpacked = unpackU8Array(data)
-        val frames = frameDecoder.decodeFrames(unpacked)
+        val unpacked = unpackU8Array(data).toByteArray()
+        val frames = frameDecoder.decode(unpacked)
 
         frames.forEach { frame ->
             frameCallback?.invoke(frame)
