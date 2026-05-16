@@ -163,6 +163,14 @@ private fun ConnectionMainContent(
         )
     }
 
+    if (state.showTestConfigDialog && state.masterDeviceName != null) {
+        TestConfigDialog(
+            deviceName = state.masterDeviceName,
+            onConfirm = viewModel::confirmTestConfig,
+            onDismiss = viewModel::dismissTestConfigDialog
+        )
+    }
+
     state.scanError?.let { error ->
         AlertDialog(
             onDismissRequest = viewModel::clearScanError,
@@ -214,6 +222,12 @@ private fun MainMenuContent(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         DeviceStatusCard(state.connectedDevices.values.toList(), onDisconnectDevice)
+
+        if (state.dataMonitorState.isMonitoring || state.dataMonitorState.testConfig != null) {
+            DataMonitorCard(
+                state = state.dataMonitorState
+            )
+        }
 
         Spacer(modifier = Modifier.height(4.dp))
 

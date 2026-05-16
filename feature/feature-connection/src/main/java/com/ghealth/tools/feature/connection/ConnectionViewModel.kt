@@ -6,11 +6,14 @@ import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.ConnectionError
 import com.ghealth.tools.ble.connection.DeviceRole
+import com.ghealth.tools.ble.protocol.gh3036.KEY_G
 import com.ghealth.tools.ble.scanner.BleScanException
 import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.model.BleDevice
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.DataLogEntry
 import com.ghealth.tools.core.model.FunctionMode
+import com.ghealth.tools.core.model.TestConfig
 import com.ghealth.tools.core.model.WorkMode
 import com.juul.kable.Advertisement
 import com.juul.kable.Peripheral
@@ -41,7 +44,10 @@ data class ConnectionUiState(
     val connectionErrorDevice: String? = null,
     val isBluetoothEnabled: Boolean = true,
     val hasPermissions: Boolean = true,
-    val commandExecutionState: CommandExecutionState = CommandExecutionState()
+    val commandExecutionState: CommandExecutionState = CommandExecutionState(),
+    val showTestConfigDialog: Boolean = false,
+    val masterDeviceName: String? = null,
+    val dataMonitorState: DataMonitorState = DataMonitorState()
 )
 
 @HiltViewModel
@@ -59,7 +65,23 @@ class ConnectionViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             connectionManager.devices.collect { devices ->
+                val previousDevices = _uiState.value.connectedDevices
                 _uiState.update { it.copy(connectedDevices = devices) }
+                
+                val newMaster = devices.entries.find { 
+                    it.value.role == DeviceRole.MASTER && 
+                    it.value.state == ConnectionState.CONNECTED &&
+                    previousDevices[it.key]?.state != ConnectionState.CONNECTED
+                }
+                
+                if (newMaster != null && !_uiState.value.dataMonitorState.isMonitoring) {
+                    _uiState.update { 
+                        it.copy(
+                            showTestConfigDialog = true,
+                            masterDeviceName = newMaster.value.name
+                        )
+                    }
+                }
             }
         }
 
@@ -72,6 +94,12 @@ class ConnectionViewModel @Inject constructor(
                         connectionErrorDevice = address
                     )
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            connectionManager.dataFlow.collect { (address, parseResult) ->
+                handleParsedData(address, parseResult)
             }
         }
 
@@ -291,6 +319,114 @@ class ConnectionViewModel @Inject constructor(
                 commandExecutionState = CommandExecutionState()
             )
         }
+    }
+
+    fun confirmTestConfig(config: TestConfig) {
+        _uiState.update { 
+            it.copy(
+                showTestConfigDialog = false,
+                dataMonitorState = DataMonitorState(
+                    isMonitoring = true,
+                    testConfig = config,
+                    logEntries = emptyList(),
+                    errorCount = 0,
+                    lastError = null
+                )
+            )
+        }
+        Timber.i("Test started: tester=${config.testerName}, scenario=${config.scenario}, round=${config.testRound}")
+    }
+
+    fun dismissTestConfigDialog() {
+        _uiState.update { 
+            it.copy(
+                showTestConfigDialog = false,
+                masterDeviceName = null
+            )
+        }
+    }
+
+    fun stopMonitoring() {
+        _uiState.update { 
+            it.copy(
+                dataMonitorState = it.dataMonitorState.copy(
+                    isMonitoring = false
+                )
+            )
+        }
+    }
+
+    fun clearDataLogs() {
+        _uiState.update { 
+            it.copy(
+                dataMonitorState = it.dataMonitorState.copy(
+                    logEntries = emptyList(),
+                    errorCount = 0,
+                    lastError = null
+                )
+            )
+        }
+    }
+
+    private fun handleParsedData(address: String, parseResult: com.ghealth.tools.ble.protocol.rpccore.ParseResult) {
+        val monitorState = _uiState.value.dataMonitorState
+        if (!monitorState.isMonitoring) return
+
+        val masterAddress = _uiState.value.connectedDevices.entries
+            .find { it.value.role == DeviceRole.MASTER }?.key
+        
+        if (address != masterAddress) return
+
+        val entry = DataLogEntry(
+            timestamp = System.currentTimeMillis(),
+            key = parseResult.key,
+            param = parseResult.param,
+            isError = false,
+            errorMessage = null
+        )
+
+        val newEntries = monitorState.logEntries + entry
+        val maxEntries = 1000
+        val trimmedEntries = if (newEntries.size > maxEntries) {
+            newEntries.takeLast(maxEntries)
+        } else {
+            newEntries
+        }
+
+        _uiState.update { 
+            it.copy(
+                dataMonitorState = it.dataMonitorState.copy(
+                    logEntries = trimmedEntries
+                )
+            )
+        }
+
+        Timber.v("Data received: key=${parseResult.key}, size=${parseResult.param.size}")
+    }
+
+    fun reportDataError(key: String, errorMessage: String) {
+        val monitorState = _uiState.value.dataMonitorState
+        if (!monitorState.isMonitoring) return
+
+        val entry = DataLogEntry(
+            timestamp = System.currentTimeMillis(),
+            key = key,
+            param = ByteArray(0),
+            isError = true,
+            errorMessage = errorMessage
+        )
+
+        _uiState.update { 
+            it.copy(
+                dataMonitorState = it.dataMonitorState.copy(
+                    logEntries = monitorState.logEntries + entry,
+                    errorCount = monitorState.errorCount + 1,
+                    lastError = errorMessage
+                )
+            )
+        }
+
+        Timber.w("Data error reported: key=$key, error=$errorMessage")
     }
 
     override fun onCleared() {
