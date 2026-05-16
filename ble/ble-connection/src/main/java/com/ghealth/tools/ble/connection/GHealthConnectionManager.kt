@@ -382,6 +382,10 @@ class BleConnectionManager @Inject constructor(
         scope.launch {
             for (result in results) {
                 result.onSuccess { parsed ->
+                    Timber.d("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
+                    if (parsed.key == "G") {
+                        Timber.i("Command G response from $address: ${parsed.param.joinToString(" ") { "%02X".format(it) }}")
+                    }
                     _dataFlow.emit(address to parsed)
                 }
                 result.onFailure { error ->

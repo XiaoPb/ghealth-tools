@@ -59,20 +59,18 @@ data class StoragePath(
 
     fun infoJson(): String {
         return buildString {
-            append("{\n")
-            append("    \"MAC\": \"$deviceAddress\",\n")
-            append("    \"NAME\": \"$deviceName\",\n")
-            append("    \"App-version\": \"$appVersion\",\n")
-            append("    \"name\": \"$tester\",\n")
-            append("    \"scenario\": \"$scenario\",\n")
-            append("    \"chip\": \"$chip\",\n")
-            append("    \"iPhone-device\": \"$phoneDevice\",\n")
-            append("    \"SDK-Version\": \"$sdkVersion\",\n")
-            append("    \"HR-Version\": \"$hrVersion\",\n")
-            append("    \"SPO2-Version\": \"$spo2Version\",\n")
-            append("    \"NADT-Version\": \"$nadtVersion\",\n")
-            append("    \"HRV-Version\": \"$hrvVersion\"\n")
-            append("}")
+            append("{\"MAC\":\"$deviceAddress\",")
+            append("\"NAME\":\"$deviceName\",")
+            append("\"App-version\":\"$appVersion\",")
+            append("\"name\":\"$tester\",")
+            append("\"scenario\":\"$scenario\",")
+            append("\"chip\":\"$chip\",")
+            append("\"iPhone-device\":\"$phoneDevice\",")
+            append("\"SDK-Version\":\"$sdkVersion\",")
+            append("\"HR-Version\":\"$hrVersion\",")
+            append("\"SPO2-Version\":\"$spo2Version\",")
+            append("\"NADT-Version\":\"$nadtVersion\",")
+            append("\"HRV-Version\":\"$hrvVersion\"}")
         }
     }
 }
