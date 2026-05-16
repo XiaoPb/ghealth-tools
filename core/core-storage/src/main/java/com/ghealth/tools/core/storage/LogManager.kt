@@ -2,7 +2,6 @@ package com.ghealth.tools.core.storage
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import timber.log.Timber
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
@@ -51,7 +50,7 @@ class LogManager(private val baseDir: File) {
             writer.newLine()
             writer.flush()
         } catch (e: Exception) {
-            Timber.w(e, "Failed to write log: $relativePath")
+            android.util.Log.w("LogManager", "Failed to write log: $relativePath", e)
         }
     }
 
@@ -68,7 +67,7 @@ class LogManager(private val baseDir: File) {
         logsDir.listFiles()?.forEach { dayDir ->
             if (dayDir.isDirectory && dayDir.lastModified() < cutoff) {
                 dayDir.deleteRecursively()
-                Timber.d("Cleaned old logs: ${dayDir.name}")
+                android.util.Log.d("LogManager", "Cleaned old logs: ${dayDir.name}")
             }
         }
     }
@@ -89,10 +88,10 @@ class LogManager(private val baseDir: File) {
                     zos.closeEntry()
                 }
             }
-            Timber.d("Logs exported to ${zipFile.absolutePath}")
+            android.util.Log.d("LogManager", "Logs exported to ${zipFile.absolutePath}")
             zipFile
         } catch (e: Exception) {
-            Timber.w(e, "Failed to export logs")
+            android.util.Log.w("LogManager", "Failed to export logs", e)
             null
         }
     }
