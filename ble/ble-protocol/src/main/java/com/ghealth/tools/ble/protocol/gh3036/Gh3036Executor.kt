@@ -7,6 +7,7 @@ import com.ghealth.tools.ble.protocol.rpccore.ProtocolError
 import com.ghealth.tools.ble.protocol.rpccore.unpackU8Array
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 
 typealias FrameCallback = (GhFuncFrame) -> Unit
@@ -55,6 +56,13 @@ class Gh3036Executor(
         val frames = frameDecoder.decode(unpacked)
 
         frames.forEach { frame ->
+            Timber.d("GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}, timestamp=${frame.timestamp}, " +
+                "rawdata=${frame.rawdata.size}ch, phyValue=${frame.phyValue.size}ch, " +
+                "gsData=${frame.gsData.size}, flags=${frame.flags.size}ch, " +
+                "algoData=${frame.algoData.size}ch, slotCfg=${frame.slotCfg}")
+            if (frame.phyValue.isNotEmpty()) {
+                Timber.v("phyValue: ${frame.phyValue.joinToString(", ")}")
+            }
             frameCallback?.invoke(frame)
         }
     }
