@@ -422,17 +422,13 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun onDeviceDisconnected(address: String) {
-        updateDeviceState(address, ConnectionState.DISCONNECTED)
-        peripherals.remove(address)
-        
         val device = _devices.value[address]
+        peripherals.remove(address)
+        _devices.value = _devices.value - address
+        
         if (device?.role == DeviceRole.COMPARE) {
-            val index = getCompareDeviceIndex(address)
-            if (index >= 0) {
-                val newResults = _heartRateResults.value.toMutableMap()
-                newResults.remove(index)
-                _heartRateResults.value = newResults
-            }
+            _heartRateResults.value = emptyMap()
         }
+        Timber.d("Device disconnected and removed: $address")
     }
 }
