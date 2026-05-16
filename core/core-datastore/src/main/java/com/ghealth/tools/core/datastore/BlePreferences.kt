@@ -86,7 +86,7 @@ class BlePreferences @Inject constructor(
 
     companion object {
         const val DEFAULT_SERVICE_UUID = "0000190e-0000-1000-8000-00805f9b34fb"
-        const val DEFAULT_WRITE_CHAR_UUID = "00000003-0000-1000-8000-00805f9b34fb"
-        const val DEFAULT_NOTIFY_CHAR_UUID = "00000004-0000-1000-8000-00805f9b34fb"
+        const val DEFAULT_WRITE_CHAR_UUID = "00000004-0000-1000-8000-00805f9b34fb"
+        const val DEFAULT_NOTIFY_CHAR_UUID = "00000003-0000-1000-8000-00805f9b34fb"
     }
 }

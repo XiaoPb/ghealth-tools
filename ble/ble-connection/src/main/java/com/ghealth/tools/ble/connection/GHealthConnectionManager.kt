@@ -301,11 +301,23 @@ class BleConnectionManager @Inject constructor(
                     characteristic = notifyUuid
                 )
 
-                peripheral.observe(notifyChar)
-                    .onEach { data ->
-                        onDataReceived(address, data)
-                    }
-                    .launchIn(scope)
+                try {
+                    peripheral.observe(notifyChar)
+                        .onEach { data ->
+                            onDataReceived(address, data)
+                        }
+                        .launchIn(scope)
+                } catch (e: NoSuchElementException) {
+                    Timber.e(e, "Notify characteristic does not support notify/indicate: $notifyUuidStr")
+                    emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
+                    disconnect(address)
+                    return
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to observe notify characteristic: $notifyUuidStr")
+                    emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
+                    disconnect(address)
+                    return
+                }
 
                 Timber.i("Device $address validated with custom service")
             }
