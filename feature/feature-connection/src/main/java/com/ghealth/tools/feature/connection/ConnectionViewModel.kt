@@ -40,7 +40,8 @@ data class ConnectionUiState(
     val connectionError: String? = null,
     val connectionErrorDevice: String? = null,
     val isBluetoothEnabled: Boolean = true,
-    val hasPermissions: Boolean = true
+    val hasPermissions: Boolean = true,
+    val commandExecutionState: CommandExecutionState = CommandExecutionState()
 )
 
 @HiltViewModel
@@ -227,6 +228,68 @@ class ConnectionViewModel @Inject constructor(
             .find { it.value.role == DeviceRole.MASTER }?.key ?: return
         viewModelScope.launch {
             connectionManager.sendCommand(masterAddress, key, param)
+        }
+    }
+
+    fun executeCommand(key: String, param: ByteArray) {
+        val masterAddress = _uiState.value.connectedDevices.entries
+            .find { it.value.role == DeviceRole.MASTER }?.key
+        
+        if (masterAddress == null) {
+            _uiState.update { 
+                it.copy(
+                    commandExecutionState = CommandExecutionState(
+                        isExecuting = false,
+                        result = null,
+                        error = "未连接主设备"
+                    )
+                )
+            }
+            return
+        }
+
+        _uiState.update { 
+            it.copy(
+                commandExecutionState = CommandExecutionState(
+                    isExecuting = true,
+                    result = null,
+                    error = null
+                )
+            )
+        }
+
+        viewModelScope.launch {
+            try {
+                connectionManager.sendCommand(masterAddress, key, param)
+                _uiState.update { 
+                    it.copy(
+                        commandExecutionState = CommandExecutionState(
+                            isExecuting = false,
+                            result = ByteArray(0),
+                            error = null
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Command execution failed")
+                _uiState.update { 
+                    it.copy(
+                        commandExecutionState = CommandExecutionState(
+                            isExecuting = false,
+                            result = null,
+                            error = e.message ?: "命令执行失败"
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearCommandResult() {
+        _uiState.update { 
+            it.copy(
+                commandExecutionState = CommandExecutionState()
+            )
         }
     }
 

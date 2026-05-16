@@ -49,6 +49,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.core.model.BleDevice
@@ -57,11 +61,62 @@ import com.ghealth.tools.core.ui.component.GHealthTopAppBar
 import com.ghealth.tools.core.ui.component.StatusBadge
 import com.ghealth.tools.core.ui.component.ConnectionStatus
 
+private object CommandRoutes {
+    const val MAIN = "main"
+    const val COMMAND_LIST = "command_list"
+    const val COMMAND_DETAIL = "command_detail/{commandKey}"
+    
+    fun commandDetail(commandKey: String) = "command_detail/$commandKey"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
+    val navController = rememberNavController()
 
+    NavHost(
+        navController = navController,
+        startDestination = CommandRoutes.MAIN
+    ) {
+        composable(CommandRoutes.MAIN) {
+            ConnectionMainContent(
+                viewModel = viewModel,
+                state = state,
+                onNavigateToCommands = {
+                    navController.navigate(CommandRoutes.COMMAND_LIST)
+                }
+            )
+        }
+        composable(CommandRoutes.COMMAND_LIST) {
+            CommandListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { commandKey ->
+                    navController.navigate(CommandRoutes.commandDetail(commandKey))
+                }
+            )
+        }
+        composable(CommandRoutes.COMMAND_DETAIL) { backStackEntry ->
+            val commandKey = backStackEntry.arguments?.getString("commandKey") ?: ""
+            CommandDetailScreen(
+                commandKey = commandKey,
+                executionState = state.commandExecutionState,
+                onNavigateBack = { navController.popBackStack() },
+                onExecute = { key, params ->
+                    viewModel.executeCommand(key, params)
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConnectionMainContent(
+    viewModel: ConnectionViewModel,
+    state: ConnectionUiState,
+    onNavigateToCommands: () -> Unit
+) {
     Scaffold(
         topBar = { GHealthTopAppBar(title = "GHealth Tools") }
     ) { padding ->
@@ -88,7 +143,7 @@ fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
                     onDisconnectAll = viewModel::disconnectAll,
                     onDisconnectDevice = viewModel::disconnectDevice,
                     onWorkMode = viewModel::showWorkModeDialog,
-                    onCommand = viewModel::showCommandSheet
+                    onCommand = onNavigateToCommands
                 )
             }
         }
@@ -105,12 +160,6 @@ fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
             selected = state.selectedFunctions,
             onConfirm = viewModel::setSelectedFunctions,
             onDismiss = viewModel::dismissFunctionDialog
-        )
-    }
-    if (state.showCommandSheet) {
-        CommandBottomSheet(
-            onSendCommand = viewModel::sendCommand,
-            onDismiss = viewModel::dismissCommandSheet
         )
     }
 
