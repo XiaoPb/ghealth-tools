@@ -68,7 +68,8 @@ class MainActivity : ComponentActivity() {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
                 arrayOf(
                     Manifest.permission.READ_MEDIA_AUDIO,
-                    Manifest.permission.READ_MEDIA_IMAGES
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO
                 )
             }
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
@@ -82,12 +83,12 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    private val allPermissions: Array<String>
-        get() = bluetoothPermissions + storagePermissions
+    private var hasRequestedBluetoothPermissions = false
 
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
+        hasRequestedBluetoothPermissions = true
         val deniedList = permissions.filter { !it.value }.keys.toList()
         if (deniedList.isNotEmpty()) {
             handleBluetoothPermissionDenied(deniedList)
@@ -180,28 +181,36 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleBluetoothPermissionDenied(deniedPermissions: List<String>) {
-        val permanentlyDenied = deniedPermissions.any { permission ->
-            !shouldShowRequestPermissionRationale(permission)
+        val shouldShowRationale = deniedPermissions.any { permission ->
+            shouldShowRequestPermissionRationale(permission)
         }
 
-        if (permanentlyDenied) {
+        if (shouldShowRationale) {
+            Toast.makeText(
+                this,
+                "蓝牙权限被拒绝，部分功能将无法使用",
+                Toast.LENGTH_LONG
+            ).show()
+        } else {
             Toast.makeText(
                 this,
                 "蓝牙权限被禁用，请在设置中手动开启",
                 Toast.LENGTH_LONG
             ).show()
             openAppSettings()
-        } else {
-            Toast.makeText(
-                this,
-                "蓝牙权限被拒绝，部分功能将无法使用",
-                Toast.LENGTH_LONG
-            ).show()
         }
     }
 
     private fun requestStoragePermissions() {
-        val missingStoragePermissions = storagePermissions.filter {
+        val perms = storagePermissions
+        if (perms.isEmpty()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+                requestManageExternalStorage()
+            }
+            return
+        }
+
+        val missingStoragePermissions = perms.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
