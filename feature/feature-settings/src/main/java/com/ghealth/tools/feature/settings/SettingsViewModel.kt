@@ -3,12 +3,14 @@ package com.ghealth.tools.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.core.datastore.BlePreferences
+import com.ghealth.tools.core.storage.LogManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 data class SettingsUiState(
@@ -16,12 +18,14 @@ data class SettingsUiState(
     val writeUuid: String = "",
     val notifyUuid: String = "",
     val autoReconnect: Boolean = true,
-    val appVersion: String = "1.0.0"
+    val appVersion: String = "1.0.0",
+    val exportedLogPath: String? = null
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val blePreferences: BlePreferences
+    private val blePreferences: BlePreferences,
+    private val logManager: LogManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -51,26 +55,29 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateServiceUuid(uuid: String) {
-        viewModelScope.launch {
-            blePreferences.setServiceUuid(uuid)
-        }
+        viewModelScope.launch { blePreferences.setServiceUuid(uuid) }
     }
 
     fun updateWriteUuid(uuid: String) {
-        viewModelScope.launch {
-            blePreferences.setWriteCharUuid(uuid)
-        }
+        viewModelScope.launch { blePreferences.setWriteCharUuid(uuid) }
     }
 
     fun updateNotifyUuid(uuid: String) {
-        viewModelScope.launch {
-            blePreferences.setNotifyCharUuid(uuid)
-        }
+        viewModelScope.launch { blePreferences.setNotifyCharUuid(uuid) }
     }
 
     fun toggleAutoReconnect() {
+        viewModelScope.launch { blePreferences.setAutoReconnect(!_uiState.value.autoReconnect) }
+    }
+
+    fun exportLogs() {
         viewModelScope.launch {
-            blePreferences.setAutoReconnect(!_uiState.value.autoReconnect)
+            val file = logManager.exportLogs()
+            _uiState.update { it.copy(exportedLogPath = file?.absolutePath) }
         }
+    }
+
+    fun clearExportMessage() {
+        _uiState.update { it.copy(exportedLogPath = null) }
     }
 }

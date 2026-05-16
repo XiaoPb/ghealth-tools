@@ -4,8 +4,8 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
 import android.content.Context
-import com.ghealth.tools.ble.protocol.KotlinProtocolParser
-import com.ghealth.tools.ble.protocol.ParseResult
+import com.ghealth.tools.ble.protocol.rpccore.ParseResult
+import com.ghealth.tools.ble.protocol.gh3036.Gh3036RpcParser
 import com.ghealth.tools.core.model.ConnectionState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -37,7 +37,7 @@ class BleConnectionManager @Inject constructor(
     )
     val dataFlow: SharedFlow<Pair<String, ParseResult>> = _dataFlow.asSharedFlow()
 
-    private val parsers = mutableMapOf<String, KotlinProtocolParser>()
+    private val parsers = mutableMapOf<String, Gh3036RpcParser>()
     private val gattConnections = mutableMapOf<String, BluetoothGatt>()
 
     fun getDeviceState(address: String): ConnectionState {
@@ -53,7 +53,7 @@ class BleConnectionManager @Inject constructor(
             state = ConnectionState.CONNECTING
         )
         _devices.value = _devices.value + (address to device)
-        parsers[address] = KotlinProtocolParser()
+        parsers[address] = Gh3036RpcParser()
 
         Timber.d("Connecting to $address as $role")
         // Nordic BLE Library connection will be integrated here

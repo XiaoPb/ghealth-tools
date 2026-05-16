@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":core:core-data"))
     implementation(project(":core:core-storage"))
     implementation(project(":ble:ble-protocol"))
+    implementation(project(":ble:ble-connection"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.navigation.compose)

@@ -75,7 +75,25 @@ class LogManager(private val baseDir: File) {
 
     suspend fun exportLogs(): File? = withContext(Dispatchers.IO) {
         val logsDir = File(baseDir, "logs")
-        if (!logsDir.exists()) return@withContext null
-        logsDir
+        if (!logsDir.exists() || logsDir.listFiles().isNullOrEmpty()) return@withContext null
+
+        val zipFile = File(baseDir, "export/logs_${dateFormat.format(Date())}.zip")
+        zipFile.parentFile?.mkdirs()
+
+        try {
+            java.util.zip.ZipOutputStream(zipFile.outputStream().buffered()).use { zos ->
+                logsDir.walkTopDown().filter { it.isFile }.forEach { file ->
+                    val entryName = file.relativeTo(logsDir).path.replace('\\', '/')
+                    zos.putNextEntry(java.util.zip.ZipEntry(entryName))
+                    file.inputStream().buffered().use { it.copyTo(zos) }
+                    zos.closeEntry()
+                }
+            }
+            Timber.d("Logs exported to ${zipFile.absolutePath}")
+            zipFile
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to export logs")
+            null
+        }
     }
 }

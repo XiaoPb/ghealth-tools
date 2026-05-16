@@ -1,6 +1,5 @@
 package com.ghealth.tools.feature.demo
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,17 +35,24 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ghealth.tools.core.model.FunctionMode
 import com.ghealth.tools.core.ui.component.EmptyStateView
 import com.ghealth.tools.core.ui.component.GHealthTopAppBar
+import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
+import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,7 +68,10 @@ fun DemoScreen(viewModel: DemoViewModel = hiltViewModel()) {
         FunctionDetailScreen(
             function = state.selectedFunction!!,
             waveformData = state.waveformData,
+            channelCount = state.channelCount,
+            selectedChannel = state.selectedChannel,
             isRecording = state.isRecording,
+            onSelectChannel = viewModel::selectChannel,
             onToggleRecording = viewModel::toggleRecording,
             onBack = viewModel::goBack
         )
@@ -162,10 +171,23 @@ private fun FunctionMode.icon(): ImageVector = when (this) {
 private fun FunctionDetailScreen(
     function: FunctionMode,
     waveformData: List<Float>,
+    channelCount: Int,
+    selectedChannel: Int,
     isRecording: Boolean,
+    onSelectChannel: (Int) -> Unit,
     onToggleRecording: () -> Unit,
     onBack: () -> Unit
 ) {
+    val modelProducer = remember { CartesianChartModelProducer() }
+
+    androidx.compose.runtime.LaunchedEffect(waveformData) {
+        if (waveformData.size >= 2) {
+            modelProducer.runTransaction {
+                lineSeries { series(waveformData) }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             GHealthTopAppBar(
@@ -184,21 +206,25 @@ private fun FunctionDetailScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            WaveformChart(
-                data = waveformData,
+            if (channelCount > 1) {
+                ChannelSelector(
+                    channelCount = channelCount,
+                    selectedChannel = selectedChannel,
+                    onSelect = onSelectChannel
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            CartesianChartHost(
+                chart = rememberCartesianChart(
+                    rememberLineCartesianLayer(),
+                    startAxis = VerticalAxis.rememberStart(),
+                    bottomAxis = HorizontalAxis.rememberBottom(),
+                ),
+                modelProducer = modelProducer,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            WaveformChart(
-                data = waveformData.map { it * 0.5f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                lineColor = MaterialTheme.colorScheme.tertiary
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -220,31 +246,23 @@ private fun FunctionDetailScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WaveformChart(
-    data: List<Float>,
-    modifier: Modifier = Modifier,
-    lineColor: Color = MaterialTheme.colorScheme.primary
+private fun ChannelSelector(
+    channelCount: Int,
+    selectedChannel: Int,
+    onSelect: (Int) -> Unit
 ) {
-    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
-
-    Canvas(modifier = modifier) {
-        drawRect(color = surfaceVariant)
-
-        if (data.size < 2) return@Canvas
-
-        val min = data.min()
-        val max = data.max()
-        val range = (max - min).coerceAtLeast(1f)
-        val stepX = size.width / (data.size - 1).coerceAtLeast(1)
-
-        val path = Path()
-        data.forEachIndexed { index, value ->
-            val x = index * stepX
-            val y = size.height - ((value - min) / range) * size.height
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    androidx.compose.foundation.lazy.LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        items(channelCount) { ch ->
+            androidx.compose.material3.FilterChip(
+                selected = ch == selectedChannel,
+                onClick = { onSelect(ch) },
+                label = { Text("CH$ch") }
+            )
         }
-
-        drawPath(path, color = lineColor, style = Stroke(width = 2f))
     }
 }
+

@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-model"))
     implementation(project(":core:core-data"))
+    implementation(project(":core:core-datastore"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.navigation.compose)

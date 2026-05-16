@@ -1,22 +1,13 @@
-@file:Suppress("unused")
-package com.ghealth.tools.ble.protocol
+package com.ghealth.tools.ble.protocol.gh3036
 
-import com.ghealth.tools.ble.protocol.gh3036.Gh3036FrameDecoder
-import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.rpccore.FrameBuilder
 import com.ghealth.tools.ble.protocol.rpccore.FrameParser
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.rpccore.RpcParser
 
-interface ProtocolParser : RpcParser {
-    fun decodeGFrame(param: ByteArray): List<GhFuncFrame>
-    fun resetDecoder()
-}
-
-class KotlinProtocolParser : ProtocolParser {
+class Gh3036RpcParser : RpcParser {
     private val frameParser = FrameParser()
     private val frameBuilder = FrameBuilder()
-    private val gFrameDecoder = Gh3036FrameDecoder()
 
     override fun encode(key: String, param: ByteArray, secure: Boolean): ByteArray {
         return frameBuilder.build(key = key, param = param, secure = secure)
@@ -26,17 +17,7 @@ class KotlinProtocolParser : ProtocolParser {
         return frameParser.process(raw)
     }
 
-    override fun decodeGFrame(param: ByteArray): List<GhFuncFrame> {
-        return gFrameDecoder.decode(param)
-    }
-
-    override fun resetDecoder() {
-        frameParser.reset()
-        gFrameDecoder.reset()
-    }
-
     override fun reset() {
         frameParser.reset()
-        gFrameDecoder.reset()
     }
 }
