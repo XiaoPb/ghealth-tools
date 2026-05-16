@@ -10,34 +10,95 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-private val LightColorScheme = lightColorScheme(
-    primary = Blue40,
-    secondary = Teal40,
-    tertiary = Amber40,
-    surface = SurfaceLight,
-)
+private fun getColorSchemeForTheme(themeMode: ThemeMode, darkTheme: Boolean) = when (themeMode) {
+    ThemeMode.OCEAN_BLUE -> if (darkTheme) {
+        darkColorScheme(
+            primary = AppColors.OceanBlue.PrimaryDark,
+            secondary = AppColors.OceanBlue.SecondaryDark,
+            tertiary = AppColors.OceanBlue.TertiaryDark,
+            surface = SurfaceDark
+        )
+    } else {
+        lightColorScheme(
+            primary = AppColors.OceanBlue.PrimaryLight,
+            secondary = AppColors.OceanBlue.SecondaryLight,
+            tertiary = AppColors.OceanBlue.TertiaryLight,
+            surface = SurfaceLight
+        )
+    }
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Blue80,
-    secondary = Teal80,
-    tertiary = Amber80,
-    surface = SurfaceDark,
-)
+    ThemeMode.FOREST_GREEN -> if (darkTheme) {
+        darkColorScheme(
+            primary = AppColors.ForestGreen.PrimaryDark,
+            secondary = AppColors.ForestGreen.SecondaryDark,
+            tertiary = AppColors.ForestGreen.TertiaryDark,
+            surface = SurfaceDark
+        )
+    } else {
+        lightColorScheme(
+            primary = AppColors.ForestGreen.PrimaryLight,
+            secondary = AppColors.ForestGreen.SecondaryLight,
+            tertiary = AppColors.ForestGreen.TertiaryLight,
+            surface = SurfaceLight
+        )
+    }
+
+    ThemeMode.WARM_ORANGE -> if (darkTheme) {
+        darkColorScheme(
+            primary = AppColors.WarmOrange.PrimaryDark,
+            secondary = AppColors.WarmOrange.SecondaryDark,
+            tertiary = AppColors.WarmOrange.TertiaryDark,
+            surface = SurfaceDark
+        )
+    } else {
+        lightColorScheme(
+            primary = AppColors.WarmOrange.PrimaryLight,
+            secondary = AppColors.WarmOrange.SecondaryLight,
+            tertiary = AppColors.WarmOrange.TertiaryLight,
+            surface = SurfaceLight
+        )
+    }
+
+    ThemeMode.LAVENDER_PURPLE -> if (darkTheme) {
+        darkColorScheme(
+            primary = AppColors.LavenderPurple.PrimaryDark,
+            secondary = AppColors.LavenderPurple.SecondaryDark,
+            tertiary = AppColors.LavenderPurple.TertiaryDark,
+            surface = SurfaceDark
+        )
+    } else {
+        lightColorScheme(
+            primary = AppColors.LavenderPurple.PrimaryLight,
+            secondary = AppColors.LavenderPurple.SecondaryLight,
+            tertiary = AppColors.LavenderPurple.TertiaryLight,
+            surface = SurfaceLight
+        )
+    }
+
+    ThemeMode.ROSE_RED -> if (darkTheme) {
+        darkColorScheme(
+            primary = AppColors.RoseRed.PrimaryDark,
+            secondary = AppColors.RoseRed.SecondaryDark,
+            tertiary = AppColors.RoseRed.TertiaryDark,
+            surface = SurfaceDark
+        )
+    } else {
+        lightColorScheme(
+            primary = AppColors.RoseRed.PrimaryLight,
+            secondary = AppColors.RoseRed.SecondaryLight,
+            tertiary = AppColors.RoseRed.TertiaryLight,
+            surface = SurfaceLight
+        )
+    }
+}
 
 @Composable
 fun GHealthTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    themeMode: ThemeMode = ThemeMode.OCEAN_BLUE,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    val colorScheme = getColorSchemeForTheme(themeMode, darkTheme)
 
     MaterialTheme(
         colorScheme = colorScheme,

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.storage.LogManager
+import com.ghealth.tools.core.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,9 @@ data class SettingsUiState(
     val notifyUuid: String = "",
     val autoReconnect: Boolean = true,
     val appVersion: String = "1.0.0",
-    val exportedLogPath: String? = null
+    val exportedLogPath: String? = null,
+    val themeMode: ThemeMode = ThemeMode.OCEAN_BLUE,
+    val availableThemes: List<ThemeMode> = ThemeMode.entries
 )
 
 @HiltViewModel
@@ -52,6 +55,11 @@ class SettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(autoReconnect = auto) }
             }
         }
+        viewModelScope.launch {
+            blePreferences.themeMode.collect { key ->
+                _uiState.update { it.copy(themeMode = ThemeMode.fromKey(key)) }
+            }
+        }
     }
 
     fun updateServiceUuid(uuid: String) {
@@ -68,6 +76,10 @@ class SettingsViewModel @Inject constructor(
 
     fun toggleAutoReconnect() {
         viewModelScope.launch { blePreferences.setAutoReconnect(!_uiState.value.autoReconnect) }
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { blePreferences.setThemeMode(mode.key) }
     }
 
     fun exportLogs() {

@@ -16,14 +16,32 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.ui.theme.GHealthTheme
+import com.ghealth.tools.core.ui.theme.ThemeMode
 import com.ghealth.tools.navigation.GHealthNavHost
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import timber.log.Timber
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var blePreferences: BlePreferences
+
+    private val themeModeState by lazy {
+        blePreferences.themeMode
+            .map { ThemeMode.fromKey(it) }
+            .stateIn(lifecycleScope, SharingStarted.WhileSubscribed(5000), ThemeMode.OCEAN_BLUE)
+    }
 
     private val bluetoothManager by lazy {
         getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -131,7 +149,9 @@ class MainActivity : ComponentActivity() {
         checkBluetoothAndPermissions()
 
         setContent {
-            GHealthTheme {
+            val themeMode by themeModeState.collectAsState()
+            
+            GHealthTheme(themeMode = themeMode) {
                 GHealthNavHost()
             }
         }
