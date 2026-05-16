@@ -10,7 +10,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-model"))
-    implementation(libs.nordic.ble)
+    implementation(libs.kable.core.android)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.coroutines.core)

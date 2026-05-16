@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":core:core-data"))
     implementation(project(":ble:ble-scanner"))
     implementation(project(":ble:ble-connection"))
+    implementation(libs.kable.core.android)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.navigation.compose)
