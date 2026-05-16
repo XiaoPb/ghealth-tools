@@ -67,9 +67,7 @@ class MainActivity : ComponentActivity() {
     private val allPermissions: Array<String>
         get() = bluetoothPermissions + storagePermissions
 
-    private var pendingPermissionRequest: (() -> Unit)? = null
-
-    private val permissionLauncher = registerForActivityResult(
+    private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
@@ -77,16 +75,30 @@ class MainActivity : ComponentActivity() {
             val deniedPermissions = permissions.filter { !it.value }.keys
             Toast.makeText(
                 this,
-                "权限被拒绝: ${deniedPermissions.joinToString()}",
+                "蓝牙权限被拒绝: ${deniedPermissions.joinToString()}",
+                Toast.LENGTH_LONG
+            ).show()
+        } else {
+            Timber.d("Bluetooth permissions granted, now requesting storage permissions")
+            requestStoragePermissions()
+        }
+    }
+
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.entries.all { it.value }
+        if (!allGranted) {
+            val deniedPermissions = permissions.filter { !it.value }.keys
+            Toast.makeText(
+                this,
+                "存储权限被拒绝: ${deniedPermissions.joinToString()}",
                 Toast.LENGTH_LONG
             ).show()
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             requestManageExternalStorage()
-        } else {
-            pendingPermissionRequest?.invoke()
-            pendingPermissionRequest = null
         }
     }
 
@@ -144,15 +156,23 @@ class MainActivity : ComponentActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
+        if (missingBluetoothPermissions.isNotEmpty()) {
+            Timber.d("Requesting bluetooth permissions: ${missingBluetoothPermissions.joinToString()}")
+            bluetoothPermissionLauncher.launch(missingBluetoothPermissions.toTypedArray())
+        } else {
+            Timber.d("Bluetooth permissions already granted, requesting storage permissions")
+            requestStoragePermissions()
+        }
+    }
+
+    private fun requestStoragePermissions() {
         val missingStoragePermissions = storagePermissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
-        val allMissing = missingBluetoothPermissions + missingStoragePermissions
-
-        if (allMissing.isNotEmpty()) {
-            Timber.d("Requesting permissions: ${allMissing.joinToString()}")
-            permissionLauncher.launch(allMissing.toTypedArray())
+        if (missingStoragePermissions.isNotEmpty()) {
+            Timber.d("Requesting storage permissions: ${missingStoragePermissions.joinToString()}")
+            storagePermissionLauncher.launch(missingStoragePermissions.toTypedArray())
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             requestManageExternalStorage()
         } else {
