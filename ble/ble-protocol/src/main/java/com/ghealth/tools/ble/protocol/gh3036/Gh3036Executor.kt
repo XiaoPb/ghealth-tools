@@ -56,12 +56,27 @@ class Gh3036Executor(
         val frames = frameDecoder.decode(unpacked)
 
         frames.forEach { frame ->
-            Timber.d("GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}, timestamp=${frame.timestamp}, " +
-                "rawdata=${frame.rawdata.size}ch, phyValue=${frame.phyValue.size}ch, " +
-                "gsData=${frame.gsData.size}, flags=${frame.flags.size}ch, " +
-                "algoData=${frame.algoData.size}ch, slotCfg=${frame.slotCfg}")
+            Timber.d("GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}, timestamp=${frame.timestamp}")
+            if (frame.rawdata.isNotEmpty()) {
+                Timber.d("  rawdata[${frame.rawdata.size}]: ${frame.rawdata.joinToString(", ")}")
+            }
             if (frame.phyValue.isNotEmpty()) {
-                Timber.v("phyValue: ${frame.phyValue.joinToString(", ")}")
+                Timber.d("  phyValue[${frame.phyValue.size}]: ${frame.phyValue.joinToString(", ")}")
+            }
+            if (frame.gsData.isNotEmpty()) {
+                Timber.d("  gsData[${frame.gsData.size}]: ${frame.gsData.joinToString(", ")}")
+            }
+            if (frame.flags.isNotEmpty()) {
+                Timber.d("  flags[${frame.flags.size}]: ${frame.flags.joinToString(", ")}")
+            }
+            if (frame.algoData.isNotEmpty()) {
+                Timber.d("  algoData[${frame.algoData.size}]: ${frame.algoData.joinToString(", ")}")
+            }
+            if (frame.agcInfo.isNotEmpty()) {
+                Timber.d("  agcInfo[${frame.agcInfo.size}]: ${frame.agcInfo.joinToString(", ")}")
+            }
+            if (frame.slotCfg != 0) {
+                Timber.d("  slotCfg: ${frame.slotCfg}")
             }
             frameCallback?.invoke(frame)
         }
