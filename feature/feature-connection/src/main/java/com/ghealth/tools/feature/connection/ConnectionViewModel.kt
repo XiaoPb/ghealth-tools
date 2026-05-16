@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.ConnectedDevice
+import com.ghealth.tools.ble.connection.ConnectionError
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.scanner.BleScanException
 import com.ghealth.tools.ble.scanner.BleScanner
@@ -34,6 +35,8 @@ data class ConnectionUiState(
     val showCommandSheet: Boolean = false,
     val minRssi: Int = -80,
     val scanError: String? = null,
+    val connectionError: String? = null,
+    val connectionErrorDevice: String? = null,
     val isBluetoothEnabled: Boolean = true,
     val hasPermissions: Boolean = true
 )
@@ -55,6 +58,19 @@ class ConnectionViewModel @Inject constructor(
                 _uiState.update { it.copy(connectedDevices = devices) }
             }
         }
+
+        viewModelScope.launch {
+            connectionManager.connectionErrors.collect { (address, error) ->
+                Timber.w("Connection error from $address: ${error.getMessage()}")
+                _uiState.update {
+                    it.copy(
+                        connectionError = error.getMessage(),
+                        connectionErrorDevice = address
+                    )
+                }
+            }
+        }
+
         checkBluetoothState()
     }
 
@@ -122,6 +138,10 @@ class ConnectionViewModel @Inject constructor(
 
     fun clearScanError() {
         _uiState.update { it.copy(scanError = null) }
+    }
+
+    fun clearConnectionError() {
+        _uiState.update { it.copy(connectionError = null, connectionErrorDevice = null) }
     }
 
     fun connectDevice(device: BleDevice) {

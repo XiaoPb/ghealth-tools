@@ -126,6 +126,24 @@ fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
             }
         )
     }
+
+    state.connectionError?.let { error ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearConnectionError,
+            title = { Text("连接错误") },
+            text = {
+                Column {
+                    Text("设备: ${state.connectionErrorDevice ?: "未知"}")
+                    Text(error)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::clearConnectionError) {
+                    Text("确定")
+                }
+            }
+        )
+    }
 }
 
 @Composable

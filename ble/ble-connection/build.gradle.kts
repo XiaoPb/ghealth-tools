@@ -10,6 +10,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-model"))
+    implementation(project(":core:core-datastore"))
     implementation(project(":ble:ble-protocol"))
     implementation(libs.nordic.ble)
     implementation(libs.nordic.ble.common)
