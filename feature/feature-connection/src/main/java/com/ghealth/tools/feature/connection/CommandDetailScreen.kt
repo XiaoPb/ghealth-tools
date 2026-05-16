@@ -23,13 +23,12 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,26 +76,25 @@ fun CommandDetailScreen(
     val command = Gh3036CommandMeta.getCommandByKey(commandKey)
     
     if (command == null) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("命令不存在") },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icons.AutoMirrored.Filled.ArrowBack
-                        }
-                    }
-                )
-            }
-        ) { padding ->
-            Column(
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("未找到命令: $commandKey")
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回"
+                    )
+                }
+                Text("命令不存在")
             }
+            Text("未找到命令: $commandKey")
         }
         return
     }
@@ -105,106 +103,105 @@ fun CommandDetailScreen(
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(command.displayName) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        androidx.compose.material3.Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
-                        )
-                    }
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onNavigateBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回"
+                )
+            }
+            Text(
+                text = command.displayName,
+                style = MaterialTheme.typography.titleMedium
             )
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "命令说明",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = command.description,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "命令键: ${command.key}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (command.params.isNotEmpty()) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "参数设置",
-                    style = MaterialTheme.typography.titleMedium
+                    text = "命令说明",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                
-                command.params.forEach { param ->
-                    ParamInputField(
-                        param = param,
-                        onValueChange = { value ->
-                            paramValues[param.name] = value
-                        }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = {
-                    try {
-                        val params = buildParams(command, paramValues)
-                        onExecute(command.key, params)
-                    } catch (e: Exception) {
-                        errorMessage = e.message ?: "参数错误"
-                        showErrorDialog = true
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !executionState.isExecuting
-            ) {
-                if (executionState.isExecuting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.width(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("执行中...")
-                } else {
-                    Text("执行命令")
-                }
-            }
-
-            if (executionState.result != null || executionState.error != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = command.description,
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 Spacer(modifier = Modifier.height(8.dp))
-                CommandResponseView(
-                    result = executionState.result,
-                    error = executionState.error
+                Text(
+                    text = "命令键: ${command.key}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+
+        if (command.params.isNotEmpty()) {
+            Text(
+                text = "参数设置",
+                style = MaterialTheme.typography.titleMedium
+            )
+            
+            command.params.forEach { param ->
+                ParamInputField(
+                    param = param,
+                    onValueChange = { value ->
+                        paramValues[param.name] = value
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = {
+                try {
+                    val params = buildParams(command, paramValues)
+                    onExecute(command.key, params)
+                } catch (e: Exception) {
+                    errorMessage = e.message ?: "参数错误"
+                    showErrorDialog = true
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !executionState.isExecuting
+        ) {
+            if (executionState.isExecuting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.width(24.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("执行中...")
+            } else {
+                Text("执行命令")
+            }
+        }
+
+        if (executionState.result != null || executionState.error != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            CommandResponseView(
+                result = executionState.result,
+                error = executionState.error
+            )
         }
     }
 

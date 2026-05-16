@@ -34,7 +34,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,7 +56,6 @@ import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.core.model.BleDevice
 import com.ghealth.tools.core.model.ConnectionState
-import com.ghealth.tools.core.ui.component.GHealthTopAppBar
 import com.ghealth.tools.core.ui.component.StatusBadge
 import com.ghealth.tools.core.ui.component.ConnectionStatus
 
@@ -117,35 +115,27 @@ private fun ConnectionMainContent(
     state: ConnectionUiState,
     onNavigateToCommands: () -> Unit
 ) {
-    Scaffold(
-        topBar = { GHealthTopAppBar(title = "GHealth Tools") }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            if (state.isScanning) {
-                ScanSection(
-                    results = state.scanResults,
-                    role = state.scanForRole,
-                    minRssi = state.minRssi,
-                    onSelect = { device, _ -> viewModel.connectDevice(device) },
-                    onStop = viewModel::stopScan,
-                    onRssiChange = viewModel::setMinRssi
-                )
-            } else {
-                MainMenuContent(
-                    state = state,
-                    onScanMaster = { viewModel.startScan(DeviceRole.MASTER) },
-                    onScanSlave = { viewModel.startScan(DeviceRole.SLAVE) },
-                    onScanCompare = { viewModel.startScan(DeviceRole.COMPARE) },
-                    onDisconnectAll = viewModel::disconnectAll,
-                    onDisconnectDevice = viewModel::disconnectDevice,
-                    onWorkMode = viewModel::showWorkModeDialog,
-                    onCommand = onNavigateToCommands
-                )
-            }
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (state.isScanning) {
+            ScanSection(
+                results = state.scanResults,
+                role = state.scanForRole,
+                minRssi = state.minRssi,
+                onSelect = { device, _ -> viewModel.connectDevice(device) },
+                onStop = viewModel::stopScan,
+                onRssiChange = viewModel::setMinRssi
+            )
+        } else {
+            MainMenuContent(
+                state = state,
+                onScanMaster = { viewModel.startScan(DeviceRole.MASTER) },
+                onScanSlave = { viewModel.startScan(DeviceRole.SLAVE) },
+                onScanCompare = { viewModel.startScan(DeviceRole.COMPARE) },
+                onDisconnectAll = viewModel::disconnectAll,
+                onDisconnectDevice = viewModel::disconnectDevice,
+                onWorkMode = viewModel::showWorkModeDialog,
+                onCommand = onNavigateToCommands
+            )
         }
     }
 

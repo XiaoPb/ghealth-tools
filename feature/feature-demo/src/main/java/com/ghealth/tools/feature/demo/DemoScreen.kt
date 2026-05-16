@@ -30,7 +30,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -83,29 +82,24 @@ private fun FunctionListScreen(
     functionDataMap: Map<FunctionMode, FunctionData>,
     onSelect: (FunctionMode) -> Unit
 ) {
-    Scaffold(
-        topBar = { GHealthTopAppBar(title = "数据演示") }
-    ) { padding ->
-        if (functionDataMap.isEmpty()) {
-            EmptyStateView(
-                icon = Icons.Default.ShowChart,
-                title = "等待数据",
-                subtitle = "连接设备并开始采集后，功能数据将显示在此处"
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(functionDataMap.values.toList(), key = { it.function }) { data ->
-                    FunctionRow(
-                        data = data,
-                        onClick = { onSelect(data.function) }
-                    )
-                }
+    if (functionDataMap.isEmpty()) {
+        EmptyStateView(
+            icon = Icons.Default.ShowChart,
+            title = "等待数据",
+            subtitle = "连接设备并开始采集后，功能数据将显示在此处"
+        )
+    } else {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(functionDataMap.values.toList(), key = { it.function }) { data ->
+                FunctionRow(
+                    data = data,
+                    onClick = { onSelect(data.function) }
+                )
             }
         }
     }
@@ -188,59 +182,59 @@ private fun FunctionDetailScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            GHealthTopAppBar(
-                title = function.displayName,
-                actions = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            }
+            Text(
+                text = function.displayName,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
             )
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-        ) {
-            if (channelCount > 1) {
-                ChannelSelector(
-                    channelCount = channelCount,
-                    selectedChannel = selectedChannel,
-                    onSelect = onSelectChannel
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
 
-            CartesianChartHost(
-                chart = rememberCartesianChart(
-                    rememberLineCartesianLayer(),
-                    startAxis = VerticalAxis.rememberStart(),
-                    bottomAxis = HorizontalAxis.rememberBottom(),
-                ),
-                modelProducer = modelProducer,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
+        if (channelCount > 1) {
+            ChannelSelector(
+                channelCount = channelCount,
+                selectedChannel = selectedChannel,
+                onSelect = onSelectChannel
             )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
-            Spacer(modifier = Modifier.height(16.dp))
+        CartesianChartHost(
+            chart = rememberCartesianChart(
+                rememberLineCartesianLayer(),
+                startAxis = VerticalAxis.rememberStart(),
+                bottomAxis = HorizontalAxis.rememberBottom(),
+            ),
+            modelProducer = modelProducer,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+        )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                FilledTonalButton(onClick = onToggleRecording) {
-                    Icon(
-                        if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
-                        contentDescription = null
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (isRecording) "停止录制" else "开始录制")
-                }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            FilledTonalButton(onClick = onToggleRecording) {
+                Icon(
+                    if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(if (isRecording) "停止录制" else "开始录制")
             }
         }
     }
@@ -265,4 +259,3 @@ private fun ChannelSelector(
         }
     }
 }
-
