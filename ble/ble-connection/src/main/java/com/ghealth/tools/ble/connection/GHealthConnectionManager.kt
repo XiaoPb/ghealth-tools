@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -306,9 +307,18 @@ class BleConnectionManager @Inject constructor(
                 try {
                     peripheral.observe(notifyChar)
                         .onEach { data ->
+                            Timber.d("Notify received ${data.size} bytes from $address")
                             onDataReceived(address, data)
                         }
+                        .onCompletion { cause ->
+                            if (cause != null) {
+                                Timber.w("Notify observation completed with error: $cause")
+                            } else {
+                                Timber.d("Notify observation completed for $address")
+                            }
+                        }
                         .launchIn(scope)
+                    Timber.i("Subscribed to notify characteristic $notifyUuidStr for $address")
                 } catch (e: NoSuchElementException) {
                     Timber.e(e, "Notify characteristic does not support notify/indicate: $notifyUuidStr")
                     emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
