@@ -88,14 +88,9 @@ class MainActivity : ComponentActivity() {
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val allGranted = permissions.entries.all { it.value }
-        if (!allGranted) {
-            val deniedPermissions = permissions.filter { !it.value }.keys
-            Toast.makeText(
-                this,
-                "蓝牙权限被拒绝: ${deniedPermissions.joinToString()}",
-                Toast.LENGTH_LONG
-            ).show()
+        val deniedList = permissions.filter { !it.value }.keys.toList()
+        if (deniedList.isNotEmpty()) {
+            handleBluetoothPermissionDenied(deniedList)
         } else {
             Timber.d("Bluetooth permissions granted, now requesting storage permissions")
             requestStoragePermissions()
@@ -105,12 +100,11 @@ class MainActivity : ComponentActivity() {
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val allGranted = permissions.entries.all { it.value }
-        if (!allGranted) {
-            val deniedPermissions = permissions.filter { !it.value }.keys
+        val deniedList = permissions.filter { !it.value }.keys.toList()
+        if (deniedList.isNotEmpty()) {
             Toast.makeText(
                 this,
-                "存储权限被拒绝: ${deniedPermissions.joinToString()}",
+                "存储权限被拒绝，日志导出功能可能受限",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -185,6 +179,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun handleBluetoothPermissionDenied(deniedPermissions: List<String>) {
+        val permanentlyDenied = deniedPermissions.any { permission ->
+            !shouldShowRequestPermissionRationale(permission)
+        }
+
+        if (permanentlyDenied) {
+            Toast.makeText(
+                this,
+                "蓝牙权限被禁用，请在设置中手动开启",
+                Toast.LENGTH_LONG
+            ).show()
+            openAppSettings()
+        } else {
+            Toast.makeText(
+                this,
+                "蓝牙权限被拒绝，部分功能将无法使用",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     private fun requestStoragePermissions() {
         val missingStoragePermissions = storagePermissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -211,6 +226,12 @@ class MainActivity : ComponentActivity() {
                 manageStorageLauncher.launch(intent)
             }
         }
+    }
+
+    private fun openAppSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+        intent.data = Uri.parse("package:$packageName")
+        startActivity(intent)
     }
 
     fun hasAllPermissions(): Boolean {
