@@ -1,20 +1,23 @@
 package com.ghealth.tools.feature.demo
 
+import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
+import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036FrameDecoder
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
 import com.ghealth.tools.core.model.FunctionMode
 import com.ghealth.tools.core.storage.DataRecorder
-import com.ghealth.tools.core.storage.di.DataRecorderFactory
+import com.ghealth.tools.core.storage.DeviceRole as StorageDeviceRole
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 data class FunctionData(
@@ -35,7 +38,7 @@ data class DemoUiState(
 @HiltViewModel
 class DemoViewModel @Inject constructor(
     private val connectionManager: BleConnectionManager,
-    private val recorderFactory: DataRecorderFactory
+    private val dataRecorder: DataRecorder
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DemoUiState())
@@ -43,14 +46,21 @@ class DemoViewModel @Inject constructor(
 
     private val waveformBuffers = MultiChannelRingBuffer(maxChannels = 32, capacity = 1024)
     private val gFrameDecoder = Gh3036FrameDecoder()
-    private var recorder: DataRecorder? = null
+    private var currentRecordingDevice: String? = null
+
+    private val baseDir: File by lazy {
+        File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+            "GHealthTools"
+        )
+    }
 
     init {
         viewModelScope.launch {
-            connectionManager.dataFlow.collect { (_, parseResult) ->
+            connectionManager.dataFlow.collect { (address, parseResult) ->
                 if (parseResult.key == "G") {
                     val frames = gFrameDecoder.decode(parseResult.param)
-                    frames.forEach { frame -> onFrameReceived(frame) }
+                    frames.forEach { frame -> onFrameReceived(address, frame) }
                 }
             }
         }
@@ -65,7 +75,7 @@ class DemoViewModel @Inject constructor(
         _uiState.update { it.copy(selectedChannel = channel, waveformData = waveformBuffers.getChannel(channel)) }
     }
 
-    private fun onFrameReceived(frame: GhFuncFrame) {
+    private fun onFrameReceived(deviceAddress: String, frame: GhFuncFrame) {
         val funcMode = frame.funcId.toFunctionMode() ?: return
         _uiState.update { state ->
             val current = state.functionDataMap[funcMode] ?: FunctionData(funcMode)
@@ -88,8 +98,8 @@ class DemoViewModel @Inject constructor(
                 }
             }
 
-            if (_uiState.value.isRecording) {
-                recorder?.writeFrame(frame.toColumnMap())
+            if (_uiState.value.isRecording && currentRecordingDevice != null) {
+                dataRecorder.writeFrame(currentRecordingDevice!!, frame.toColumnMap())
             }
         }
     }
@@ -112,20 +122,34 @@ class DemoViewModel @Inject constructor(
     fun toggleRecording() {
         val currentlyRecording = _uiState.value.isRecording
         if (currentlyRecording) {
-            recorder?.stop()
-            recorder = null
+            currentRecordingDevice?.let { dataRecorder.stopRecording(it) }
+            currentRecordingDevice = null
         } else {
             val func = _uiState.value.selectedFunction ?: return
-            recorder = recorderFactory.create("gh3036").also {
-                it.start(mode = func.name)
+            val devices = connectionManager.devices.value
+            val masterDevice = devices.values.find { 
+                it.role == com.ghealth.tools.ble.connection.DeviceRole.MASTER && 
+                it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED 
+            }
+            
+            if (masterDevice != null) {
+                currentRecordingDevice = masterDevice.address
+                dataRecorder.startRecording(
+                    baseDir = baseDir,
+                    deviceAddress = masterDevice.address,
+                    deviceRole = StorageDeviceRole.MASTER,
+                    deviceName = masterDevice.name ?: "Unknown",
+                    chip = "gh3036",
+                    mode = func.name
+                )
             }
         }
         _uiState.update { it.copy(isRecording = !currentlyRecording) }
     }
 
     fun goBack() {
-        recorder?.stop()
-        recorder = null
+        currentRecordingDevice?.let { dataRecorder.stopRecording(it) }
+        currentRecordingDevice = null
         _uiState.update { it.copy(selectedFunction = null, waveformData = emptyList(), channelCount = 0, selectedChannel = 0, isRecording = false) }
         waveformBuffers.clearAll()
     }

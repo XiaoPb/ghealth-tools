@@ -53,10 +53,24 @@ sealed class ConnectionError {
     }
 }
 
+sealed class ConnectionConstraint {
+    object MasterAlreadyConnected : ConnectionConstraint()
+    object SlaveAlreadyConnected : ConnectionConstraint()
+    object CompareLimitReached : ConnectionConstraint()
+    data class Success(val canConnect: Boolean) : ConnectionConstraint()
+
+    fun getMessage(): String = when (this) {
+        is MasterAlreadyConnected -> "主设备已连接，请先断开现有连接"
+        is SlaveAlreadyConnected -> "从设备已连接，请先断开现有连接"
+        is CompareLimitReached -> "对比设备已达最大数量（5个）"
+        is Success -> ""
+    }
+}
+
 data class GHealthPeripheral(
     val peripheral: Peripheral,
     val role: DeviceRole,
-    val parser: Gh3036RpcParser
+    val parser: Gh3036RpcParser?
 ) {
     val address: String get() = peripheral.identifier.toString()
     val name: String? get() = peripheral.name
@@ -79,6 +93,9 @@ class BleConnectionManager @Inject constructor(
     private val _connectionErrors = MutableSharedFlow<Pair<String, ConnectionError>>()
     val connectionErrors: SharedFlow<Pair<String, ConnectionError>> = _connectionErrors.asSharedFlow()
 
+    private val _heartRateResults = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    val heartRateResults: StateFlow<Map<Int, Int>> = _heartRateResults.asStateFlow()
+
     private val peripherals = mutableMapOf<String, GHealthPeripheral>()
     private val pendingConnections = mutableMapOf<String, Peripheral>()
 
@@ -86,8 +103,41 @@ class BleConnectionManager @Inject constructor(
         return _devices.value[address]?.state ?: ConnectionState.DISCONNECTED
     }
 
+    fun checkConnectionConstraint(role: DeviceRole): ConnectionConstraint {
+        return when (role) {
+            DeviceRole.MASTER -> {
+                val hasMaster = _devices.value.values.any {
+                    it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED
+                }
+                if (hasMaster) ConnectionConstraint.MasterAlreadyConnected
+                else ConnectionConstraint.Success(true)
+            }
+            DeviceRole.SLAVE -> {
+                val hasSlave = _devices.value.values.any {
+                    it.role == DeviceRole.SLAVE && it.state == ConnectionState.CONNECTED
+                }
+                if (hasSlave) ConnectionConstraint.SlaveAlreadyConnected
+                else ConnectionConstraint.Success(true)
+            }
+            DeviceRole.COMPARE -> {
+                val compareCount = _devices.value.values.count {
+                    it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED
+                }
+                if (compareCount >= 5) ConnectionConstraint.CompareLimitReached
+                else ConnectionConstraint.Success(true)
+            }
+        }
+    }
+
     @OptIn(ExperimentalUuidApi::class)
     fun connect(address: String, name: String?, role: DeviceRole) {
+        val constraint = checkConnectionConstraint(role)
+        if (constraint !is ConnectionConstraint.Success) {
+            Timber.w("Connection constraint violated: $constraint")
+            emitConnectionError(address, ConnectionError.ConnectionFailed(constraint.getMessage()))
+            return
+        }
+
         val peripheral = pendingConnections[address]
         if (peripheral != null) {
             scope.launch {
@@ -107,6 +157,13 @@ class BleConnectionManager @Inject constructor(
     suspend fun connect(peripheral: Peripheral, role: DeviceRole) {
         val address = peripheral.identifier.toString()
 
+        val constraint = checkConnectionConstraint(role)
+        if (constraint !is ConnectionConstraint.Success) {
+            Timber.w("Connection constraint violated: $constraint")
+            emitConnectionError(address, ConnectionError.ConnectionFailed(constraint.getMessage()))
+            return
+        }
+
         val device = ConnectedDevice(
             address = address,
             name = peripheral.name,
@@ -120,10 +177,16 @@ class BleConnectionManager @Inject constructor(
         try {
             peripheral.connect()
 
+            val parser = when (role) {
+                DeviceRole.MASTER -> Gh3036RpcParser()
+                DeviceRole.SLAVE -> Gh3036RpcParser()
+                DeviceRole.COMPARE -> null
+            }
+
             val gHealthPeripheral = GHealthPeripheral(
                 peripheral = peripheral,
                 role = role,
-                parser = Gh3036RpcParser()
+                parser = parser
             )
             peripherals[address] = gHealthPeripheral
 
@@ -144,6 +207,43 @@ class BleConnectionManager @Inject constructor(
             Timber.e(e, "Connection failed for $address")
             emitConnectionError(address, ConnectionError.ConnectionFailed(e.message ?: "Unknown error"))
             updateDeviceState(address, ConnectionState.DISCONNECTED)
+        }
+    }
+
+    fun setPrimaryCompareDevice(address: String) {
+        val device = _devices.value[address] ?: return
+        if (device.role != DeviceRole.COMPARE) return
+
+        _devices.value = _devices.value.mapValues { (key, value) ->
+            if (value.role == DeviceRole.COMPARE) {
+                value.copy(isPrimaryCompare = key == address)
+            } else {
+                value
+            }
+        }
+        Timber.d("Set primary compare device: $address")
+    }
+
+    private fun getCompareDeviceIndex(address: String): Int {
+        val compareDevices = _devices.value.values
+            .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
+            .sortedByDescending { it.isPrimaryCompare }
+        return compareDevices.indexOfFirst { it.address == address }
+    }
+
+    private fun onHeartRateReceived(address: String, data: ByteArray) {
+        if (data.isEmpty()) return
+        val flags = data[0].toInt() and 0xFF
+        val heartRate = if (flags and 0x01 == 0) {
+            data[1].toInt() and 0xFF
+        } else {
+            ((data[2].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
+        }
+
+        val index = getCompareDeviceIndex(address)
+        if (index in 0..4) {
+            _heartRateResults.value = _heartRateResults.value + (index to heartRate)
+            Timber.d("Heart rate from $address (index $index): $heartRate bpm")
         }
     }
 
@@ -237,7 +337,7 @@ class BleConnectionManager @Inject constructor(
 
                 peripheral.observe(heartRateChar)
                     .onEach { data ->
-                        Timber.d("Heart rate data: ${data.size} bytes")
+                        onHeartRateReceived(address, data)
                     }
                     .launchIn(scope)
 
@@ -249,7 +349,8 @@ class BleConnectionManager @Inject constructor(
     private fun onDataReceived(address: String, data: ByteArray) {
         Timber.v("Received ${data.size} bytes from $address")
         val gHealthPeripheral = peripherals[address] ?: return
-        val results = gHealthPeripheral.parser.decode(data)
+        val parser = gHealthPeripheral.parser ?: return
+        val results = parser.decode(data)
 
         scope.launch {
             for (result in results) {
@@ -286,7 +387,8 @@ class BleConnectionManager @Inject constructor(
     @OptIn(ExperimentalUuidApi::class)
     suspend fun sendCommand(address: String, key: String, param: ByteArray = ByteArray(0)) {
         val gHealthPeripheral = peripherals[address] ?: return
-        val frame = gHealthPeripheral.parser.encode(key, param)
+        val parser = gHealthPeripheral.parser ?: return
+        val frame = parser.encode(key, param)
         writeToDevice(address, frame)
     }
 
@@ -322,5 +424,15 @@ class BleConnectionManager @Inject constructor(
     private fun onDeviceDisconnected(address: String) {
         updateDeviceState(address, ConnectionState.DISCONNECTED)
         peripherals.remove(address)
+        
+        val device = _devices.value[address]
+        if (device?.role == DeviceRole.COMPARE) {
+            val index = getCompareDeviceIndex(address)
+            if (index >= 0) {
+                val newResults = _heartRateResults.value.toMutableMap()
+                newResults.remove(index)
+                _heartRateResults.value = newResults
+            }
+        }
     }
 }

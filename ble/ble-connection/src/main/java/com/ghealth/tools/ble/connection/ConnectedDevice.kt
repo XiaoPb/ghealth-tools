@@ -12,5 +12,6 @@ data class ConnectedDevice(
     val name: String?,
     val role: DeviceRole,
     val state: ConnectionState = ConnectionState.DISCONNECTED,
-    val deviceType: DeviceType? = null
+    val deviceType: DeviceType? = null,
+    val isPrimaryCompare: Boolean = false
 )

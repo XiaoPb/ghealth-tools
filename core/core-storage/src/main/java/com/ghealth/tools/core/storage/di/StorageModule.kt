@@ -34,14 +34,4 @@ object StorageModule {
     fun provideLogManager(@Named("storageBaseDir") baseDir: File): LogManager {
         return LogManager(baseDir).also { it.init() }
     }
-
-    @Provides
-    @Singleton
-    fun provideDataRecorderFactory(@Named("storageBaseDir") baseDir: File): DataRecorderFactory {
-        return DataRecorderFactory(baseDir)
-    }
-}
-
-class DataRecorderFactory(private val baseDir: File) {
-    fun create(chip: String): DataRecorder = DataRecorder(baseDir, chip)
 }
