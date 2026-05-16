@@ -324,7 +324,7 @@ private fun DeviceStatusCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        StatusBadge(status = ConnectionStatus.Connected)
+                        StatusBadge(status = device.state.toUiStatus())
                     }
                 }
             }
