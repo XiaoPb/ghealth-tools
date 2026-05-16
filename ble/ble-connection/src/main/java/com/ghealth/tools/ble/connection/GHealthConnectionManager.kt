@@ -6,6 +6,7 @@ import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036RpcParser
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.storage.LogManager
 import com.juul.kable.ExperimentalApi
 import com.juul.kable.Peripheral
 import com.juul.kable.State
@@ -79,6 +80,7 @@ data class GHealthPeripheral(
 @Singleton
 class BleConnectionManager @Inject constructor(
     private val blePreferences: BlePreferences,
+    private val logManager: LogManager,
     private val scope: CoroutineScope
 ) {
     private val _devices = MutableStateFlow<Map<String, ConnectedDevice>>(emptyMap())
@@ -360,6 +362,7 @@ class BleConnectionManager @Inject constructor(
 
     private fun onDataReceived(address: String, data: ByteArray) {
         Timber.v("Received ${data.size} bytes from $address")
+        logManager.logBle(address, "RX", data)
         val gHealthPeripheral = peripherals[address] ?: return
         val parser = gHealthPeripheral.parser ?: return
         val results = parser.decode(data)
@@ -419,6 +422,7 @@ class BleConnectionManager @Inject constructor(
         )
 
         gHealthPeripheral.peripheral.write(writeChar, data, WriteType.WithResponse)
+        logManager.logBle(address, "TX", data)
         Timber.d("Wrote ${data.size} bytes to $address")
     }
 

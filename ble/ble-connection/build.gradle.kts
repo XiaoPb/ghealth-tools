@@ -11,6 +11,7 @@ android {
 dependencies {
     implementation(project(":core:core-model"))
     implementation(project(":core:core-datastore"))
+    implementation(project(":core:core-storage"))
     implementation(project(":ble:ble-protocol"))
     implementation(libs.kable.core.android)
     implementation(libs.hilt.android)
