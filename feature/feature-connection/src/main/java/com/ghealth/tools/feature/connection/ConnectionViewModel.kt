@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.DeviceRole
+import com.ghealth.tools.ble.scanner.BleScanException
 import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.model.BleDevice
 import com.ghealth.tools.core.model.ConnectionState
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 data class ConnectionUiState(
@@ -29,7 +31,11 @@ data class ConnectionUiState(
     val scanForRole: DeviceRole? = null,
     val showWorkModeDialog: Boolean = false,
     val showFunctionDialog: Boolean = false,
-    val showCommandSheet: Boolean = false
+    val showCommandSheet: Boolean = false,
+    val minRssi: Int = -80,
+    val scanError: String? = null,
+    val isBluetoothEnabled: Boolean = true,
+    val hasPermissions: Boolean = true
 )
 
 @HiltViewModel
@@ -49,14 +55,51 @@ class ConnectionViewModel @Inject constructor(
                 _uiState.update { it.copy(connectedDevices = devices) }
             }
         }
+        checkBluetoothState()
+    }
+
+    private fun checkBluetoothState() {
+        val isBtEnabled = bleScanner.isBluetoothEnabled
+        val hasPerm = bleScanner.hasScanPermission && bleScanner.hasConnectPermission
+        _uiState.update { it.copy(
+            isBluetoothEnabled = isBtEnabled,
+            hasPermissions = hasPerm
+        )}
     }
 
     fun startScan(role: DeviceRole) {
-        _uiState.update { it.copy(scanForRole = role, scanResults = emptyList(), isScanning = true) }
+        checkBluetoothState()
+
+        if (!_uiState.value.isBluetoothEnabled) {
+            _uiState.update { it.copy(scanError = "蓝牙未启用") }
+            return
+        }
+
+        if (!_uiState.value.hasPermissions) {
+            _uiState.update { it.copy(scanError = "缺少蓝牙权限") }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                scanForRole = role,
+                scanResults = emptyList(),
+                isScanning = true,
+                scanError = null
+            )
+        }
+
         scanJob?.cancel()
         scanJob = viewModelScope.launch {
-            bleScanner.scan()
-                .catch { _uiState.update { s -> s.copy(isScanning = false) } }
+            bleScanner.scan(minRssi = _uiState.value.minRssi)
+                .catch { e ->
+                    Timber.e(e, "Scan error")
+                    val errorMsg = when (e) {
+                        is BleScanException -> e.message ?: "扫描失败"
+                        else -> "扫描出错: ${e.message}"
+                    }
+                    _uiState.update { it.copy(isScanning = false, scanError = errorMsg) }
+                }
                 .collect { device ->
                     _uiState.update { state ->
                         val existing = state.scanResults.associateBy { it.address }.toMutableMap()
@@ -71,6 +114,14 @@ class ConnectionViewModel @Inject constructor(
         scanJob?.cancel()
         scanJob = null
         _uiState.update { it.copy(isScanning = false) }
+    }
+
+    fun setMinRssi(rssi: Int) {
+        _uiState.update { it.copy(minRssi = rssi) }
+    }
+
+    fun clearScanError() {
+        _uiState.update { it.copy(scanError = null) }
     }
 
     fun connectDevice(device: BleDevice) {

@@ -22,9 +22,11 @@ import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Cable
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -33,11 +35,15 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -68,8 +74,10 @@ fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
                 ScanSection(
                     results = state.scanResults,
                     role = state.scanForRole,
+                    minRssi = state.minRssi,
                     onSelect = { device, _ -> viewModel.connectDevice(device) },
-                    onStop = viewModel::stopScan
+                    onStop = viewModel::stopScan,
+                    onRssiChange = viewModel::setMinRssi
                 )
             } else {
                 MainMenuContent(
@@ -103,6 +111,19 @@ fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
         CommandBottomSheet(
             onSendCommand = viewModel::sendCommand,
             onDismiss = viewModel::dismissCommandSheet
+        )
+    }
+
+    state.scanError?.let { error ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearScanError,
+            title = { Text("扫描错误") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = viewModel::clearScanError) {
+                    Text("确定")
+                }
+            }
         )
     }
 }
@@ -286,9 +307,13 @@ private fun MenuItemCard(
 private fun ScanSection(
     results: List<BleDevice>,
     role: DeviceRole?,
+    minRssi: Int,
     onSelect: (BleDevice, DeviceRole) -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onRssiChange: (Int) -> Unit
 ) {
+    var showFilter by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -315,12 +340,58 @@ private fun ScanSection(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-            FilledTonalButton(onClick = onStop) {
-                Icon(Icons.Default.Stop, contentDescription = null)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("停止")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(
+                    onClick = { showFilter = !showFilter }
+                ) {
+                    Icon(Icons.Default.SignalCellularAlt, contentDescription = null)
+                }
+                FilledTonalButton(onClick = onStop) {
+                    Icon(Icons.Default.Stop, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("停止")
+                }
             }
         }
+
+        if (showFilter) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("信号强度过滤", style = MaterialTheme.typography.bodyMedium)
+                        Text("$minRssi dBm", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Slider(
+                        value = minRssi.toFloat(),
+                        onValueChange = { onRssiChange(it.toInt()) },
+                        valueRange = -100f..-40f,
+                        steps = 12
+                    )
+                    Text(
+                        "仅显示信号强度 ≥ $minRssi dBm 的设备",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = "发现 ${results.size} 个设备",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 4.dp)
+        )
 
         LazyColumn(
             contentPadding = PaddingValues(vertical = 8.dp),
@@ -361,13 +432,56 @@ private fun ScanResultItem(device: BleDevice, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text(
-                text = "${device.rssi} dBm",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "${device.rssi} dBm",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = getRssiColor(device.rssi)
+                )
+                RssiIndicator(rssi = device.rssi)
+            }
         }
     }
+}
+
+@Composable
+private fun RssiIndicator(rssi: Int) {
+    val color = getRssiColor(rssi)
+    val bars = when {
+        rssi >= -50 -> 4
+        rssi >= -60 -> 3
+        rssi >= -70 -> 2
+        rssi >= -80 -> 1
+        else -> 1
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        repeat(4) { index ->
+            val height = (8 + index * 4).dp
+            val isActive = index < bars
+            Card(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(height),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isActive) color
+                    else MaterialTheme.colorScheme.outlineVariant
+                )
+            ) {}
+        }
+    }
+}
+
+@Composable
+private fun getRssiColor(rssi: Int) = when {
+    rssi >= -50 -> MaterialTheme.colorScheme.primary
+    rssi >= -60 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+    rssi >= -70 -> MaterialTheme.colorScheme.tertiary
+    rssi >= -80 -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f)
+    else -> MaterialTheme.colorScheme.outline
 }
 
 private fun ConnectionState.toUiStatus(): ConnectionStatus = when (this) {
