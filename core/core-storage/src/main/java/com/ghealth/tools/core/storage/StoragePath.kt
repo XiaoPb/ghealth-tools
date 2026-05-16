@@ -21,6 +21,13 @@ data class StoragePath(
     val chip: String = "gh3036",
     val deviceName: String = "",
     val deviceAddress: String = "",
+    val phoneDevice: String = "",
+    val appVersion: String = "1.0.0",
+    val sdkVersion: String = "1.0.0",
+    val hrVersion: String = "1.0.0",
+    val spo2Version: String = "1.0.0",
+    val nadtVersion: String = "1.0.0",
+    val hrvVersion: String = "1.0.0",
     val date: Date = Date()
 ) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US)
@@ -52,16 +59,19 @@ data class StoragePath(
 
     fun infoJson(): String {
         return buildString {
-            append("{")
-            append("\"mode\":\"$mode\",")
-            append("\"role\":\"${rolePrefix()}\",")
-            append("\"status\":\"${statusPrefix()}\",")
-            append("\"scenario\":\"$scenario\",")
-            append("\"tester\":\"$tester\",")
-            append("\"chip\":\"$chip\",")
-            append("\"deviceName\":\"$deviceName\",")
-            append("\"deviceAddress\":\"$deviceAddress\",")
-            append("\"date\":\"${dateFormat.format(date)}\"")
+            append("{\n")
+            append("    \"MAC\": \"$deviceAddress\",\n")
+            append("    \"NAME\": \"$deviceName\",\n")
+            append("    \"App-version\": \"$appVersion\",\n")
+            append("    \"name\": \"$tester\",\n")
+            append("    \"scenario\": \"$scenario\",\n")
+            append("    \"chip\": \"$chip\",\n")
+            append("    \"iPhone-device\": \"$phoneDevice\",\n")
+            append("    \"SDK-Version\": \"$sdkVersion\",\n")
+            append("    \"HR-Version\": \"$hrVersion\",\n")
+            append("    \"SPO2-Version\": \"$spo2Version\",\n")
+            append("    \"NADT-Version\": \"$nadtVersion\",\n")
+            append("    \"HRV-Version\": \"$hrvVersion\"\n")
             append("}")
         }
     }

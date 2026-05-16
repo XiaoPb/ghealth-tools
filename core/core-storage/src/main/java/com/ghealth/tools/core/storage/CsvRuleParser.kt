@@ -4,9 +4,7 @@ data class CsvRule(
     val chip: String,
     val columns: List<String>,
     val delimiter: String = ",",
-    val encoding: String = "utf-8",
-    val hrRefColumn: Map<String, Int> = emptyMap(),
-    val spoRefColumn: Map<String, Int> = emptyMap()
+    val encoding: String = "utf-8"
 )
 
 object CsvRuleParser {
@@ -31,41 +29,39 @@ object CsvRuleParser {
         return result
     }
 
-    fun parseGh3036(): CsvRule {
-        val rawColumns = listOf(
-            "TimeStamp", "FRAME_ID", "ACCX", "ACCY", "ACCZ",
-            "Ipd{0-31}", "FLAG{0-7}", "REF_RESULT{0-15}", "ALGO_RESULT{0-15}",
-            "Rawdata{0-31}", "AGC_INFO_CH{0-31}", "LED_INFO_CH{0-31}",
-            "GYRO_X", "GYRO_Y", "GYRO_Z"
-        )
-        return CsvRule(
+    private val gh3036Columns = listOf(
+        "TimeStamp", "FRAME_ID", "ACCX", "ACCY", "ACCZ",
+        "Ipd{0-31}", "FLAG{0-7}", "REF_RESULT{0-15}", "ALGO_RESULT{0-15}",
+        "Rawdata{0-31}", "AGC_INFO_CH{0-31}", "LED_INFO_CH{0-31}",
+        "GYRO_X", "GYRO_Y", "GYRO_Z"
+    )
+
+    private val gh3220Columns = listOf(
+        "TimeStamp", "FRAME_ID", "ACCX", "ACCY", "ACCZ",
+        "CH{0-15}", "FLAG{0-7}", "REF_RESULT{0-15}", "ALGO_RESULT{0-7}",
+        "AGC_INFO_CH{0-15}", "AMB_CH{0-15}",
+        "GYRO_X", "GYRO_Y", "GYRO_Z",
+        "CH16-31", "ALGO_RESULT{8-15}", "AGC_INFO_CH{16-31}",
+        "CAP_CH{0-3}", "TEMP_CH{0-3}"
+    )
+
+    val gh3036: CsvRule by lazy {
+        CsvRule(
             chip = "gh3036",
-            columns = expandColumns(rawColumns),
-            hrRefColumn = mapOf("REF_RESULT0" to 46),
-            spoRefColumn = mapOf("REF_RESULT5" to 51)
+            columns = expandColumns(gh3036Columns)
         )
     }
 
-    fun parseGh3220(): CsvRule {
-        val rawColumns = listOf(
-            "TimeStamp", "FRAME_ID", "ACCX", "ACCY", "ACCZ",
-            "CH{0-15}", "FLAG{0-7}", "REF_RESULT{0-15}", "ALGO_RESULT{0-7}",
-            "AGC_INFO_CH{0-15}", "AMB_CH{0-15}",
-            "GYRO_X", "GYRO_Y", "GYRO_Z",
-            "CH16-31", "ALGO_RESULT{8-15}", "AGC_INFO_CH{16-31}",
-            "CAP_CH{0-3}", "TEMP_CH{0-3}"
-        )
-        return CsvRule(
+    val gh3220: CsvRule by lazy {
+        CsvRule(
             chip = "gh3220",
-            columns = expandColumns(rawColumns),
-            hrRefColumn = mapOf("REF_RESULT0" to 30),
-            spoRefColumn = mapOf("REF_RESULT5" to 35)
+            columns = expandColumns(gh3220Columns)
         )
     }
 
-    fun forChip(chip: String): CsvRule = when (chip) {
-        "gh3036" -> parseGh3036()
-        "gh3220" -> parseGh3220()
+    fun forChip(chip: String): CsvRule = when (chip.lowercase()) {
+        "gh3036" -> gh3036
+        "gh3220" -> gh3220
         else -> throw IllegalArgumentException("Unknown chip: $chip")
     }
 }

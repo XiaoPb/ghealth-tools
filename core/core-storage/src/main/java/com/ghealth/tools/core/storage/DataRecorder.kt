@@ -20,6 +20,23 @@ data class DeviceRecorder(
     val recordsWriter: CsvWriter
 )
 
+data class RecordingConfig(
+    val deviceAddress: String,
+    val deviceRole: DeviceRole,
+    val deviceName: String,
+    val chip: String,
+    val mode: String,
+    val scenario: String = "default",
+    val tester: String = "unknown",
+    val phoneDevice: String = "",
+    val appVersion: String = "1.0.0",
+    val sdkVersion: String = "1.0.0",
+    val hrVersion: String = "1.0.0",
+    val spo2Version: String = "1.0.0",
+    val nadtVersion: String = "1.0.0",
+    val hrvVersion: String = "1.0.0"
+)
+
 @Singleton
 class DataRecorder @Inject constructor() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -30,28 +47,30 @@ class DataRecorder @Inject constructor() {
 
     fun startRecording(
         baseDir: File,
-        deviceAddress: String,
-        deviceRole: DeviceRole,
-        deviceName: String,
-        chip: String,
-        mode: String,
-        scenario: String = "default",
-        tester: String = "unknown"
+        config: RecordingConfig
     ) {
+        val deviceAddress = config.deviceAddress
         if (deviceRecorders.containsKey(deviceAddress)) {
             Timber.w("Device $deviceAddress already recording")
             return
         }
 
-        val rule = CsvRuleParser.forChip(chip)
+        val rule = CsvRuleParser.forChip(config.chip)
         val path = StoragePath(
-            mode = mode,
-            deviceRole = deviceRole,
-            scenario = scenario,
-            tester = tester,
-            chip = chip,
-            deviceName = deviceName,
-            deviceAddress = deviceAddress
+            mode = config.mode,
+            deviceRole = config.deviceRole,
+            scenario = config.scenario,
+            tester = config.tester,
+            chip = config.chip,
+            deviceName = config.deviceName,
+            deviceAddress = config.deviceAddress,
+            phoneDevice = config.phoneDevice,
+            appVersion = config.appVersion,
+            sdkVersion = config.sdkVersion,
+            hrVersion = config.hrVersion,
+            spo2Version = config.spo2Version,
+            nadtVersion = config.nadtVersion,
+            hrvVersion = config.hrvVersion
         )
 
         val serverFile = File(baseDir, path.serverPath())
@@ -63,7 +82,7 @@ class DataRecorder @Inject constructor() {
 
         deviceRecorders[deviceAddress] = DeviceRecorder(
             deviceAddress = deviceAddress,
-            deviceRole = deviceRole,
+            deviceRole = config.deviceRole,
             serverWriter = serverWriter,
             recordsWriter = recordsWriter
         )
@@ -74,7 +93,45 @@ class DataRecorder @Inject constructor() {
         }
 
         globalState = RecordingState.RECORDING
-        Timber.d("Recording started for device $deviceAddress as ${deviceRole.name}")
+        Timber.d("Recording started for device $deviceAddress as ${config.deviceRole.name}")
+    }
+
+    fun startRecording(
+        baseDir: File,
+        deviceAddress: String,
+        deviceRole: DeviceRole,
+        deviceName: String,
+        chip: String,
+        mode: String,
+        scenario: String = "default",
+        tester: String = "unknown",
+        phoneDevice: String = "",
+        appVersion: String = "1.0.0",
+        sdkVersion: String = "1.0.0",
+        hrVersion: String = "1.0.0",
+        spo2Version: String = "1.0.0",
+        nadtVersion: String = "1.0.0",
+        hrvVersion: String = "1.0.0"
+    ) {
+        startRecording(
+            baseDir,
+            RecordingConfig(
+                deviceAddress = deviceAddress,
+                deviceRole = deviceRole,
+                deviceName = deviceName,
+                chip = chip,
+                mode = mode,
+                scenario = scenario,
+                tester = tester,
+                phoneDevice = phoneDevice,
+                appVersion = appVersion,
+                sdkVersion = sdkVersion,
+                hrVersion = hrVersion,
+                spo2Version = spo2Version,
+                nadtVersion = nadtVersion,
+                hrvVersion = hrvVersion
+            )
+        )
     }
 
     fun writeFrame(deviceAddress: String, values: Map<String, Any?>) {
