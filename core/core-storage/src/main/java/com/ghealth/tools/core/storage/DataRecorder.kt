@@ -34,7 +34,8 @@ data class RecordingConfig(
     val hrVersion: String = "1.0.0",
     val spo2Version: String = "1.0.0",
     val nadtVersion: String = "1.0.0",
-    val hrvVersion: String = "1.0.0"
+    val hrvVersion: String = "1.0.0",
+    val compareDeviceNames: List<String> = emptyList()
 )
 
 @Singleton
@@ -55,7 +56,12 @@ class DataRecorder @Inject constructor() {
             return
         }
 
-        val rule = CsvRuleParser.forChip(config.chip)
+        val rule = if (config.compareDeviceNames.isNotEmpty()) {
+            CsvRuleParser.forChipWithCompareDevices(config.chip, config.compareDeviceNames)
+        } else {
+            CsvRuleParser.forChip(config.chip)
+        }
+
         val path = StoragePath(
             mode = config.mode,
             deviceRole = config.deviceRole,
@@ -111,7 +117,8 @@ class DataRecorder @Inject constructor() {
         hrVersion: String = "1.0.0",
         spo2Version: String = "1.0.0",
         nadtVersion: String = "1.0.0",
-        hrvVersion: String = "1.0.0"
+        hrvVersion: String = "1.0.0",
+        compareDeviceNames: List<String> = emptyList()
     ) {
         startRecording(
             baseDir,
@@ -129,7 +136,8 @@ class DataRecorder @Inject constructor() {
                 hrVersion = hrVersion,
                 spo2Version = spo2Version,
                 nadtVersion = nadtVersion,
-                hrvVersion = hrvVersion
+                hrvVersion = hrvVersion,
+                compareDeviceNames = compareDeviceNames
             )
         )
     }
