@@ -299,6 +299,8 @@ class BleConnectionManager @Inject constructor(
                     return
                 }
 
+                Timber.d("Notify characteristic properties: ${notifyCharacteristic.properties}")
+
                 val notifyChar = characteristicOf(
                     service = serviceUuid,
                     characteristic = notifyUuid

@@ -197,6 +197,10 @@ class ConnectionViewModel @Inject constructor(
                         logging {
                             level = com.juul.kable.logs.Logging.Level.Events
                         }
+                        onServicesDiscovered {
+                            val negotiatedMtu = requestMtu(247)
+                            Timber.i("MTU negotiated: $negotiatedMtu")
+                        }
                     }
                     connectionManager.connect(peripheral, role)
                 } catch (e: Exception) {
