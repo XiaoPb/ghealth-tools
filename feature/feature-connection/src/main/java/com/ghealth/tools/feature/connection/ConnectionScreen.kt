@@ -123,7 +123,8 @@ private fun ConnectionMainContent(
                 minRssi = state.minRssi,
                 onSelect = { device, _ -> viewModel.connectDevice(device) },
                 onStop = viewModel::stopScan,
-                onRssiChange = viewModel::setMinRssi
+                onRssiChange = viewModel::setMinRssi,
+                onSortByRssi = viewModel::sortScanResultsByRssi
             )
         } else {
             MainMenuContent(
@@ -381,7 +382,8 @@ private fun ScanSection(
     minRssi: Int,
     onSelect: (BleDevice, DeviceRole) -> Unit,
     onStop: () -> Unit,
-    onRssiChange: (Int) -> Unit
+    onRssiChange: (Int) -> Unit,
+    onSortByRssi: () -> Unit
 ) {
     var showFilter by remember { mutableStateOf(false) }
 
@@ -412,6 +414,11 @@ private fun ScanSection(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(
+                    onClick = onSortByRssi
+                ) {
+                    Text("RSSI↓", style = MaterialTheme.typography.labelSmall)
+                }
                 FilledTonalButton(
                     onClick = { showFilter = !showFilter }
                 ) {

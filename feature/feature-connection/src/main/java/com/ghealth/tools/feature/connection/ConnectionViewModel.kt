@@ -159,9 +159,14 @@ class ConnectionViewModel @Inject constructor(
                         rssi = advertisement.rssi
                     )
                     _uiState.update { state ->
-                        val existing = state.scanResults.associateBy { it.address }.toMutableMap()
-                        existing[device.address] = device
-                        state.copy(scanResults = existing.values.sortedByDescending { it.rssi })
+                        val currentIndex = state.scanResults.indexOfFirst { it.address == device.address }
+                        if (currentIndex == -1) {
+                            state.copy(scanResults = state.scanResults + device)
+                        } else {
+                            val updated = state.scanResults.toMutableList()
+                            updated[currentIndex] = device
+                            state.copy(scanResults = updated)
+                        }
                     }
                 }
         }
@@ -175,6 +180,12 @@ class ConnectionViewModel @Inject constructor(
 
     fun setMinRssi(rssi: Int) {
         _uiState.update { it.copy(minRssi = rssi) }
+    }
+
+    fun sortScanResultsByRssi() {
+        _uiState.update { state ->
+            state.copy(scanResults = state.scanResults.sortedByDescending { it.rssi })
+        }
     }
 
     fun clearScanError() {
