@@ -1,6 +1,7 @@
 package com.ghealth.tools.ble.protocol.gh3036
 
 import com.ghealth.tools.ble.protocol.rpccore.ChipFrameDecoder
+import timber.log.Timber
 
 class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
     private var startFlag = true
@@ -42,23 +43,27 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
         val raw = RawFrame()
         val (hdrRaw, p1) = readVarint(buf, pos); pos = p1
         raw.packHeader = PackHeader(zigzagDecode(hdrRaw))
-        if (raw.packHeader.rawdataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.rawdata = arr }
-        if (raw.packHeader.phyValueEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.phyValue = arr }
-        if (raw.packHeader.gsDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_GS_DATA)); pos = p2; raw.gsData = arr }
-        if (raw.packHeader.flagsEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.flags = arr }
-        if (raw.packHeader.algDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_ALGO_DATA)); pos = p2; raw.algoData = arr }
-        if (raw.packHeader.agcInfoEn) { val (sz, p) = readSigned(buf, pos); pos = p; val size = sz.coerceIn(0, MAX_CHANNELS); val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; val (arrH, p3) = readSignedArray(buf, pos, size); pos = p3; raw.agcInfo = arr; raw.agcInfoHigh = arrH }
-        if (raw.packHeader.timestampEn) { val (tsL, p) = readSigned(buf, pos); pos = p; val (tsH, p2) = readSigned(buf, pos); pos = p2; raw.timestamp = tsL; raw.timestampHigh = tsH }
+        
+        Timber.d("decodeSingleFrame: startPos=$start, packHeader bits=${raw.packHeader.bits}")
+        
+        if (raw.packHeader.rawdataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.rawdata = arr; Timber.d("  rawdata: sz=$sz, values=${arr.take(3).toList()}...") }
+        if (raw.packHeader.phyValueEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.phyValue = arr; Timber.d("  phyValue: sz=$sz, values=${arr.take(3).toList()}...") }
+        if (raw.packHeader.gsDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_GS_DATA)); pos = p2; raw.gsData = arr; Timber.d("  gsData: sz=$sz, values=${arr.toList()}") }
+        if (raw.packHeader.flagsEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.flags = arr; Timber.d("  flags: sz=$sz") }
+        if (raw.packHeader.algDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_ALGO_DATA)); pos = p2; raw.algoData = arr; Timber.d("  algoData: sz=$sz, values=${arr.toList()}") }
+        if (raw.packHeader.agcInfoEn) { val (sz, p) = readSigned(buf, pos); pos = p; val size = sz.coerceIn(0, MAX_CHANNELS); val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; val (arrH, p3) = readSignedArray(buf, pos, size); pos = p3; raw.agcInfo = arr; raw.agcInfoHigh = arrH; Timber.d("  agcInfo: sz=$size") }
+        if (raw.packHeader.timestampEn) { val (tsL, p) = readSigned(buf, pos); pos = p; val (tsH, p2) = readSigned(buf, pos); pos = p2; raw.timestamp = tsL; raw.timestampHigh = tsH; Timber.d("  timestamp: tsL=$tsL, tsH=$tsH") }
         val (fid, pf) = readSigned(buf, pos); pos = pf; raw.frameId = fid
-        if (raw.packHeader.funcIdEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.functionId = v }
-        if (raw.packHeader.slotCfgEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.slotCfg = v }
+        if (raw.packHeader.funcIdEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.functionId = v; Timber.d("  funcId: $v") }
+        if (raw.packHeader.slotCfgEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.slotCfg = v; Timber.d("  slotCfg: $v") }
         return Pair(pos, raw)
     }
 
     private fun processDelta(raw: RawFrame): GhFuncFrame {
         if (lastFrameId >= 0) {
-            val expected = (lastFrameId + 1) % 1001
+            val expected = lastFrameId + 1
             if (raw.frameId != expected) {
+                Timber.w("Frame discontinuity: expected=$expected, got=${raw.frameId}, resetting delta state")
                 startFlag = true
                 lastRawdata.fill(0); lastPhyValue.fill(0); lastTimestamp = 0; lastTimestampHigh = 0
                 lastGsData.fill(0); lastFlags.fill(0); lastAlgoData.fill(0); lastAgcInfo.fill(0); lastAgcInfoHigh.fill(0)
@@ -68,18 +73,32 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
         frame.frameCnt = raw.frameId
         frame.funcId = GhFuncId.from(raw.functionId)
         lastFrameId = raw.frameId
+        
+        Timber.d("processDelta: frameId=${raw.frameId}, startFlag=$startFlag, timestampEn=${raw.packHeader.timestampEn}")
+        Timber.d("  raw.timestamp=${raw.timestamp}, raw.timestampHigh=${raw.timestampHigh}")
+        Timber.d("  lastTimestamp=$lastTimestamp, lastTimestampHigh=$lastTimestampHigh")
+        
         if (raw.packHeader.timestampEn) {
             if (startFlag) {
                 frame.timestamp = (raw.timestamp.toLong() and 0xFFFFFFFFL) or ((raw.timestampHigh.toLong() and 0xFFFFFFFFL) shl 32)
                 lastTimestamp = raw.timestamp; lastTimestampHigh = raw.timestampHigh
+                Timber.d("Timestamp (first): ${frame.timestamp}")
             } else {
                 val lastTs = (lastTimestamp.toLong() and 0xFFFFFFFFL) or ((lastTimestampHigh.toLong() and 0xFFFFFFFFL) shl 32)
                 val diff = (raw.timestamp.toLong() and 0xFFFFFFFFL) or ((raw.timestampHigh.toLong() and 0xFFFFFFFFL) shl 32)
                 frame.timestamp = lastTs + diff
+                Timber.d("Timestamp (delta): lastTs=$lastTs, diff=$diff, result=${frame.timestamp}")
                 lastTimestamp = (frame.timestamp and 0xFFFFFFFFL).toInt()
                 lastTimestampHigh = ((frame.timestamp ushr 32) and 0xFFFFFFFFL).toInt()
             }
+        } else {
+            Timber.w("Timestamp disabled in packHeader for frameId=${raw.frameId}")
         }
+        
+        Timber.d("  packHeader bits: rawdataEn=${raw.packHeader.rawdataEn}, phyValueEn=${raw.packHeader.phyValueEn}, " +
+                 "gsDataEn=${raw.packHeader.gsDataEn}, flagsEn=${raw.packHeader.flagsEn}, " +
+                 "algDataEn=${raw.packHeader.algDataEn}, agcInfoEn=${raw.packHeader.agcInfoEn}")
+        
         frame.rawdata = applyDelta(raw.rawdata, lastRawdata)
         frame.phyValue = applyDelta(raw.phyValue, lastPhyValue)
         frame.gsData = applyDelta(raw.gsData, lastGsData)
@@ -88,6 +107,9 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
         frame.agcInfo = applyDelta(raw.agcInfo, lastAgcInfo)
         frame.agcInfoHigh = applyDelta(raw.agcInfoHigh, lastAgcInfoHigh)
         frame.slotCfg = raw.slotCfg
+        
+        Timber.d("  rawdata size=${frame.rawdata.size}, phyValue size=${frame.phyValue.size}, algoData size=${frame.algoData.size}")
+        
         startFlag = false
         return frame
     }
