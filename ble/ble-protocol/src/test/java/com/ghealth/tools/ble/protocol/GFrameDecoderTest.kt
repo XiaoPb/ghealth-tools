@@ -1,21 +1,22 @@
 package com.ghealth.tools.ble.protocol
 
+import com.ghealth.tools.ble.protocol.gh3036.Gh3036FrameDecoder
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 class GFrameDecoderTest {
-    private lateinit var decoder: GFrameDecoder
+    private lateinit var decoder: Gh3036FrameDecoder
 
     @BeforeEach
     fun setup() {
-        decoder = GFrameDecoder()
+        decoder = Gh3036FrameDecoder()
     }
 
     @Test
     fun `varint decode single byte`() {
         val buf = byteArrayOf(0x05)
-        val (value, pos) = GFrameDecoder.readVarint(buf, 0)
+        val (value, pos) = Gh3036FrameDecoder.readVarint(buf, 0)
         assertEquals(5, value)
         assertEquals(1, pos)
     }
@@ -23,28 +24,28 @@ class GFrameDecoderTest {
     @Test
     fun `varint decode multi byte`() {
         val buf = byteArrayOf(0xAC.toByte(), 0x02)
-        val (value, pos) = GFrameDecoder.readVarint(buf, 0)
+        val (value, pos) = Gh3036FrameDecoder.readVarint(buf, 0)
         assertEquals(300, value)
         assertEquals(2, pos)
     }
 
     @Test
     fun `zigzag decode positive`() {
-        assertEquals(1, GFrameDecoder.zigzagDecode(2))
-        assertEquals(2, GFrameDecoder.zigzagDecode(4))
-        assertEquals(150, GFrameDecoder.zigzagDecode(300))
+        assertEquals(1, Gh3036FrameDecoder.zigzagDecode(2))
+        assertEquals(2, Gh3036FrameDecoder.zigzagDecode(4))
+        assertEquals(150, Gh3036FrameDecoder.zigzagDecode(300))
     }
 
     @Test
     fun `zigzag decode negative`() {
-        assertEquals(-1, GFrameDecoder.zigzagDecode(1))
-        assertEquals(-2, GFrameDecoder.zigzagDecode(3))
-        assertEquals(-150, GFrameDecoder.zigzagDecode(299))
+        assertEquals(-1, Gh3036FrameDecoder.zigzagDecode(1))
+        assertEquals(-2, Gh3036FrameDecoder.zigzagDecode(3))
+        assertEquals(-150, Gh3036FrameDecoder.zigzagDecode(299))
     }
 
     @Test
     fun `zigzag decode zero`() {
-        assertEquals(0, GFrameDecoder.zigzagDecode(0))
+        assertEquals(0, Gh3036FrameDecoder.zigzagDecode(0))
     }
 
     @Test

@@ -5,6 +5,13 @@ import com.ghealth.tools.ble.protocol.rpccore.FrameParser
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.rpccore.RpcParser
 
+@Deprecated(
+    message = "Replaced by RpcCore + Gh3036Executor",
+    replaceWith = ReplaceWith(
+        "Gh3036Executor + RpcCore",
+        "com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor"
+    )
+)
 class Gh3036RpcParser : RpcParser {
     private val frameParser = FrameParser()
     private val frameBuilder = FrameBuilder()

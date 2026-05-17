@@ -292,19 +292,35 @@ class ConnectionViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                connectionManager.sendCommand(masterAddress, key, param)
-                _uiState.update { 
-                    it.copy(
-                        commandExecutionState = CommandExecutionState(
-                            isExecuting = false,
-                            result = ByteArray(0),
-                            error = null
-                        )
-                    )
-                }
+                val result = connectionManager.sendCommand(masterAddress, key, param)
+                result.fold(
+                    onSuccess = { response ->
+                        _uiState.update {
+                            it.copy(
+                                commandExecutionState = CommandExecutionState(
+                                    isExecuting = false,
+                                    result = response,
+                                    error = null
+                                )
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        Timber.e(error, "Command execution failed")
+                        _uiState.update {
+                            it.copy(
+                                commandExecutionState = CommandExecutionState(
+                                    isExecuting = false,
+                                    result = null,
+                                    error = error.message ?: "命令执行失败"
+                                )
+                            )
+                        }
+                    }
+                )
             } catch (e: Exception) {
                 Timber.e(e, "Command execution failed")
-                _uiState.update { 
+                _uiState.update {
                     it.copy(
                         commandExecutionState = CommandExecutionState(
                             isExecuting = false,

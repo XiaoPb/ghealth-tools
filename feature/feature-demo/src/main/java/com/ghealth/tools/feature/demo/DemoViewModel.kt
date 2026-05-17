@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.DeviceRole
-import com.ghealth.tools.ble.protocol.gh3036.Gh3036FrameDecoder
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
 import com.ghealth.tools.core.model.FunctionMode
@@ -45,7 +44,6 @@ class DemoViewModel @Inject constructor(
     val uiState: StateFlow<DemoUiState> = _uiState.asStateFlow()
 
     private val waveformBuffers = MultiChannelRingBuffer(maxChannels = 32, capacity = 1024)
-    private val gFrameDecoder = Gh3036FrameDecoder()
     private var currentRecordingDevice: String? = null
 
     private val baseDir: File by lazy {
@@ -57,11 +55,8 @@ class DemoViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            connectionManager.dataFlow.collect { (address, parseResult) ->
-                if (parseResult.key == "G") {
-                    val frames = gFrameDecoder.decode(parseResult.param)
-                    frames.forEach { frame -> onFrameReceived(address, frame) }
-                }
+            connectionManager.ghFrameFlow.collect { (address, frame) ->
+                onFrameReceived(address, frame)
             }
         }
     }

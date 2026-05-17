@@ -3,7 +3,8 @@
 package com.ghealth.tools.ble.connection
 
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
-import com.ghealth.tools.ble.protocol.gh3036.Gh3036RpcParser
+import com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor
+import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.core.storage.LogManager
@@ -72,7 +73,7 @@ sealed class ConnectionConstraint {
 data class GHealthPeripheral(
     val peripheral: Peripheral,
     val role: DeviceRole,
-    val parser: Gh3036RpcParser?
+    val executor: Gh3036Executor?
 ) {
     val address: String get() = peripheral.identifier.toString()
     val name: String? get() = peripheral.name
@@ -92,6 +93,12 @@ class BleConnectionManager @Inject constructor(
         extraBufferCapacity = 64
     )
     val dataFlow: SharedFlow<Pair<String, ParseResult>> = _dataFlow.asSharedFlow()
+
+    private val _ghFrameFlow = MutableSharedFlow<Pair<String, GhFuncFrame>>(
+        replay = 0,
+        extraBufferCapacity = 64
+    )
+    val ghFrameFlow: SharedFlow<Pair<String, GhFuncFrame>> = _ghFrameFlow.asSharedFlow()
 
     private val _connectionErrors = MutableSharedFlow<Pair<String, ConnectionError>>()
     val connectionErrors: SharedFlow<Pair<String, ConnectionError>> = _connectionErrors.asSharedFlow()
@@ -180,16 +187,20 @@ class BleConnectionManager @Inject constructor(
         try {
             peripheral.connect()
 
-            val parser = when (role) {
-                DeviceRole.MASTER -> Gh3036RpcParser()
-                DeviceRole.SLAVE -> Gh3036RpcParser()
+            val executor = when (role) {
+                DeviceRole.MASTER -> Gh3036Executor().also {
+                    setupExecutor(it, address)
+                }
+                DeviceRole.SLAVE -> Gh3036Executor().also {
+                    setupExecutor(it, address)
+                }
                 DeviceRole.COMPARE -> null
             }
 
             val gHealthPeripheral = GHealthPeripheral(
                 peripheral = peripheral,
                 role = role,
-                parser = parser
+                executor = executor
             )
             peripherals[address] = gHealthPeripheral
 
@@ -375,17 +386,13 @@ class BleConnectionManager @Inject constructor(
     private fun onDataReceived(address: String, data: ByteArray) {
         Timber.v("Received ${data.size} bytes from $address")
         logManager.logBle(address, "RX", data)
-        val gHealthPeripheral = peripherals[address] ?: return
-        val parser = gHealthPeripheral.parser ?: return
-        val results = parser.decode(data)
+        val executor = peripherals[address]?.executor ?: return
 
         scope.launch {
+            val results = executor.process(data)
             for (result in results) {
                 result.onSuccess { parsed ->
                     Timber.d("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
-                    if (parsed.key == "G") {
-                        Timber.i("Command G response from $address: ${parsed.param.joinToString(" ") { "%02X".format(it) }}")
-                    }
                     _dataFlow.emit(address to parsed)
                 }
                 result.onFailure { error ->
@@ -398,6 +405,7 @@ class BleConnectionManager @Inject constructor(
     suspend fun disconnect(address: String) {
         Timber.d("Disconnecting from $address")
         val gHealthPeripheral = peripherals[address] ?: return
+        gHealthPeripheral.executor?.reset()
         updateDeviceState(address, ConnectionState.DISCONNECTING)
         try {
             gHealthPeripheral.peripheral.disconnect()
@@ -416,11 +424,22 @@ class BleConnectionManager @Inject constructor(
     }
 
     @OptIn(ExperimentalUuidApi::class)
-    suspend fun sendCommand(address: String, key: String, param: ByteArray = ByteArray(0)) {
-        val gHealthPeripheral = peripherals[address] ?: return
-        val parser = gHealthPeripheral.parser ?: return
-        val frame = parser.encode(key, param)
-        writeToDevice(address, frame)
+    suspend fun sendCommand(address: String, key: String, param: ByteArray = ByteArray(0)): Result<ByteArray> {
+        val executor = peripherals[address]?.executor
+            ?: return Result.failure(Exception("Executor not available for $address"))
+        val format = getFormatForKey(key)
+        return executor.call(key, format, param)
+    }
+
+    private fun getFormatForKey(key: String): String = when (key) {
+        "G" -> "<u8*>"
+        "GH3X_GetVersion" -> "<u8>"
+        "GH3X_RegsReadCmd" -> "<u16><d32>"
+        "GH3X_RegsWriteCmd" -> "<u16*>"
+        "GH3X_ChipCtrl" -> "<u8>"
+        "GHSetWorkModeCmd" -> "<u8>"
+        "GH3X_SwFunctionCmd" -> "<u32><u8>"
+        else -> "<u8*>"
     }
 
     @OptIn(ExperimentalUuidApi::class)
@@ -440,6 +459,31 @@ class BleConnectionManager @Inject constructor(
         gHealthPeripheral.peripheral.write(writeChar, data, WriteType.WithResponse)
         logManager.logBle(address, "TX", data)
         Timber.d("Wrote ${data.size} bytes to $address")
+    }
+
+    private fun setupExecutor(executor: Gh3036Executor, address: String) {
+        executor.setSendFunction { data ->
+            try {
+                scope.launch {
+                    writeToDevice(address, data)
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+        executor.registerFrameCallback { frame ->
+            onGhFuncFrame(address, frame)
+        }
+        scope.launch {
+            executor.registerGHandler()
+        }
+    }
+
+    private fun onGhFuncFrame(address: String, frame: GhFuncFrame) {
+        scope.launch {
+            _ghFrameFlow.emit(address to frame)
+        }
     }
 
     private fun emitConnectionError(address: String, error: ConnectionError) {
