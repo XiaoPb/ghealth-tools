@@ -32,7 +32,7 @@ data class ConnectionUiState(
     val isScanning: Boolean = false,
     val scanResults: List<BleDevice> = emptyList(),
     val connectedDevices: Map<String, ConnectedDevice> = emptyMap(),
-    val currentWorkMode: WorkMode? = null,
+    val currentWorkMode: WorkMode? = WorkMode.AUTO_PASS,
     val selectedFunctions: Set<FunctionMode> = emptySet(),
     val scanForRole: DeviceRole? = null,
     val showWorkModeDialog: Boolean = false,
@@ -353,7 +353,8 @@ class ConnectionViewModel @Inject constructor(
     }
 
     fun confirmTestConfig(config: TestConfig) {
-        _uiState.update { 
+        connectionManager.setTestConfig(config)
+        _uiState.update {
             it.copy(
                 showTestConfigDialog = false,
                 dataMonitorState = DataMonitorState(

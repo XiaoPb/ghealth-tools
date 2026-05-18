@@ -7,6 +7,7 @@ import com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.TestConfig
 import com.ghealth.tools.core.storage.LogManager
 import com.juul.kable.ExperimentalApi
 import com.juul.kable.Peripheral
@@ -105,6 +106,17 @@ class BleConnectionManager @Inject constructor(
 
     private val _heartRateResults = MutableStateFlow<Map<Int, Int>>(emptyMap())
     val heartRateResults: StateFlow<Map<Int, Int>> = _heartRateResults.asStateFlow()
+
+    private val _testConfig = MutableStateFlow<TestConfig?>(null)
+    val testConfig: StateFlow<TestConfig?> = _testConfig.asStateFlow()
+
+    fun setTestConfig(config: TestConfig) {
+        _testConfig.value = config
+    }
+
+    fun resetFrameDecoders() {
+        peripherals.values.forEach { it.executor?.resetFrameDecoder() }
+    }
 
     private val peripherals = mutableMapOf<String, GHealthPeripheral>()
     private val pendingConnections = mutableMapOf<String, Peripheral>()

@@ -69,4 +69,8 @@ class Gh3036Executor(
         core.reset()
         frameDecoder.reset()
     }
+
+    fun resetFrameDecoder() {
+        frameDecoder.reset()
+    }
 }

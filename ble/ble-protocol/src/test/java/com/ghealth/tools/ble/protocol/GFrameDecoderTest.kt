@@ -63,7 +63,7 @@ class GFrameDecoderTest {
     }
 
     @Test
-    fun `delta compression across frames`() {
+    fun `delta compression within single batch`() {
         val data1 = buildGFrameData(
             packHeaderBits = 0x01,
             rawdataSize = 1,
@@ -76,12 +76,31 @@ class GFrameDecoderTest {
             rawdata = intArrayOf(5),
             frameId = 1
         )
+        val combined = data1 + data2
+        val frames = decoder.decode(combined)
+        assertEquals(2, frames.size)
+        assertEquals(1000, frames[0].rawdata[0])
+        assertEquals(1005, frames[1].rawdata[0])
+    }
 
+    @Test
+    fun `state resets across decode calls`() {
+        val data1 = buildGFrameData(
+            packHeaderBits = 0x01,
+            rawdataSize = 1,
+            rawdata = intArrayOf(1000),
+            frameId = 0
+        )
+        val data2 = buildGFrameData(
+            packHeaderBits = 0x01,
+            rawdataSize = 1,
+            rawdata = intArrayOf(5),
+            frameId = 0
+        )
         val frames1 = decoder.decode(data1)
         assertEquals(1000, frames1[0].rawdata[0])
-
         val frames2 = decoder.decode(data2)
-        assertEquals(1005, frames2[0].rawdata[0])
+        assertEquals(5, frames2[0].rawdata[0])
     }
 
     private fun buildGFrameData(

@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -26,6 +27,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ghealth.tools.feature.connection.ConnectionScreen
 import com.ghealth.tools.feature.demo.DemoScreen
+import com.ghealth.tools.feature.demo.DemoViewModel
 import com.ghealth.tools.feature.login.LoginScreen
 import com.ghealth.tools.feature.settings.DeviceInfoScreen
 import com.ghealth.tools.feature.settings.SettingsScreen
@@ -68,6 +70,7 @@ fun MainScreen(onLogout: () -> Unit) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val demoViewModel: DemoViewModel = hiltViewModel()
 
     val isTopLevelRoute = currentDestination?.route in TopLevelRoute.entries.map { it.route }
 
@@ -119,7 +122,7 @@ fun MainScreen(onLogout: () -> Unit) {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(TopLevelRoute.Connection.route) { ConnectionScreen() }
-            composable(TopLevelRoute.Demo.route) { DemoScreen() }
+            composable(TopLevelRoute.Demo.route) { DemoScreen(viewModel = demoViewModel) }
             composable(TopLevelRoute.Settings.route) {
                 SettingsScreen(
                     onNavigateToDeviceinfo = {

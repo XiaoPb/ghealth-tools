@@ -46,13 +46,16 @@ class DataRecorder @Inject constructor() {
 
     val recordingState: RecordingState get() = globalState
 
+    private fun recorderKey(deviceAddress: String, mode: String): String = "${deviceAddress}_$mode"
+
     fun startRecording(
         baseDir: File,
         config: RecordingConfig
     ) {
         val deviceAddress = config.deviceAddress
-        if (deviceRecorders.containsKey(deviceAddress)) {
-            Timber.w("Device $deviceAddress already recording")
+        val key = recorderKey(deviceAddress, config.mode)
+        if (deviceRecorders.containsKey(key)) {
+            Timber.w("Recorder $key already exists")
             return
         }
 
@@ -86,7 +89,7 @@ class DataRecorder @Inject constructor() {
         val serverWriter = CsvWriter(serverFile, rule, infoJson)
         val recordsWriter = CsvWriter(recordsFile, rule, infoJson)
 
-        deviceRecorders[deviceAddress] = DeviceRecorder(
+        deviceRecorders[key] = DeviceRecorder(
             deviceAddress = deviceAddress,
             deviceRole = config.deviceRole,
             serverWriter = serverWriter,
@@ -142,33 +145,33 @@ class DataRecorder @Inject constructor() {
         )
     }
 
-    fun writeFrame(deviceAddress: String, values: Map<String, Any?>) {
+    fun writeFrame(deviceAddress: String, mode: String, values: Map<String, Any?>) {
         if (globalState != RecordingState.RECORDING) return
-        val recorder = deviceRecorders[deviceAddress] ?: return
+        val recorder = deviceRecorders[recorderKey(deviceAddress, mode)] ?: return
         scope.launch {
             recorder.serverWriter.writeRow(values)
             recorder.recordsWriter.writeRow(values)
         }
     }
 
-    fun writeHeartRateResult(deviceAddress: String, index: Int, heartRate: Int) {
+    fun writeHeartRateResult(deviceAddress: String, mode: String, index: Int, heartRate: Int) {
         if (globalState != RecordingState.RECORDING) return
-        val recorder = deviceRecorders[deviceAddress] ?: return
+        val recorder = deviceRecorders[recorderKey(deviceAddress, mode)] ?: return
         if (recorder.deviceRole != DeviceRole.MASTER) return
-        
+
         scope.launch {
             val values = mapOf("REF_RESULT$index" to heartRate)
             recorder.serverWriter.writeRow(values)
         }
     }
 
-    fun stopRecording(deviceAddress: String) {
-        val recorder = deviceRecorders.remove(deviceAddress) ?: return
+    fun stopRecording(deviceAddress: String, mode: String) {
+        val recorder = deviceRecorders.remove(recorderKey(deviceAddress, mode)) ?: return
         scope.launch {
             recorder.serverWriter.close()
             recorder.recordsWriter.close()
         }
-        Timber.d("Recording stopped for device $deviceAddress")
+        Timber.d("Recording stopped for device $deviceAddress mode $mode")
 
         if (deviceRecorders.isEmpty()) {
             globalState = RecordingState.IDLE
@@ -201,11 +204,16 @@ class DataRecorder @Inject constructor() {
         }
     }
 
-    fun isRecording(deviceAddress: String): Boolean {
-        return deviceRecorders.containsKey(deviceAddress)
+    fun isRecording(deviceAddress: String, mode: String): Boolean {
+        return deviceRecorders.containsKey(recorderKey(deviceAddress, mode))
     }
 
-    fun getRecordingDevices(): List<String> {
-        return deviceRecorders.keys.toList()
+    fun isAnyRecording(): Boolean {
+        return deviceRecorders.isNotEmpty()
+    }
+
+    fun getRecordingModes(deviceAddress: String): List<String> {
+        val prefix = "${deviceAddress}_"
+        return deviceRecorders.keys.filter { it.startsWith(prefix) }.map { it.removePrefix(prefix) }
     }
 }
