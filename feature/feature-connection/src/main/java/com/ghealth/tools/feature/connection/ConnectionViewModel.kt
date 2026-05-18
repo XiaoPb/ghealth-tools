@@ -53,7 +53,8 @@ data class ConnectionUiState(
 @HiltViewModel
 class ConnectionViewModel @Inject constructor(
     private val bleScanner: BleScanner,
-    private val connectionManager: BleConnectionManager
+    private val connectionManager: BleConnectionManager,
+    private val recordingManager: com.ghealth.tools.core.storage.RecordingManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ConnectionUiState())
@@ -100,6 +101,23 @@ class ConnectionViewModel @Inject constructor(
         viewModelScope.launch {
             connectionManager.dataFlow.collect { (address, parseResult) ->
                 handleParsedData(address, parseResult)
+            }
+        }
+
+        viewModelScope.launch {
+            connectionManager.devices.collect { devices ->
+                if (devices.isEmpty() && _uiState.value.dataMonitorState.isMonitoring) {
+                    stopMonitoring()
+                    viewModelScope.launch { recordingManager.endSession() }
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            connectionManager.recordingStoppedEvents.collect {
+                if (_uiState.value.dataMonitorState.isMonitoring) {
+                    stopMonitoring()
+                }
             }
         }
 
@@ -344,6 +362,28 @@ class ConnectionViewModel @Inject constructor(
 
     fun confirmTestConfig(config: TestConfig) {
         connectionManager.setTestConfig(config)
+        connectionManager.resetFrameDecoders()
+        val devices = connectionManager.devices.value
+        val masterDevice = devices.values.find {
+            it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED
+        }
+        val slaveDevices = devices.values.filter {
+            it.role == DeviceRole.SLAVE && it.state == ConnectionState.CONNECTED
+        }
+        if (masterDevice != null) {
+            recordingManager.startSession(
+                config = config,
+                masterDeviceName = masterDevice.name ?: "Unknown",
+                masterDeviceAddress = masterDevice.address,
+                slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },
+                compareDeviceNames = devices.values
+                    .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
+                    .map { it.name ?: it.address },
+                compareDeviceAddresses = devices.values
+                    .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
+                    .map { it.address }
+            )
+        }
         _uiState.update {
             it.copy(
                 showTestConfigDialog = false,

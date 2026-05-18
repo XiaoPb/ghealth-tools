@@ -227,6 +227,14 @@ private fun MainMenuContent(
             subtitle = "扫描并连接对比 BLE 设备",
             onClick = onScanCompare
         )
+        if (state.connectedDevices.isNotEmpty()) {
+            MenuItemCard(
+                icon = Icons.Default.LinkOff,
+                title = "断开全部",
+                subtitle = "断开所有已连接设备",
+                onClick = onDisconnectAll
+            )
+        }
         MenuItemCard(
             icon = Icons.Default.Tune,
             title = "工作模式",
@@ -239,15 +247,6 @@ private fun MainMenuContent(
             subtitle = "发送 RPC 命令到设备",
             onClick = onCommand
         )
-
-        if (state.connectedDevices.isNotEmpty()) {
-            MenuItemCard(
-                icon = Icons.Default.LinkOff,
-                title = "断开全部",
-                subtitle = "断开所有已连接设备",
-                onClick = onDisconnectAll
-            )
-        }
     }
 }
 

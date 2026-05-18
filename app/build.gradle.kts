@@ -1,3 +1,6 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +8,8 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
+
+val buildTimestamp: String = SimpleDateFormat("yyyyMMdd-HHmm").format(Date())
 
 android {
     namespace = "com.ghealth.tools"
@@ -15,7 +20,7 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = "1.0.0-dev.$buildTimestamp"
     }
 
     buildTypes {

@@ -74,7 +74,7 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
                 lastTimestamp = raw.timestamp; lastTimestampHigh = raw.timestampHigh
             } else {
                 val lastTs = (lastTimestamp.toLong() and 0xFFFFFFFFL) or ((lastTimestampHigh.toLong() and 0xFFFFFFFFL) shl 32)
-                val diff = (raw.timestamp.toLong() and 0xFFFFFFFFL) or ((raw.timestampHigh.toLong() and 0xFFFFFFFFL) shl 32)
+                val diff = raw.timestamp.toLong() and 0xFFFFFFFFL
                 frame.timestamp = lastTs + diff
                 lastTimestamp = (frame.timestamp and 0xFFFFFFFFL).toInt()
                 lastTimestampHigh = ((frame.timestamp ushr 32) and 0xFFFFFFFFL).toInt()
@@ -93,22 +93,19 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
             frame.flags = lastFlags.copyOf(lastFlagDataBits)
         }
 
-        // agc_info: absolute values (not delta), fallback to last when absent
+        // agc_info: delta-accumulated, fallback to last when absent
         if (raw.agcInfo.isNotEmpty()) {
-            frame.agcInfo = raw.agcInfo.copyOf()
-            frame.agcInfoHigh = raw.agcInfoHigh.copyOf()
-            copyInto(raw.agcInfo, lastAgcInfo)
-            copyInto(raw.agcInfoHigh, lastAgcInfoHigh)
+            frame.agcInfo = applyDelta(raw.agcInfo, lastAgcInfo)
+            frame.agcInfoHigh = applyDelta(raw.agcInfoHigh, lastAgcInfoHigh)
             lastAgcSize = raw.agcInfo.size
         } else if (lastAgcSize > 0) {
             frame.agcInfo = lastAgcInfo.copyOf(lastAgcSize)
             frame.agcInfoHigh = lastAgcInfoHigh.copyOf(lastAgcSize)
         }
 
-        // algo_data: absolute values (not delta), fallback to last when absent
+        // algo_data: delta-accumulated, fallback to last when absent
         if (raw.algoData.isNotEmpty()) {
-            frame.algoData = raw.algoData.copyOf()
-            copyInto(raw.algoData, lastAlgoData)
+            frame.algoData = applyDelta(raw.algoData, lastAlgoData)
             lastAlgoDataSize = raw.algoData.size
         } else if (lastAlgoDataSize > 0) {
             frame.algoData = lastAlgoData.copyOf(lastAlgoDataSize)
@@ -127,12 +124,6 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
             if (i < last.size) last[i] = result[i]
         }
         return result
-    }
-
-    private fun copyInto(src: IntArray, dst: IntArray) {
-        for (i in src.indices) {
-            if (i < dst.size) dst[i] = src[i]
-        }
     }
 
     private class RawFrame {

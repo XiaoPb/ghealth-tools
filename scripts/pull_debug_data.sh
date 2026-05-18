@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if $ALL_DATES; then
-    TARGET_DATE="*"
+    TARGET_DATE="all"
 elif [[ -n "$DATE_ARG" ]]; then
     TARGET_DATE="$DATE_ARG"
 else
@@ -84,7 +84,11 @@ echo "    远程目录内容:"
 echo "$REMOTE_FILES" | sed 's/^/      /'
 
 # ── 创建本地目录 ─────────────────────────────────────
-LOCAL_DIR="${DEBUG_DIR}/${TARGET_DATE}"
+if $ALL_DATES; then
+    LOCAL_DIR="${DEBUG_DIR}/all"
+else
+    LOCAL_DIR="${DEBUG_DIR}/${TARGET_DATE}"
+fi
 mkdir -p "${LOCAL_DIR}/logs"
 mkdir -p "${LOCAL_DIR}/server"
 mkdir -p "${LOCAL_DIR}/records"
@@ -94,17 +98,33 @@ echo ">>> 本地输出目录: ${LOCAL_DIR}"
 # ── 拉取 LOG 文件 ────────────────────────────────────
 echo ""
 echo ">>> 拉取 LOG 文件..."
-LOG_REMOTE="${REMOTE_BASE}/logs/${TARGET_DATE}"
+
+pull_logs_for_date() {
+    local date_dir="$1"
+    local log_remote="${REMOTE_BASE}/logs/${date_dir}"
+    local log_local="${DEBUG_DIR}/${date_dir}/logs"
+    mkdir -p "$log_local"
+
+    local log_list=$("$ADB" shell "ls ${log_remote}/ 2>/dev/null" | tr -d '\r' || true)
+    if [[ -n "$log_list" ]]; then
+        while IFS= read -r f; do
+            [[ -z "$f" ]] && continue
+            echo "    ${f}"
+            pull_file "${log_remote}/${f}" "${log_local}/${f}"
+            LOG_COUNT=$((LOG_COUNT + 1))
+        done <<< "$log_list"
+    fi
+}
+
 LOG_COUNT=0
 
-LOG_LIST=$("$ADB" shell "ls ${LOG_REMOTE}/ 2>/dev/null" | tr -d '\r' || true)
-if [[ -n "$LOG_LIST" ]]; then
-    while IFS= read -r f; do
-        [[ -z "$f" ]] && continue
-        echo "    ${f}"
-        pull_file "${LOG_REMOTE}/${f}" "${LOCAL_DIR}/logs/${f}"
-        LOG_COUNT=$((LOG_COUNT + 1))
-    done <<< "$LOG_LIST"
+if $ALL_DATES; then
+    for date_dir in $("$ADB" shell "ls ${REMOTE_BASE}/logs/ 2>/dev/null" | tr -d '\r' || true); do
+        [[ -z "$date_dir" ]] && continue
+        pull_logs_for_date "$date_dir"
+    done
+else
+    pull_logs_for_date "$TARGET_DATE"
 fi
 echo "    共拉取 ${LOG_COUNT} 个 LOG 文件"
 

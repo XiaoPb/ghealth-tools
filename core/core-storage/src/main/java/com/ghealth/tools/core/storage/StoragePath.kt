@@ -57,6 +57,12 @@ data class StoragePath(
         return "records/$mode/${status}_${role}_${scenario}_${tester}_${chip}_${mode}_records_$dateStr.csv"
     }
 
+    fun recordsPathForMode(): String {
+        val dateStr = dateFormat.format(date)
+        val status = statusPrefix()
+        return "records/$mode/${status}_records_${mode}_$dateStr.csv"
+    }
+
     fun infoJson(): String {
         return buildString {
             append("{\"MAC\":\"$deviceAddress\",")

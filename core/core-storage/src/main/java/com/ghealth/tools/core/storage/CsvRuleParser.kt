@@ -65,6 +65,14 @@ object CsvRuleParser {
         else -> throw IllegalArgumentException("Unknown chip: $chip")
     }
 
+    fun forRecordsCsv(maxCompareDevices: Int): CsvRule {
+        val columns = mutableListOf("TimeStamp", "MasterAlgo", "SlaveAlgo")
+        for (i in 0 until maxCompareDevices.coerceIn(0, 5)) {
+            columns.add("Compare${i}_HR")
+        }
+        return CsvRule(chip = "records", columns = columns)
+    }
+
     fun forChipWithCompareDevices(chip: String, compareDeviceNames: List<String>): CsvRule {
         val baseRule = forChip(chip)
         if (compareDeviceNames.isEmpty()) return baseRule

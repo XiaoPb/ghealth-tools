@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
     private val themeModeState by lazy {
         blePreferences.themeMode
             .map { ThemeMode.fromKey(it) }
-            .stateIn(lifecycleScope, SharingStarted.WhileSubscribed(5000), ThemeMode.OCEAN_BLUE)
+            .stateIn(lifecycleScope, SharingStarted.WhileSubscribed(5000), ThemeMode.SKY_BLUE)
     }
 
     private val bluetoothManager by lazy {
@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
         checkBluetoothAndPermissions()
 
         setContent {
-            val themeMode by themeModeState.collectAsState(initial = ThemeMode.OCEAN_BLUE)
+            val themeMode by themeModeState.collectAsState(initial = ThemeMode.SKY_BLUE)
             
             GHealthTheme(themeMode = themeMode) {
                 GHealthNavHost()

@@ -53,7 +53,7 @@ class BlePreferences @Inject constructor(
     }
 
     val themeMode: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[Keys.THEME_MODE] ?: "ocean_blue"
+        prefs[Keys.THEME_MODE] ?: "sky_blue"
     }
 
     suspend fun setServiceUuid(uuid: String) {

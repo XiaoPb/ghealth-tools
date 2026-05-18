@@ -3,6 +3,7 @@
 package com.ghealth.tools.ble.connection
 
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
+import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.core.datastore.BlePreferences
@@ -101,6 +102,9 @@ class BleConnectionManager @Inject constructor(
     )
     val ghFrameFlow: SharedFlow<Pair<String, GhFuncFrame>> = _ghFrameFlow.asSharedFlow()
 
+    private val _recordingStoppedEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val recordingStoppedEvents: SharedFlow<Unit> = _recordingStoppedEvents.asSharedFlow()
+
     private val _connectionErrors = MutableSharedFlow<Pair<String, ConnectionError>>()
     val connectionErrors: SharedFlow<Pair<String, ConnectionError>> = _connectionErrors.asSharedFlow()
 
@@ -112,6 +116,10 @@ class BleConnectionManager @Inject constructor(
 
     fun setTestConfig(config: TestConfig) {
         _testConfig.value = config
+    }
+
+    fun notifyRecordingStopped() {
+        _recordingStoppedEvents.tryEmit(Unit)
     }
 
     fun resetFrameDecoders() {
@@ -395,21 +403,19 @@ class BleConnectionManager @Inject constructor(
         }
     }
 
-    private fun onDataReceived(address: String, data: ByteArray) {
+    private suspend fun onDataReceived(address: String, data: ByteArray) {
         Timber.v("Received ${data.size} bytes from $address")
         logManager.logBle(address, "RX", data)
         val executor = peripherals[address]?.executor ?: return
 
-        scope.launch {
-            val results = executor.process(data)
-            for (result in results) {
-                result.onSuccess { parsed ->
-                    Timber.d("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
-                    _dataFlow.emit(address to parsed)
-                }
-                result.onFailure { error ->
-                    Timber.w("Parse error from $address: ${error.message}")
-                }
+        val results = executor.process(data)
+        for (result in results) {
+            result.onSuccess { parsed ->
+                Timber.d("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
+                _dataFlow.emit(address to parsed)
+            }
+            result.onFailure { error ->
+                Timber.w("Parse error from $address: ${error.message}")
             }
         }
     }
@@ -440,7 +446,12 @@ class BleConnectionManager @Inject constructor(
         val executor = peripherals[address]?.executor
             ?: return Result.failure(Exception("Executor not available for $address"))
         val format = getFormatForKey(key)
-        return executor.call(key, format, param)
+        val hasResponse = Gh3036CommandMeta.getCommandByKey(key)?.hasResponse ?: true
+        return if (hasResponse) {
+            executor.call(key, format, param)
+        } else {
+            executor.send(key, format, param).map { ByteArray(0) }
+        }
     }
 
     private fun getFormatForKey(key: String): String = when (key) {
@@ -470,17 +481,18 @@ class BleConnectionManager @Inject constructor(
 
         gHealthPeripheral.peripheral.write(writeChar, data, WriteType.WithResponse)
         logManager.logBle(address, "TX", data)
-        Timber.d("Wrote ${data.size} bytes to $address")
+        Timber.d("Wrote ${data.size} bytes to $address: ${data.toHexString()}")
     }
 
     private fun setupExecutor(executor: Gh3036Executor, address: String) {
         executor.setSendFunction { data ->
             try {
-                scope.launch {
+                kotlinx.coroutines.runBlocking {
                     writeToDevice(address, data)
                 }
                 Result.success(Unit)
             } catch (e: Exception) {
+                Timber.e(e, "Failed to write to device $address")
                 Result.failure(e)
             }
         }
@@ -493,9 +505,7 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun onGhFuncFrame(address: String, frame: GhFuncFrame) {
-        scope.launch {
-            _ghFrameFlow.emit(address to frame)
-        }
+        _ghFrameFlow.tryEmit(address to frame)
     }
 
     private fun emitConnectionError(address: String, error: ConnectionError) {
@@ -520,3 +530,5 @@ class BleConnectionManager @Inject constructor(
         Timber.d("Device disconnected and removed: $address")
     }
 }
+
+private fun ByteArray.toHexString(): String = joinToString(" ") { "%02X".format(it) }

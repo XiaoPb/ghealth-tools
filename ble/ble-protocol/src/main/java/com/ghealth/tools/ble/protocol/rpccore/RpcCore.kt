@@ -1,6 +1,8 @@
 package com.ghealth.tools.ble.protocol.rpccore
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
@@ -36,6 +38,7 @@ class RpcCore(
 ) {
     private val frameParser = FrameParser()
     private val frameBuilder = FrameBuilder()
+    private val processMutex = Mutex()
 
     private val staticHandlers = ConcurrentHashMap<String, (ByteArray, Int, InvokeContext) -> Unit>()
     private val pendingCalls = ConcurrentHashMap<String, PendingCall>()
@@ -49,15 +52,17 @@ class RpcCore(
     }
 
     suspend fun process(data: ByteArray): List<Result<ParseResult>> {
-        val results = frameParser.process(data)
+        return processMutex.withLock {
+            val results = frameParser.process(data)
 
-        results.forEach { result ->
-            if (result.isSuccess) {
-                handleParseResult(result.getOrThrow())
+            results.forEach { result ->
+                if (result.isSuccess) {
+                    handleParseResult(result.getOrThrow())
+                }
             }
-        }
 
-        return results
+            results
+        }
     }
 
     private fun handleParseResult(result: ParseResult) {
@@ -110,6 +115,7 @@ class RpcCore(
                     0 -> {
                         @Suppress("UNUSED_VARIABLE")
                         val ackFrameIdx = data.getOrElse(1) { 0 }
+                        pending.onResponse(Result.success(ByteArray(0)))
                     }
                     1 -> {
                         val responseData = if (data.size > 2) {

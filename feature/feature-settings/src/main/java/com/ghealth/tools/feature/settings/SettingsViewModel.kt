@@ -13,25 +13,27 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
+import javax.inject.Named
 
 data class SettingsUiState(
     val serviceUuid: String = "",
     val writeUuid: String = "",
     val notifyUuid: String = "",
     val autoReconnect: Boolean = true,
-    val appVersion: String = "1.0.0",
+    val appVersion: String = "",
     val exportedLogPath: String? = null,
-    val themeMode: ThemeMode = ThemeMode.OCEAN_BLUE,
+    val themeMode: ThemeMode = ThemeMode.SKY_BLUE,
     val availableThemes: List<ThemeMode> = ThemeMode.entries
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val blePreferences: BlePreferences,
-    private val logManager: LogManager
+    private val logManager: LogManager,
+    @Named("app_version") private val versionName: String
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(SettingsUiState())
+    private val _uiState = MutableStateFlow(SettingsUiState(appVersion = versionName))
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     init {

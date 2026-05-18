@@ -52,6 +52,10 @@ class CsvWriter(
         }
     }
 
+    suspend fun flush() = withContext(Dispatchers.IO) {
+        writer?.flush()
+    }
+
     suspend fun close() = withContext(Dispatchers.IO) {
         writer?.flush()
         writer?.close()

@@ -1,23 +1,34 @@
 package com.ghealth.tools.navigation
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -73,6 +84,7 @@ fun MainScreen(onLogout: () -> Unit) {
     val demoViewModel: DemoViewModel = hiltViewModel()
 
     val isTopLevelRoute = currentDestination?.route in TopLevelRoute.entries.map { it.route }
+    val demoState by demoViewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -83,6 +95,31 @@ fun MainScreen(onLogout: () -> Unit) {
                 } ?: "GHealth Tools") },
                 actions = {
                     if (isTopLevelRoute) {
+                        val isRecording = demoState.isRecording
+                        Icon(
+                            imageVector = Icons.Default.FiberManualRecord,
+                            contentDescription = null,
+                            tint = if (isRecording) Color(0xFFFF1744) else Color(0xFF666666),
+                            modifier = Modifier.size(10.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isRecording) "录制中" else "未录制",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { demoViewModel.toggleRecording() },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                                contentDescription = if (isRecording) "停止录制" else "开始录制",
+                                tint = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                         IconButton(onClick = onLogout) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ExitToApp,
