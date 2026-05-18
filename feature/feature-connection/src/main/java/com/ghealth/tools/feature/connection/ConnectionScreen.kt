@@ -61,10 +61,7 @@ import com.ghealth.tools.core.ui.component.ConnectionStatus
 
 private object CommandRoutes {
     const val MAIN = "main"
-    const val COMMAND_LIST = "command_list"
-    const val COMMAND_DETAIL = "command_detail/{commandKey}"
-    
-    fun commandDetail(commandKey: String) = "command_detail/$commandKey"
+    const val COMMAND_PANEL = "command_panel"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,23 +79,13 @@ fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
                 viewModel = viewModel,
                 state = state,
                 onNavigateToCommands = {
-                    navController.navigate(CommandRoutes.COMMAND_LIST)
+                    navController.navigate(CommandRoutes.COMMAND_PANEL)
                 }
             )
         }
-        composable(CommandRoutes.COMMAND_LIST) {
-            CommandListScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToDetail = { commandKey ->
-                    navController.navigate(CommandRoutes.commandDetail(commandKey))
-                }
-            )
-        }
-        composable(CommandRoutes.COMMAND_DETAIL) { backStackEntry ->
-            val commandKey = backStackEntry.arguments?.getString("commandKey") ?: ""
-            CommandDetailScreen(
-                commandKey = commandKey,
-                executionState = state.commandExecutionState,
+        composable(CommandRoutes.COMMAND_PANEL) {
+            CommandPanelScreen(
+                commandExecutionStates = state.commandExecutionStates,
                 onNavigateBack = { navController.popBackStack() },
                 onExecute = { key, params ->
                     viewModel.executeCommand(key, params)

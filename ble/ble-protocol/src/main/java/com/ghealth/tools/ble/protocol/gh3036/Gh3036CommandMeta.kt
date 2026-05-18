@@ -3,7 +3,8 @@ package com.ghealth.tools.ble.protocol.gh3036
 enum class ParamType {
     U8, U16, U32, I8, I16, I32,
     U8_ARRAY, U16_ARRAY,
-    TIMESTAMP
+    TIMESTAMP,
+    FUNC_MODE_BITS
 }
 
 data class CommandParamDef(
@@ -42,30 +43,42 @@ enum class CommandGroup(val displayName: String) {
 
 object Gh3036CommandMeta {
 
+    // ── Options from cmd.yaml ────────────────────────────────────────
+
     val CHIP_CTRL_OPTIONS = listOf(
-        CommandParamDef.OptionItem("复位", 0),
-        CommandParamDef.OptionItem("使能", 1),
-        CommandParamDef.OptionItem("禁能", 2)
+        CommandParamDef.OptionItem("硬件复位 (0x5A)", 0x5A),
+        CommandParamDef.OptionItem("软件复位 (0xC2)", 0xC2),
+        CommandParamDef.OptionItem("退出休眠 (0xC3)", 0xC3),
+        CommandParamDef.OptionItem("进入休眠 (0xC4)", 0xC4)
     )
 
     val VERSION_TYPE_OPTIONS = listOf(
-        CommandParamDef.OptionItem("固件版本", 0),
-        CommandParamDef.OptionItem("硬件版本", 1),
-        CommandParamDef.OptionItem("协议版本", 2)
+        CommandParamDef.OptionItem("固件版本 (0x01)", 0x01),
+        CommandParamDef.OptionItem("虚拟寄存器版本 (0x03)", 0x03),
+        CommandParamDef.OptionItem("Bootloader版本 (0x04)", 0x04),
+        CommandParamDef.OptionItem("协议版本 (0x05)", 0x05),
+        CommandParamDef.OptionItem("驱动功能支持 (0x06)", 0x06),
+        CommandParamDef.OptionItem("驱动版本 (0x07)", 0x07),
+        CommandParamDef.OptionItem("芯片版本 (0x08)", 0x08),
+        CommandParamDef.OptionItem("BLE版本 (0x09)", 0x09),
+        CommandParamDef.OptionItem("算法调用Demo版本 (0x0A)", 0x0A),
+        CommandParamDef.OptionItem("算法版本 (0x20)", 0x20)
     )
 
     val WORK_MODE_OPTIONS = listOf(
-        CommandParamDef.OptionItem("空闲模式", 0),
-        CommandParamDef.OptionItem("工作模式", 1),
-        CommandParamDef.OptionItem("测试模式", 2),
-        CommandParamDef.OptionItem("休眠模式", 3)
+        CommandParamDef.OptionItem("EVK模式 (0)", 0),
+        CommandParamDef.OptionItem("APP模式 (1,弃用)", 1),
+        CommandParamDef.OptionItem("MCU在线模式 (2)", 2),
+        CommandParamDef.OptionItem("MCU离线模式 (3)", 3),
+        CommandParamDef.OptionItem("测试调谐模式 (4,弃用)", 4),
+        CommandParamDef.OptionItem("透传模式 (5)", 5),
+        CommandParamDef.OptionItem("获取工作模式 (6,弃用)", 6),
+        CommandParamDef.OptionItem("工厂模式 (7)", 7)
     )
 
     val DOWNLOAD_STAGE_OPTIONS = listOf(
-        CommandParamDef.OptionItem("阶段0 - 初始化", 0),
-        CommandParamDef.OptionItem("阶段1 - 数据传输", 1),
-        CommandParamDef.OptionItem("阶段2 - 验证", 2),
-        CommandParamDef.OptionItem("阶段3 - 完成", 3)
+        CommandParamDef.OptionItem("开始下载 (0)", 0),
+        CommandParamDef.OptionItem("结束下载 (1)", 1)
     )
 
     val LINK_TYPE_OPTIONS = listOf(
@@ -75,83 +88,181 @@ object Gh3036CommandMeta {
     )
 
     val TEST_MODE_OPTIONS = listOf(
-        CommandParamDef.OptionItem("模式0", 0),
-        CommandParamDef.OptionItem("模式1", 1),
-        CommandParamDef.OptionItem("模式2", 2),
-        CommandParamDef.OptionItem("模式3", 3)
+        CommandParamDef.OptionItem("Chip Init Test (0x01)", 0x01),
+        CommandParamDef.OptionItem("Chip UID Test (0x02)", 0x02),
+        CommandParamDef.OptionItem("Base Noise Test (0x04)", 0x04),
+        CommandParamDef.OptionItem("PPG Noise Test (0x08)", 0x08),
+        CommandParamDef.OptionItem("LPCTR Test (0x10)", 0x10),
+        CommandParamDef.OptionItem("LPL CTR Test (0x20)", 0x20)
     )
 
+    val SW_FUNCTION_CTRL_OPTIONS = listOf(
+        CommandParamDef.OptionItem("开启", 0),
+        CommandParamDef.OptionItem("关闭", 1)
+    )
+
+    val LOW_POWER_CTRL_OPTIONS = listOf(
+        CommandParamDef.OptionItem("开启低功耗", 0),
+        CommandParamDef.OptionItem("退出低功耗", 1)
+    )
+
+    // ── FuncModeBits for GH3036 SwFunctionCmd / LowPowerCmd ──────────
+    // Each entry maps to a bit position in the 32-bit function mask.
+    // GH3036 supported bits from cmd.yaml func_mode_bits section.
+
+    data class FuncModeBit(
+        val name: String,
+        val label: String,
+        val bit: Int
+    )
+
+    val FUNC_MODE_BITS_GH3036 = listOf(
+        FuncModeBit("ADT", "ADT", 0),
+        FuncModeBit("HR", "HR", 1),
+        FuncModeBit("SpO2", "SpO2", 2),
+        FuncModeBit("HRV", "HRV", 3),
+        FuncModeBit("GNADT", "GNADT", 4),
+        FuncModeBit("IRNADT", "IRNADT", 5),
+        FuncModeBit("TEST1", "TEST1", 6),
+        FuncModeBit("TEST2", "TEST2", 7),
+        FuncModeBit("SLOT", "SLOT", 8)
+    )
+
+    // ── All Commands ─────────────────────────────────────────────────
+
     val ALL_COMMANDS: List<CommandMeta> = listOf(
-        CommandMeta(
-            key = KEY_F_GET_MODE,
-            displayName = "获取测试模式",
-            description = "获取工厂测试模式的数据",
-            params = listOf(
-                CommandParamDef(
-                    name = "testMode",
-                    label = "测试模式",
-                    type = ParamType.U8,
-                    options = TEST_MODE_OPTIONS,
-                    description = "选择要查询的测试模式"
-                )
-            ),
-            hasResponse = true,
-            responseFormat = RET_F_GET_MODE,
-            group = CommandGroup.FACTORY
-        ),
-        CommandMeta(
-            key = KEY_F_SET_MODE,
-            displayName = "设置测试模式",
-            description = "设置工厂测试模式",
-            params = listOf(
-                CommandParamDef(
-                    name = "testMode",
-                    label = "测试模式",
-                    type = ParamType.U8,
-                    options = TEST_MODE_OPTIONS,
-                    description = "选择要设置的测试模式"
-                )
-            ),
-            hasResponse = false,
-            group = CommandGroup.FACTORY
-        ),
+        // ── 设备控制 ──
         CommandMeta(
             key = KEY_GH3X_CHIP_CTRL,
             displayName = "芯片控制",
-            description = "控制芯片的复位、使能、禁能等操作",
+            description = "硬件复位、软件复位、休眠控制",
             params = listOf(
                 CommandParamDef(
                     name = "ctrlType",
                     label = "控制类型",
                     type = ParamType.U8,
-                    options = CHIP_CTRL_OPTIONS,
-                    description = "选择控制操作类型"
+                    options = CHIP_CTRL_OPTIONS
                 )
             ),
             hasResponse = false,
             group = CommandGroup.DEVICE_CONTROL
         ),
         CommandMeta(
-            key = KEY_GH3X_GET_VERSION,
-            displayName = "获取版本",
-            description = "获取芯片的固件、硬件或协议版本信息",
+            key = KEY_GH3X_SW_FUNCTION_CMD,
+            displayName = "功能切换",
+            description = "开启/关闭芯片功能模块，支持多选",
             params = listOf(
                 CommandParamDef(
-                    name = "verType",
-                    label = "版本类型",
+                    name = "funcModeBits",
+                    label = "功能选择",
+                    type = ParamType.FUNC_MODE_BITS,
+                    description = "选择要控制的功能（多选）"
+                ),
+                CommandParamDef(
+                    name = "ctrlType",
+                    label = "控制类型",
                     type = ParamType.U8,
-                    options = VERSION_TYPE_OPTIONS,
-                    description = "选择要获取的版本类型"
+                    options = SW_FUNCTION_CTRL_OPTIONS
+                )
+            ),
+            hasResponse = false,
+            group = CommandGroup.DEVICE_CONTROL
+        ),
+        CommandMeta(
+            key = KEY_GH_SET_WORK_MODE_CMD,
+            displayName = "设置工作模式",
+            description = "设置芯片工作模式",
+            params = listOf(
+                CommandParamDef(
+                    name = "workMode",
+                    label = "工作模式",
+                    type = ParamType.U8,
+                    options = WORK_MODE_OPTIONS
+                )
+            ),
+            hasResponse = false,
+            group = CommandGroup.DEVICE_CONTROL
+        ),
+        CommandMeta(
+            key = KEY_GH_LOW_POWER_CMD,
+            displayName = "低功耗命令",
+            description = "控制芯片进入/退出低功耗模式，支持按功能模块控制",
+            params = listOf(
+                CommandParamDef(
+                    name = "funcModeBits",
+                    label = "功能选择",
+                    type = ParamType.FUNC_MODE_BITS,
+                    description = "选择要控制的功能（多选）"
+                ),
+                CommandParamDef(
+                    name = "ctrlType",
+                    label = "控制类型",
+                    type = ParamType.U8,
+                    options = LOW_POWER_CTRL_OPTIONS
+                )
+            ),
+            hasResponse = false,
+            group = CommandGroup.DEVICE_CONTROL
+        ),
+        CommandMeta(
+            key = KEY_DOWNLOAD_CONFIG,
+            displayName = "下载配置",
+            description = "控制配置下载的开始与结束",
+            params = listOf(
+                CommandParamDef(
+                    name = "stage",
+                    label = "下载阶段",
+                    type = ParamType.U8,
+                    options = DOWNLOAD_STAGE_OPTIONS
+                )
+            ),
+            hasResponse = false,
+            group = CommandGroup.DEVICE_CONTROL
+        ),
+
+        // ── 寄存器操作 ──
+        CommandMeta(
+            key = KEY_GH3X_REGS_WRITE_CMD,
+            displayName = "寄存器写入",
+            description = "连续写寄存器：格式 [地址1, 值1, 地址2, 值2, ...]（十六进制，空格分隔）",
+            params = listOf(
+                CommandParamDef(
+                    name = "regs",
+                    label = "寄存器数据",
+                    type = ParamType.U16_ARRAY,
+                    description = "地址和值交替排列"
+                )
+            ),
+            hasResponse = false,
+            group = CommandGroup.REGISTER
+        ),
+        CommandMeta(
+            key = KEY_GH3X_REGS_READ_CMD,
+            displayName = "寄存器读取",
+            description = "从指定地址连续读取寄存器值",
+            params = listOf(
+                CommandParamDef(
+                    name = "regAddr",
+                    label = "起始地址",
+                    type = ParamType.U16,
+                    description = "16位寄存器地址（十六进制）"
+                ),
+                CommandParamDef(
+                    name = "readLen",
+                    label = "读取个数",
+                    type = ParamType.I32,
+                    defaultValue = 1,
+                    description = "读取的寄存器数量 (1-200)"
                 )
             ),
             hasResponse = true,
-            responseFormat = RET_GH3X_GET_VERSION,
-            group = CommandGroup.VERSION_STATUS
+            responseFormat = RET_GH3X_REGS_READ_CMD,
+            group = CommandGroup.REGISTER
         ),
         CommandMeta(
             key = KEY_GH3X_REG_BIT_FIELD_WRITE_CMD,
             displayName = "寄存器位域写入",
-            description = "写入寄存器的指定位域",
+            description = "修改单个寄存器的位域",
             params = listOf(
                 CommandParamDef(
                     name = "regAddr",
@@ -161,21 +272,21 @@ object Gh3036CommandMeta {
                 ),
                 CommandParamDef(
                     name = "lsb",
-                    label = "起始位",
+                    label = "起始位 (LSB)",
                     type = ParamType.U8,
-                    description = "位域的最低位位置（0-15）"
+                    description = "位域最低位 (0-15)"
                 ),
                 CommandParamDef(
                     name = "msb",
-                    label = "结束位",
+                    label = "结束位 (MSB)",
                     type = ParamType.U8,
-                    description = "位域的最高位位置（0-15）"
+                    description = "位域最高位 (0-15)"
                 ),
                 CommandParamDef(
                     name = "regVal",
                     label = "写入值",
                     type = ParamType.U16,
-                    description = "要写入的值"
+                    description = "要写入的值（自动移位到对应位置）"
                 )
             ),
             hasResponse = false,
@@ -183,14 +294,14 @@ object Gh3036CommandMeta {
         ),
         CommandMeta(
             key = KEY_GH3X_REGS_BIT_FIELD_WRITE_CMD,
-            displayName = "多寄存器位域写入",
-            description = "批量写入多个寄存器的位域",
+            displayName = "批量位域写入",
+            description = "批量修改多个寄存器的位域：格式 [地址, LSB, MSB, 值, ...]（十六进制）",
             params = listOf(
                 CommandParamDef(
                     name = "regBits",
-                    label = "寄存器位域数据",
+                    label = "位域数据",
                     type = ParamType.U16_ARRAY,
-                    description = "格式: 地址, LSB, MSB, 值, ...（十六进制，空格分隔）"
+                    description = "每组4个值：地址 LSB MSB 值"
                 )
             ),
             hasResponse = false,
@@ -199,159 +310,73 @@ object Gh3036CommandMeta {
         CommandMeta(
             key = KEY_GH3X_REGS_LIST_WRITE_CMD,
             displayName = "寄存器列表写入",
-            description = "批量写入寄存器列表",
+            description = "批量写寄存器地址列表（十六进制，空格分隔）",
             params = listOf(
                 CommandParamDef(
                     name = "regs",
-                    label = "寄存器数据",
+                    label = "地址列表",
                     type = ParamType.U16_ARRAY,
-                    description = "格式: 地址, 值, 地址, 值, ...（十六进制，空格分隔）"
+                    description = "要写入的寄存器地址列表"
                 )
             ),
             hasResponse = false,
             group = CommandGroup.REGISTER
         ),
+
+        // ── 版本与状态 ──
         CommandMeta(
-            key = KEY_GH3X_REGS_READ_CMD,
-            displayName = "寄存器读取",
-            description = "从指定地址读取寄存器值",
+            key = KEY_GH3X_GET_VERSION,
+            displayName = "获取版本",
+            description = "获取芯片各类型版本信息",
             params = listOf(
                 CommandParamDef(
-                    name = "regAddr",
-                    label = "寄存器地址",
-                    type = ParamType.U16,
-                    description = "16位寄存器起始地址（十六进制）"
-                ),
-                CommandParamDef(
-                    name = "readLen",
-                    label = "读取长度",
-                    type = ParamType.I32,
-                    defaultValue = 1,
-                    description = "要读取的寄存器数量"
+                    name = "verType",
+                    label = "版本类型",
+                    type = ParamType.U8,
+                    options = VERSION_TYPE_OPTIONS
                 )
             ),
             hasResponse = true,
-            responseFormat = RET_GH3X_REGS_READ_CMD,
-            group = CommandGroup.REGISTER
-        ),
-        CommandMeta(
-            key = KEY_GH3X_REGS_WRITE_CMD,
-            displayName = "寄存器写入",
-            description = "批量写入寄存器值",
-            params = listOf(
-                CommandParamDef(
-                    name = "regs",
-                    label = "寄存器数据",
-                    type = ParamType.U16_ARRAY,
-                    description = "格式: 地址, 值, 地址, 值, ...（十六进制，空格分隔）"
-                )
-            ),
-            hasResponse = false,
-            group = CommandGroup.REGISTER
-        ),
-        CommandMeta(
-            key = KEY_GH3X_SW_FUNCTION_CMD,
-            displayName = "软件功能命令",
-            description = "执行软件功能控制命令",
-            params = listOf(
-                CommandParamDef(
-                    name = "targetFuncMode",
-                    label = "目标功能模式",
-                    type = ParamType.U32,
-                    description = "目标功能模式值（十六进制）"
-                ),
-                CommandParamDef(
-                    name = "ctrlType",
-                    label = "控制类型",
-                    type = ParamType.U8,
-                    options = listOf(
-                        CommandParamDef.OptionItem("启动", 0),
-                        CommandParamDef.OptionItem("停止", 1)
-                    ),
-                    description = "控制操作类型"
-                )
-            ),
-            hasResponse = false,
-            group = CommandGroup.DEVICE_CONTROL
-        ),
-        CommandMeta(
-            key = KEY_GH_SET_WORK_MODE_CMD,
-            displayName = "设置工作模式",
-            description = "设置芯片的工作模式",
-            params = listOf(
-                CommandParamDef(
-                    name = "workMode",
-                    label = "工作模式",
-                    type = ParamType.U8,
-                    options = WORK_MODE_OPTIONS,
-                    description = "选择工作模式"
-                )
-            ),
-            hasResponse = false,
-            group = CommandGroup.DEVICE_CONTROL
-        ),
-        CommandMeta(
-            key = KEY_DOWNLOAD_CONFIG,
-            displayName = "下载配置",
-            description = "执行配置下载流程",
-            params = listOf(
-                CommandParamDef(
-                    name = "stage",
-                    label = "下载阶段",
-                    type = ParamType.U8,
-                    options = DOWNLOAD_STAGE_OPTIONS,
-                    description = "选择下载阶段"
-                )
-            ),
-            hasResponse = false,
-            group = CommandGroup.OTHER
+            responseFormat = RET_GH3X_GET_VERSION,
+            group = CommandGroup.VERSION_STATUS
         ),
         CommandMeta(
             key = KEY_GET_CHIP_LINK_STATUS,
-            displayName = "获取芯片连接状态",
-            description = "获取芯片的链路连接状态",
+            displayName = "获取连接状态",
+            description = "获取芯片链路连接状态",
             params = listOf(
                 CommandParamDef(
                     name = "linkType",
                     label = "链路类型",
                     type = ParamType.U8,
-                    options = LINK_TYPE_OPTIONS,
-                    description = "选择要查询的链路类型"
+                    options = LINK_TYPE_OPTIONS
                 )
             ),
             hasResponse = true,
             responseFormat = RET_GET_CHIP_LINK_STATUS,
             group = CommandGroup.VERSION_STATUS
         ),
+
+        // ── 时间设置 ──
         CommandMeta(
-            key = KEY_GH_LOW_POWER_CMD,
-            displayName = "低功耗命令",
-            description = "控制芯片进入低功耗模式",
+            key = KEY_GH_TIMESTAMP_SET,
+            displayName = "设置时间戳",
+            description = "设置芯片 Unix 时间戳（秒）",
             params = listOf(
                 CommandParamDef(
-                    name = "targetFuncMode",
-                    label = "目标功能模式",
-                    type = ParamType.U32,
-                    description = "目标功能模式值（十六进制）"
-                ),
-                CommandParamDef(
-                    name = "ctrlType",
-                    label = "控制类型",
-                    type = ParamType.U8,
-                    options = listOf(
-                        CommandParamDef.OptionItem("进入低功耗", 0),
-                        CommandParamDef.OptionItem("退出低功耗", 1)
-                    ),
-                    description = "低功耗控制类型"
+                    name = "ts",
+                    label = "时间戳",
+                    type = ParamType.TIMESTAMP,
+                    description = "Unix时间戳（秒）"
                 )
             ),
             hasResponse = false,
-            group = CommandGroup.OTHER
+            group = CommandGroup.TIME
         ),
         CommandMeta(
             key = KEY_GH_TIME_SET,
             displayName = "设置时间",
-            description = "设置芯片时间（带时区偏移）",
+            description = "设置芯片时间与时区偏移",
             params = listOf(
                 CommandParamDef(
                     name = "ts",
@@ -364,34 +389,48 @@ object Gh3036CommandMeta {
                     label = "时区偏移",
                     type = ParamType.I8,
                     defaultValue = 8,
-                    description = "时区偏移小时数（东八区为8）"
+                    description = "时区偏移小时数 (-12 ~ +14)"
                 )
             ),
             hasResponse = false,
             group = CommandGroup.TIME
         ),
+
+        // ── 工厂测试 ──
         CommandMeta(
-            key = KEY_GH_TIMESTAMP_SET,
-            displayName = "设置时间戳",
-            description = "设置芯片时间戳",
+            key = KEY_F_SET_MODE,
+            displayName = "设置测试模式",
+            description = "进入指定的工厂测试模式",
             params = listOf(
                 CommandParamDef(
-                    name = "ts",
-                    label = "时间戳",
-                    type = ParamType.TIMESTAMP,
-                    description = "Unix时间戳（秒）"
+                    name = "testMode",
+                    label = "测试模式",
+                    type = ParamType.U8,
+                    options = TEST_MODE_OPTIONS
                 )
             ),
             hasResponse = false,
-            group = CommandGroup.TIME
+            group = CommandGroup.FACTORY
+        ),
+        CommandMeta(
+            key = KEY_F_GET_MODE,
+            displayName = "获取测试模式",
+            description = "读取工厂测试模式的测试数据",
+            params = listOf(
+                CommandParamDef(
+                    name = "testMode",
+                    label = "测试模式",
+                    type = ParamType.U8,
+                    options = TEST_MODE_OPTIONS
+                )
+            ),
+            hasResponse = true,
+            responseFormat = RET_F_GET_MODE,
+            group = CommandGroup.FACTORY
         )
     )
 
-    fun getCommandByKey(key: String): CommandMeta? {
-        return ALL_COMMANDS.find { it.key == key }
-    }
+    fun getCommandByKey(key: String): CommandMeta? = ALL_COMMANDS.find { it.key == key }
 
-    fun getCommandsByGroup(group: CommandGroup): List<CommandMeta> {
-        return ALL_COMMANDS.filter { it.group == group }
-    }
+    fun getCommandsByGroup(group: CommandGroup): List<CommandMeta> = ALL_COMMANDS.filter { it.group == group }
 }

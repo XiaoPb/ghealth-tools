@@ -44,7 +44,7 @@ data class ConnectionUiState(
     val connectionErrorDevice: String? = null,
     val isBluetoothEnabled: Boolean = true,
     val hasPermissions: Boolean = true,
-    val commandExecutionState: CommandExecutionState = CommandExecutionState(),
+    val commandExecutionStates: Map<String, CommandExecutionState> = emptyMap(),
     val showTestConfigDialog: Boolean = false,
     val masterDeviceName: String? = null,
     val dataMonitorState: DataMonitorState = DataMonitorState()
@@ -277,27 +277,24 @@ class ConnectionViewModel @Inject constructor(
     fun executeCommand(key: String, param: ByteArray) {
         val masterAddress = _uiState.value.connectedDevices.entries
             .find { it.value.role == DeviceRole.MASTER }?.key
-        
+
         if (masterAddress == null) {
-            _uiState.update { 
+            _uiState.update {
                 it.copy(
-                    commandExecutionState = CommandExecutionState(
+                    commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                         isExecuting = false,
-                        result = null,
                         error = "未连接主设备"
-                    )
+                    ))
                 )
             }
             return
         }
 
-        _uiState.update { 
+        _uiState.update {
             it.copy(
-                commandExecutionState = CommandExecutionState(
-                    isExecuting = true,
-                    result = null,
-                    error = null
-                )
+                commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
+                    isExecuting = true
+                ))
             )
         }
 
@@ -308,48 +305,41 @@ class ConnectionViewModel @Inject constructor(
                     onSuccess = { response ->
                         _uiState.update {
                             it.copy(
-                                commandExecutionState = CommandExecutionState(
+                                commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                                     isExecuting = false,
-                                    result = response,
-                                    error = null
-                                )
+                                    result = response
+                                ))
                             )
                         }
                     },
                     onFailure = { error ->
-                        Timber.e(error, "Command execution failed")
+                        Timber.e(error, "Command execution failed: $key")
                         _uiState.update {
                             it.copy(
-                                commandExecutionState = CommandExecutionState(
+                                commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                                     isExecuting = false,
-                                    result = null,
                                     error = error.message ?: "命令执行失败"
-                                )
+                                ))
                             )
                         }
                     }
                 )
             } catch (e: Exception) {
-                Timber.e(e, "Command execution failed")
+                Timber.e(e, "Command execution failed: $key")
                 _uiState.update {
                     it.copy(
-                        commandExecutionState = CommandExecutionState(
+                        commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                             isExecuting = false,
-                            result = null,
                             error = e.message ?: "命令执行失败"
-                        )
+                        ))
                     )
                 }
             }
         }
     }
 
-    fun clearCommandResult() {
-        _uiState.update { 
-            it.copy(
-                commandExecutionState = CommandExecutionState()
-            )
-        }
+    fun clearCommandResults() {
+        _uiState.update { it.copy(commandExecutionStates = emptyMap()) }
     }
 
     fun confirmTestConfig(config: TestConfig) {
