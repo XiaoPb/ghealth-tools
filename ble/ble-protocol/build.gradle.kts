@@ -6,6 +6,12 @@ plugins {
 
 android {
     namespace = "com.ghealth.tools.ble.protocol"
+
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+        }
+    }
 }
 
 dependencies {
@@ -16,6 +22,7 @@ dependencies {
     implementation(libs.timber)
 
     testImplementation(libs.junit5)
+    testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.turbine)
 }

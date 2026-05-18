@@ -16,6 +16,7 @@ timber = "5.0.1"
 nordic-ble = "2.6.0"
 vico = "2.0.0-beta.2"
 junit5 = "5.10.3"
+junit-platform = "1.10.3"
 mockk = "1.13.12"
 turbine = "1.1.0"
 kable = "0.42.0"
@@ -80,6 +81,7 @@ activity-compose = { group = "androidx.activity", name = "activity-compose", ver
 
 # Testing
 junit5 = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junit5" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junit-platform" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
