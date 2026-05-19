@@ -47,6 +47,8 @@ data class DemoUiState(
     val frameIds: List<Float> = emptyList(),
     val isRecording: Boolean = false,
     val compareHrResults: Map<Int, Int> = emptyMap(),
+    val masterAlgoResult: AlgorithmResult = AlgorithmResult.None,
+    val slaveAlgoResult: AlgorithmResult? = null,
     val testerName: String = "",
     val scenario: String = "",
     val testRound: Int = 0
@@ -68,7 +70,7 @@ class DemoViewModel @Inject constructor(
     private var autoRecordingStopped = false
     private val lastColumnValues = mutableMapOf<FunctionMode, MutableMap<String, Any?>>()
     private val algoNonZeroSeen = mutableMapOf<String, Boolean>()
-    private val lastAlgoResults = mutableMapOf<FunctionMode, AlgorithmResult>()
+    private val lastAlgoResultsByRole = mutableMapOf<FunctionMode, MutableMap<DeviceRole, AlgorithmResult>>()
 
     init {
         viewModelScope.launch {
@@ -103,18 +105,34 @@ class DemoViewModel @Inject constructor(
                 if (devices.isEmpty()) {
                     autoRecordingStopped = false
                 }
+                val hasSlave = devices.values.any {
+                    it.role == DeviceRole.SLAVE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED
+                }
+                if (!hasSlave) {
+                    lastAlgoResultsByRole.values.forEach { it.remove(DeviceRole.SLAVE) }
+                }
+                _uiState.update { state ->
+                    val selectedFunc = state.selectedFunction
+                    val roleResults = if (selectedFunc != null) lastAlgoResultsByRole[selectedFunc] else null
+                    val slaveAlgo = if (hasSlave) {
+                        roleResults?.get(DeviceRole.SLAVE) ?: AlgorithmResult.None
+                    } else {
+                        null
+                    }
+                    state.copy(slaveAlgoResult = slaveAlgo)
+                }
             }
         }
     }
 
     private fun resetAllData() {
-        _uiState.update { it.copy(functionDataMap = emptyMap()) }
+        _uiState.update { it.copy(functionDataMap = emptyMap(), masterAlgoResult = AlgorithmResult.None, slaveAlgoResult = null) }
         perFunctionBuffers.clear()
         perFunctionPhyBuffers.clear()
         perFunctionScalarBuffers.clear()
         lastColumnValues.clear()
         algoNonZeroSeen.clear()
-        lastAlgoResults.clear()
+        lastAlgoResultsByRole.clear()
     }
 
     fun selectFunction(function: FunctionMode) {
@@ -122,6 +140,7 @@ class DemoViewModel @Inject constructor(
         val defaultCols = defaultColumnsForChip(chipType)
         val w1Data = getColumnData(function, defaultCols.first)
         val w2Data = getColumnData(function, defaultCols.second)
+        val roleResults = lastAlgoResultsByRole[function] ?: emptyMap()
         _uiState.update {
             it.copy(
                 selectedFunction = function,
@@ -131,7 +150,9 @@ class DemoViewModel @Inject constructor(
                 waveform2Data = w2Data,
                 waveform1Stats = computeStats(w1Data),
                 waveform2Stats = computeStats(w2Data),
-                frameIds = getFrameIds(function)
+                frameIds = getFrameIds(function),
+                masterAlgoResult = roleResults[DeviceRole.MASTER] ?: AlgorithmResult.None,
+                slaveAlgoResult = roleResults[DeviceRole.SLAVE]
             )
         }
     }
@@ -169,19 +190,20 @@ class DemoViewModel @Inject constructor(
 
         detectChipType()
 
+        val role = connectionManager.devices.value[deviceAddress]?.role ?: DeviceRole.MASTER
+        val roleResults = lastAlgoResultsByRole.getOrPut(funcMode) { mutableMapOf() }
         val newResult = parseAlgorithmResult(funcMode, frame.algoData)
-        val displayResult = if (newResult.hasData) {
-            lastAlgoResults[funcMode] = newResult
-            newResult
-        } else {
-            lastAlgoResults[funcMode] ?: AlgorithmResult.None
+        if (newResult.hasData) {
+            roleResults[role] = newResult
         }
+        val masterResult = roleResults[DeviceRole.MASTER] ?: AlgorithmResult.None
+        val slaveResult = roleResults[DeviceRole.SLAVE]
 
         _uiState.update { state ->
             val current = state.functionDataMap[funcMode] ?: FunctionData(funcMode)
             val updated = current.copy(
                 frameCount = current.frameCount + 1,
-                algorithmResult = displayResult
+                algorithmResult = masterResult
             )
             state.copy(functionDataMap = state.functionDataMap + (funcMode to updated))
         }
@@ -224,7 +246,9 @@ class DemoViewModel @Inject constructor(
                     waveform2Data = w2Data,
                     waveform1Stats = computeStats(w1Data),
                     waveform2Stats = computeStats(w2Data),
-                    frameIds = getFrameIds(funcMode)
+                    frameIds = getFrameIds(funcMode),
+                    masterAlgoResult = masterResult,
+                    slaveAlgoResult = slaveResult ?: it.slaveAlgoResult
                 )
             }
         }
@@ -306,7 +330,9 @@ class DemoViewModel @Inject constructor(
     }
 
     private fun onHeartRateResultsChanged(hrMap: Map<Int, Int>) {
-        _uiState.update { it.copy(compareHrResults = hrMap) }
+        // Offset compare device keys: 0→2, 1→3, etc. to leave room for Master(0) and Slave(1)
+        val displayMap = hrMap.mapKeys { it.key + 2 }
+        _uiState.update { it.copy(compareHrResults = displayMap) }
         if (recordingManager.isSessionActive.value) {
             for ((index, hr) in hrMap) {
                 recordingManager.updateCompareHr(index, hr)

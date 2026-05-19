@@ -243,8 +243,11 @@ private fun FunctionDetailScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        val algoResult = state.functionDataMap[function]?.algorithmResult ?: AlgorithmResult.None
-        AlgorithmResultCard(result = algoResult, compareHrResults = state.compareHrResults)
+        AlgorithmResultCard(
+            masterResult = state.masterAlgoResult,
+            slaveResult = state.slaveAlgoResult,
+            compareHrResults = state.compareHrResults
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -389,16 +392,16 @@ private fun WaveformPanel(
                 StatsGrid(stats)
             }
 
-            if (frameLabel.isNotEmpty()) {
-                Text(
-                    text = frameLabel,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            // if (frameLabel.isNotEmpty()) {
+            //     Text(
+            //         text = frameLabel,
+            //         style = MaterialTheme.typography.bodySmall.copy(
+            //             fontFamily = FontFamily.Monospace,
+            //             fontSize = 10.sp
+            //         ),
+            //         color = MaterialTheme.colorScheme.onSurfaceVariant
+            //     )
+            // }
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -421,7 +424,7 @@ private fun WaveformPanel(
                 animationSpec = null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .height(180.dp)
             )
         }
     }
@@ -496,9 +499,13 @@ private fun formatYAxisMixed(value: Double): String {
 }
 
 @Composable
-private fun AlgorithmResultCard(result: AlgorithmResult, compareHrResults: Map<Int, Int>) {
-    val deviceColumns = remember(compareHrResults) {
-        compareHrResults.keys.sorted().map { it to deviceRoleLabel(it) }
+private fun AlgorithmResultCard(masterResult: AlgorithmResult, slaveResult: AlgorithmResult?, compareHrResults: Map<Int, Int>) {
+    val deviceColumns = remember(compareHrResults, slaveResult) {
+        buildList {
+            add(0 to deviceRoleLabel(0))
+            if (slaveResult != null) add(1 to deviceRoleLabel(1))
+            compareHrResults.keys.sorted().mapTo(this) { it to deviceRoleLabel(it) }
+        }
     }
 
     Card(
@@ -508,113 +515,161 @@ private fun AlgorithmResultCard(result: AlgorithmResult, compareHrResults: Map<I
         )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = "Algorithm Results",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            when (result) {
-                is AlgorithmResult.None -> {
+            when {
+                masterResult is AlgorithmResult.HR || slaveResult is AlgorithmResult.HR -> {
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "HR" to { idx: Int ->
+                                when (idx) {
+                                    0 -> hrCell(masterResult)
+                                    1 -> hrCell(slaveResult ?: AlgorithmResult.None)
+                                    else -> compareHrResults[idx]?.let { "$it BPM" } ?: "--"
+                                }
+                            }
+                        )
+                    )
+                }
+                masterResult is AlgorithmResult.SPO2 || slaveResult is AlgorithmResult.SPO2 -> {
+                    val mr = masterResult as? AlgorithmResult.SPO2
+                    val sr = slaveResult as? AlgorithmResult.SPO2
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "SpO2" to { idx: Int -> spo2Cell(resultFor(idx, mr, sr)) },
+                            "R" to { idx: Int -> rCell(resultFor(idx, mr, sr)) },
+                            "HR" to { idx: Int -> spo2HrCell(resultFor(idx, mr, sr)) }
+                        )
+                    )
+                }
+                masterResult is AlgorithmResult.HRV || slaveResult is AlgorithmResult.HRV -> {
+                    val mr = masterResult as? AlgorithmResult.HRV
+                    val sr = slaveResult as? AlgorithmResult.HRV
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "RRI" to { idx: Int -> rriCell(resultFor(idx, mr, sr)) },
+                            "Conf" to { idx: Int -> confCell(resultFor(idx, mr, sr)) },
+                            "Valid" to { idx: Int -> validCell(resultFor(idx, mr, sr)) }
+                        )
+                    )
+                }
+                masterResult is AlgorithmResult.ADT || slaveResult is AlgorithmResult.ADT -> {
+                    val mr = masterResult as? AlgorithmResult.ADT
+                    val sr = slaveResult as? AlgorithmResult.ADT
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "Wear" to { idx: Int -> wearCell(resultFor(idx, mr, sr)) },
+                            "Status" to { idx: Int -> detStatusCell(resultFor(idx, mr, sr)) },
+                            "Ctr" to { idx: Int -> ctrCell(resultFor(idx, mr, sr)) }
+                        )
+                    )
+                }
+                masterResult is AlgorithmResult.NADT || slaveResult is AlgorithmResult.NADT -> {
+                    val mr = masterResult as? AlgorithmResult.NADT
+                    val sr = slaveResult as? AlgorithmResult.NADT
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "Wear" to { idx: Int -> nadtWearCell(resultFor(idx, mr, sr)) },
+                            "Live" to { idx: Int -> nadtLiveCell(resultFor(idx, mr, sr)) }
+                        )
+                    )
+                }
+                else -> {
                     Text("--", style = MaterialTheme.typography.bodyMedium)
-                }
-                is AlgorithmResult.HR -> {
-                    AlgoGrid(
-                        deviceColumns = deviceColumns,
-                        rows = listOf(
-                            "HR" to { idx: Int ->
-                                val hr = compareHrResults[idx]
-                                if (hr != null) "$hr BPM" else "--"
-                            }
-                        )
-                    )
-                }
-                is AlgorithmResult.SPO2 -> {
-                    val rDisplay = if (result.rValue > 0)
-                        String.format("%.3f", result.rValue / 1000.0) else "--"
-                    AlgoGrid(
-                        deviceColumns = deviceColumns,
-                        rows = listOf(
-                            "SpO2" to { idx: Int ->
-                                if (idx == 0) "${result.spo2}%" else "--"
-                            },
-                            "R" to { idx: Int ->
-                                if (idx == 0) rDisplay else "--"
-                            },
-                            "HR" to { idx: Int ->
-                                val hr = compareHrResults[idx]
-                                if (hr != null) "$hr BPM" else "--"
-                            }
-                        )
-                    )
-                }
-                is AlgorithmResult.HRV -> {
-                    val validRris = result.rri.filter { it > 0 }
-                    AlgoGrid(
-                        deviceColumns = deviceColumns,
-                        rows = listOf(
-                            "RRI" to { idx: Int ->
-                                if (idx == 0 && validRris.isNotEmpty())
-                                    validRris.joinToString(", ") + " ms" else "--"
-                            },
-                            "Conf" to { idx: Int ->
-                                if (idx == 0) result.confidence.toString() else "--"
-                            },
-                            "Valid" to { idx: Int ->
-                                if (idx == 0) result.validNum.toString() else "--"
-                            }
-                        )
-                    )
-                }
-                is AlgorithmResult.ADT -> {
-                    val wearLabel = when (result.wearEvent) {
-                        1 -> "Wear"
-                        2 -> "Off"
-                        else -> result.wearEvent.toString()
-                    }
-                    val statusLabel = when (result.detStatus) {
-                        1 -> "Detecting"
-                        2 -> "Detected"
-                        else -> result.detStatus.toString()
-                    }
-                    AlgoGrid(
-                        deviceColumns = deviceColumns,
-                        rows = listOf(
-                            "Wear" to { idx: Int ->
-                                if (idx == 0) wearLabel else "--"
-                            },
-                            "Status" to { idx: Int ->
-                                if (idx == 0) statusLabel else "--"
-                            },
-                            "Ctr" to { idx: Int ->
-                                if (idx == 0) result.ctr.toString() else "--"
-                            }
-                        )
-                    )
-                }
-                is AlgorithmResult.NADT -> {
-                    AlgoGrid(
-                        deviceColumns = deviceColumns,
-                        rows = listOf(
-                            "WearOff" to { idx: Int ->
-                                if (idx == 0) result.wearOffDetectRes.toString() else "--"
-                            },
-                            "LiveBody" to { idx: Int ->
-                                if (idx == 0) result.liveBodyConf.toString() else "--"
-                            }
-                        )
-                    )
                 }
             }
         }
     }
 }
 
+// --- Per-mode cell helpers ---
+
+private fun hrCell(r: AlgorithmResult): String {
+    return if (r is AlgorithmResult.HR && r.heartRate > 0) "${r.heartRate} BPM" else "--"
+}
+
+private fun spo2Cell(r: AlgorithmResult): String {
+    val s = r as? AlgorithmResult.SPO2 ?: return "--"
+    if (s.spo2 <= 0) return "--"
+    val v = if (s.spo2 > 10000) s.spo2 / 10000.0 else s.spo2.toDouble()
+    return "${formatStat(v.toFloat())}%"
+}
+
+private fun rCell(r: AlgorithmResult): String {
+    val s = r as? AlgorithmResult.SPO2 ?: return "--"
+    return if (s.rValue > 0) String.format("%.3f", s.rValue / 10000.0) else "--"
+}
+
+private fun spo2HrCell(r: AlgorithmResult): String {
+    val s = r as? AlgorithmResult.SPO2 ?: return "--"
+    return if (s.hbMean > 0) "${s.hbMean} BPM" else "--"
+}
+
+private fun rriCell(r: AlgorithmResult): String {
+    val h = r as? AlgorithmResult.HRV ?: return "--"
+    val valid = h.rri.filter { it > 0 }
+    return if (valid.isNotEmpty()) valid.joinToString(", ") + " ms" else "--"
+}
+
+private fun confCell(r: AlgorithmResult): String {
+    val h = r as? AlgorithmResult.HRV ?: return "--"
+    return if (h.confidence > 0) h.confidence.toString() else "--"
+}
+
+private fun validCell(r: AlgorithmResult): String {
+    val h = r as? AlgorithmResult.HRV ?: return "--"
+    return if (h.validNum > 0) h.validNum.toString() else "--"
+}
+
+private fun wearCell(r: AlgorithmResult): String {
+    val a = r as? AlgorithmResult.ADT ?: return "--"
+    return when (a.wearEvent) {
+        1 -> "Wear"
+        2 -> "Off"
+        else -> a.wearEvent.toString()
+    }
+}
+
+private fun detStatusCell(r: AlgorithmResult): String {
+    val a = r as? AlgorithmResult.ADT ?: return "--"
+    return when (a.detStatus) {
+        1 -> "Detecting"
+        2 -> "Detected"
+        else -> a.detStatus.toString()
+    }
+}
+
+private fun ctrCell(r: AlgorithmResult): String {
+    val a = r as? AlgorithmResult.ADT ?: return "--"
+    return a.ctr.toString()
+}
+
+private fun nadtWearCell(r: AlgorithmResult): String {
+    val n = r as? AlgorithmResult.NADT ?: return "--"
+    return n.wearOffDetectRes.toString()
+}
+
+private fun nadtLiveCell(r: AlgorithmResult): String {
+    val n = r as? AlgorithmResult.NADT ?: return "--"
+    return n.liveBodyConf.toString()
+}
+
+/** Pick the result for a given column index (0=Master, 1=Slave, >=2=compare). */
+private fun <T : AlgorithmResult> resultFor(idx: Int, master: T?, slave: T?): AlgorithmResult {
+    return when (idx) {
+        0 -> master ?: AlgorithmResult.None
+        1 -> slave ?: AlgorithmResult.None
+        else -> AlgorithmResult.None
+    }
+}
+
 private fun deviceRoleLabel(index: Int): String = when (index) {
     0 -> "Master"
     1 -> "Slave"
-    else -> "Cmp$index"
+    else -> "Cmp${index - 1}" // compare devices start at UI index 2
 }
 
 @Composable
@@ -628,7 +683,7 @@ private fun AlgoGrid(
     )
     val cellStyle = MaterialTheme.typography.bodySmall.copy(
         fontFamily = FontFamily.Monospace,
-        fontSize = 12.sp
+        fontSize = 14.sp
     )
     val labelStyle = MaterialTheme.typography.labelSmall.copy(
         fontFamily = FontFamily.Monospace,
@@ -640,7 +695,7 @@ private fun AlgoGrid(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Spacer(modifier = Modifier.width(40.dp))
+        Spacer(modifier = Modifier.width(60.dp))
         deviceColumns.forEach { (_, label) ->
             Text(
                 text = label,
@@ -663,7 +718,7 @@ private fun AlgoGrid(
                 text = rowLabel,
                 style = labelStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(40.dp)
+                modifier = Modifier.width(60.dp)
             )
             deviceColumns.forEach { (idx, _) ->
                 Text(

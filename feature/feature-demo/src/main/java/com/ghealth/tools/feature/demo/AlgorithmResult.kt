@@ -48,8 +48,9 @@ sealed class AlgorithmResult {
     ) : AlgorithmResult() {
         override val hasData: Boolean get() = spo2 > 0
         override val display: String get() = if (hasData) {
-            val rv = if (rValue > 0) " / R:${rValue / 1000.0}" else ""
-            "$spo2%$rv"
+            val rv = if (rValue > 0) " / R:${rValue / 10000.0}" else ""
+            val spo2_val = if (spo2 > 10000) spo2 / 10000.0 else spo2
+            "$spo2_val%$rv"
         } else "--"
     }
 
