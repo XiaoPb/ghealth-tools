@@ -9,6 +9,8 @@ import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
 import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
+import com.ghealth.tools.core.model.TestConfig
+import com.ghealth.tools.core.model.TestScenario
 import com.ghealth.tools.core.storage.RecordingManager
 import com.ghealth.tools.core.storage.DeviceRole as StorageDeviceRole
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -57,9 +59,11 @@ data class DemoUiState(
     val testerName: String = "",
     val scenario: String = "",
     val testRound: Int = 0,
+    val lastTestScenario: TestScenario = TestScenario.RESTING,
     val manualCompareDevices: List<ManualCompareDevice> = emptyList(),
     val showAddCompareDialog: Boolean = false,
-    val editingCompareDeviceIndex: Int? = null
+    val editingCompareDeviceIndex: Int? = null,
+    val showRestartConfigDialog: Boolean = false
 )
 
 @HiltViewModel
@@ -103,7 +107,8 @@ class DemoViewModel @Inject constructor(
                     it.copy(
                         testerName = config?.testerName ?: "",
                         scenario = config?.scenario?.displayName ?: "",
-                        testRound = config?.testRound ?: 0
+                        testRound = config?.testRound ?: 0,
+                        lastTestScenario = config?.scenario ?: TestScenario.RESTING
                     )
                 }
             }
@@ -405,33 +410,41 @@ class DemoViewModel @Inject constructor(
             connectionManager.notifyRecordingStopped()
             viewModelScope.launch { recordingManager.endSession() }
         } else {
-            autoRecordingStopped = false
-            connectionManager.resetFrameDecoders()
-            val config = connectionManager.testConfig.value
-            if (config != null) {
-                val devices = connectionManager.devices.value
-                val masterDevice = devices.values.find {
-                    it.role == DeviceRole.MASTER && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED
-                }
-                val slaveDevices = devices.values.filter {
-                    it.role == DeviceRole.SLAVE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED
-                }
-                if (masterDevice != null) {
-                    recordingManager.startSession(
-                        config = config,
-                        masterDeviceName = masterDevice.name ?: "Unknown",
-                        masterDeviceAddress = masterDevice.address,
-                        slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },
-                        compareDeviceNames = devices.values
-                            .filter { it.role == DeviceRole.COMPARE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED }
-                            .map { it.name ?: it.address },
-                        compareDeviceAddresses = devices.values
-                            .filter { it.role == DeviceRole.COMPARE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED }
-                            .map { it.address }
-                    )
-                }
-            }
+            // Show config dialog for tester info before starting
+            _uiState.update { it.copy(showRestartConfigDialog = true) }
         }
+    }
+
+    fun confirmRestartRecording(config: TestConfig) {
+        connectionManager.setTestConfig(config)
+        autoRecordingStopped = false
+        connectionManager.resetFrameDecoders()
+        val devices = connectionManager.devices.value
+        val masterDevice = devices.values.find {
+            it.role == DeviceRole.MASTER && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED
+        }
+        val slaveDevices = devices.values.filter {
+            it.role == DeviceRole.SLAVE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED
+        }
+        if (masterDevice != null) {
+            recordingManager.startSession(
+                config = config,
+                masterDeviceName = masterDevice.name ?: "Unknown",
+                masterDeviceAddress = masterDevice.address,
+                slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },
+                compareDeviceNames = devices.values
+                    .filter { it.role == DeviceRole.COMPARE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED }
+                    .map { it.name ?: it.address },
+                compareDeviceAddresses = devices.values
+                    .filter { it.role == DeviceRole.COMPARE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED }
+                    .map { it.address }
+            )
+        }
+        _uiState.update { it.copy(showRestartConfigDialog = false) }
+    }
+
+    fun cancelRestartRecording() {
+        _uiState.update { it.copy(showRestartConfigDialog = false) }
     }
 
     private fun getColumnData(funcMode: FunctionMode, columnName: String): List<Float> {
