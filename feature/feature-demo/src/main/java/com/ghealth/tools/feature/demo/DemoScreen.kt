@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -37,9 +38,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -918,13 +921,10 @@ private fun Spo2CompareMenu(
 
     if (editingIndex != null && editingIndex in devices.indices) {
         val device = devices[editingIndex]
-        EditSpo2Dialog(
+        EditSpo2Sheet(
             deviceName = device.name,
             spo2Value = device.spo2,
-            onConfirm = { newValue ->
-                onUpdateSpo2(editingIndex, newValue)
-                onStopEdit()
-            },
+            onUpdate = { newValue -> onUpdateSpo2(editingIndex, newValue) },
             onDismiss = onStopEdit,
             onRemove = {
                 onRemoveDevice(editingIndex)
@@ -934,65 +934,82 @@ private fun Spo2CompareMenu(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditSpo2Dialog(
+private fun EditSpo2Sheet(
     deviceName: String,
     spo2Value: Float?,
-    onConfirm: (Float?) -> Unit,
+    onUpdate: (Float?) -> Unit,
     onDismiss: () -> Unit,
     onRemove: () -> Unit
 ) {
-    var spo2Text by remember {
+    var spo2Text by remember(spo2Value) {
         mutableStateOf(spo2Value?.let { formatSpo2Text(it) } ?: "98")
     }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(deviceName) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = spo2Text,
-                    onValueChange = { spo2Text = it },
-                    label = { Text("血氧值 (%)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = deviceName,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    listOf(+5f, +3f, +1f, -1f, -3f, -5f).forEach { delta ->
-                        val label = if (delta > 0) "+${delta.toInt()}" else "${delta.toInt()}"
-                        TextButton(
-                            onClick = {
-                                val current = spo2Text.toFloatOrNull() ?: 98f
-                                spo2Text = formatSpo2Text((current + delta).coerceIn(SPO2_MIN, SPO2_MAX))
-                            }
-                        ) { Text(label) }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val raw = spo2Text.toFloatOrNull()
-                    val value = raw?.coerceIn(SPO2_MIN, SPO2_MAX)
-                    onConfirm(value)
-                }
-            ) { Text("确定") }
-        },
-        dismissButton = {
-            Row {
                 TextButton(onClick = onRemove) {
                     Text("删除", color = MaterialTheme.colorScheme.error)
                 }
-                TextButton(onClick = onDismiss) { Text("取消") }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = spo2Text,
+                onValueChange = { spo2Text = it },
+                label = { Text("血氧值 (%)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                listOf(+5f, +3f, +1f, -1f, -3f, -5f).forEach { delta ->
+                    val label = if (delta > 0) "+${delta.toInt()}" else "${delta.toInt()}"
+                    TextButton(
+                        onClick = {
+                            val current = spo2Text.toFloatOrNull() ?: 98f
+                            spo2Text = formatSpo2Text((current + delta).coerceIn(SPO2_MIN, SPO2_MAX))
+                        }
+                    ) { Text(label) }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = {
+                    val raw = spo2Text.toFloatOrNull()
+                    val value = raw?.coerceIn(SPO2_MIN, SPO2_MAX)
+                    onUpdate(value)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("更新") }
         }
-    )
+    }
 }
 
 private fun formatSpo2Text(value: Float): String {
