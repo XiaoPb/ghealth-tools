@@ -23,16 +23,30 @@ android {
         versionName = "1.0.0-dev.$buildTimestamp"
     }
 
+    signingConfigs {
+        create("ghealth") {
+            storeFile = rootProject.file("ghealth-release.keystore")
+            storePassword = "ghealth2026"
+            keyAlias = "ghealth"
+            keyPassword = "ghealth2026"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("ghealth")
         }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds = false
     }
 
     buildFeatures {

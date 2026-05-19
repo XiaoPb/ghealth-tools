@@ -175,11 +175,15 @@ class RpcCore(
 
     suspend fun call(key: String, format: String, params: ByteArray): Result<ByteArray> {
         return withContext(Dispatchers.IO) {
+            val packed = Package.pack(format, params).getOrElse {
+                return@withContext Result.failure(it)
+            }
+
             val invokeIdx = nextInvokeIndex()
 
             val frames = frameBuilder.build(
                 key = key,
-                param = params,
+                param = packed,
                 secure = false,
                 invokeIdx = invokeIdx
             )
@@ -205,11 +209,15 @@ class RpcCore(
 
     suspend fun send(key: String, format: String, params: ByteArray): Result<Unit> {
         return withContext(Dispatchers.IO) {
+            val packed = Package.pack(format, params).getOrElse {
+                return@withContext Result.failure(it)
+            }
+
             val invokeIdx = nextInvokeIndex()
 
             val frames = frameBuilder.build(
                 key = key,
-                param = params,
+                param = packed,
                 secure = true,
                 invokeIdx = invokeIdx
             )
@@ -246,11 +254,15 @@ class RpcCore(
 
     suspend fun sall(key: String, format: String, params: ByteArray): Result<ByteArray> {
         return withContext(Dispatchers.IO) {
+            val packed = Package.pack(format, params).getOrElse {
+                return@withContext Result.failure(it)
+            }
+
             val invokeIdx = nextInvokeIndex()
 
             val frames = frameBuilder.build(
                 key = key,
-                param = params,
+                param = packed,
                 secure = true,
                 invokeIdx = invokeIdx
             )

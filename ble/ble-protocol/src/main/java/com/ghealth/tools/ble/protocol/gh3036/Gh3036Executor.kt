@@ -36,7 +36,7 @@ class Gh3036Executor(
         val frames = frameDecoder.decode(unpacked)
 
         frames.forEach { frame ->
-            Timber.d("GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}, timestamp=${frame.timestamp}")
+            Timber.v("GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}, timestamp=${frame.timestamp}")
             frameCallback?.invoke(frame)
         }
     }

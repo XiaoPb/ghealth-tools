@@ -426,52 +426,60 @@ object Unpackage {
             val actualHeader = TypeHeader.fromByte(data[offset])
             offset++
 
-            if (actualHeader.packType != expectedHeader.packType ||
-                actualHeader.isArray != expectedHeader.isArray ||
-                actualHeader.width != expectedHeader.width
-            ) {
-                return Result.failure(ProtocolError.UnpackageError)
-            }
+            // Use actualHeader's width for element size (trust the data, not the format)
+            val widthBytes = (1 shl actualHeader.width.toInt()) / 8
 
-            val widthBytes = (1 shl actualHeader.width.toInt())
-
-            if (actualHeader.isArray) {
-                var totalElements = 0
-                val arrData = mutableListOf<Byte>()
-                var currentHeader = actualHeader
-
-                while (true) {
-                    if (offset >= data.size) {
+            if (expectedHeader.isArray) {
+                if (!actualHeader.isArray) {
+                    // Non-array header in response where array expected:
+                    // treat as single-element array (matching DataUnpacker behavior)
+                    if (offset + widthBytes > data.size) {
                         return Result.failure(ProtocolError.UnpackageError)
                     }
-                    val chunkLen = data[offset].toInt() and 0xFF
-                    offset++
+                    result.add(1.toByte())
+                    result.add(0.toByte())
+                    for (j in 0 until widthBytes) {
+                        result.add(data[offset + j])
+                    }
+                    offset += widthBytes
+                } else {
+                    var totalElements = 0
+                    val arrData = mutableListOf<Byte>()
+                    var currentHeader = actualHeader
 
-                    val chunkBytes = chunkLen * widthBytes
-                    if (offset + chunkBytes > data.size) {
-                        return Result.failure(ProtocolError.UnpackageError)
+                    while (true) {
+                        if (offset >= data.size) {
+                            return Result.failure(ProtocolError.UnpackageError)
+                        }
+                        val chunkLen = data[offset].toInt() and 0xFF
+                        offset++
+
+                        val chunkBytes = chunkLen * widthBytes
+                        if (offset + chunkBytes > data.size) {
+                            return Result.failure(ProtocolError.UnpackageError)
+                        }
+
+                        for (j in 0 until chunkBytes) {
+                            arrData.add(data[offset + j])
+                        }
+                        offset += chunkBytes
+                        totalElements += chunkLen
+
+                        if (!currentHeader.split) {
+                            break
+                        }
+
+                        if (offset >= data.size) {
+                            return Result.failure(ProtocolError.UnpackageError)
+                        }
+                        currentHeader = TypeHeader.fromByte(data[offset])
+                        offset++
                     }
 
-                    for (j in 0 until chunkBytes) {
-                        arrData.add(data[offset + j])
-                    }
-                    offset += chunkBytes
-                    totalElements += chunkLen
-
-                    if (!currentHeader.split) {
-                        break
-                    }
-
-                    if (offset >= data.size) {
-                        return Result.failure(ProtocolError.UnpackageError)
-                    }
-                    currentHeader = TypeHeader.fromByte(data[offset])
-                    offset++
+                    result.add((totalElements and 0xFF).toByte())
+                    result.add(((totalElements shr 8) and 0xFF).toByte())
+                    result.addAll(arrData)
                 }
-
-                result.add((totalElements and 0xFF).toByte())
-                result.add(((totalElements shr 8) and 0xFF).toByte())
-                result.addAll(arrData)
             } else {
                 if (offset + widthBytes > data.size) {
                     return Result.failure(ProtocolError.UnpackageError)

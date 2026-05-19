@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Cable
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tune
@@ -33,6 +34,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -399,21 +401,29 @@ private fun ScanSection(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(
-                    onClick = onSortByRssi
-                ) {
-                    Text("RSSI↓", style = MaterialTheme.typography.labelSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconButton(onClick = onSortByRssi) {
+                    Icon(
+                        Icons.Default.Sort,
+                        contentDescription = "RSSI排序",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                IconButton(onClick = { showFilter = !showFilter }) {
+                    Icon(
+                        Icons.Default.SignalCellularAlt,
+                        contentDescription = "信号过滤",
+                        tint = if (showFilter) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 FilledTonalButton(
-                    onClick = { showFilter = !showFilter }
+                    onClick = onStop,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                 ) {
-                    Icon(Icons.Default.SignalCellularAlt, contentDescription = null)
-                }
-                FilledTonalButton(onClick = onStop) {
-                    Icon(Icons.Default.Stop, contentDescription = null)
+                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.height(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("停止")
+                    Text("停止", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }

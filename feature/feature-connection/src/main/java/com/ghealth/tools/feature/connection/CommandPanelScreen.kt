@@ -17,7 +17,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Settings
@@ -37,7 +39,9 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -62,12 +66,14 @@ import java.util.Locale
 data class CommandExecutionState(
     val isExecuting: Boolean = false,
     val result: ByteArray? = null,
-    val error: String? = null
+    val error: String? = null,
+    val commandKey: String = ""
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
         other as CommandExecutionState
+        if (commandKey != other.commandKey) return false
         if (result != null) {
             if (other.result == null) return false
             if (!result.contentEquals(other.result)) return false
@@ -75,7 +81,7 @@ data class CommandExecutionState(
         return true
     }
 
-    override fun hashCode(): Int = result?.contentHashCode() ?: 0
+    override fun hashCode(): Int = 31 * commandKey.hashCode() + (result?.contentHashCode() ?: 0)
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -159,6 +165,15 @@ private fun CommandCard(
     onExecute: (ByteArray) -> Unit
 ) {
     val paramValues = remember { mutableStateMapOf<String, Any>() }
+    val isRegWrite = command.key == "GH3X_RegsWriteCmd"
+    val isRegRead = command.key == "GH3X_RegsReadCmd"
+    var multiReg by remember { mutableStateOf(false) }
+
+    // Multi-register state for write
+    var regPairs by remember { mutableStateOf(listOf(Pair("", ""), Pair("", ""))) }
+    // Multi-register state for read
+    var readStartAddr by remember { mutableStateOf("") }
+    var readCount by remember { mutableStateOf("1") }
 
     Card(
         onClick = if (!isExpanded) onToggle else ({ }),
@@ -200,20 +215,71 @@ private fun CommandCard(
             // Expanded content
             AnimatedVisibility(visible = isExpanded) {
                 Column(modifier = Modifier.padding(top = 12.dp)) {
-                    command.params.forEach { param ->
-                        ParamInput(
-                            param = param,
-                            onValueChange = { value ->
-                                paramValues[param.name] = value
-                            }
-                        )
+                    // Single/Multi toggle for register commands
+                    if (isRegWrite || isRegRead) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (multiReg) "多寄存器模式" else "单寄存器模式",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Switch(
+                                checked = multiReg,
+                                onCheckedChange = { multiReg = it }
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
+
+                        if (isRegWrite) {
+                            if (multiReg) {
+                                MultiRegWriteInput(regPairs) { regPairs = it }
+                            } else {
+                                SingleRegWriteInput { addr, value ->
+                                    paramValues["regs"] = shortArrayOf(
+                                        addr.toShort(16),
+                                        value.toShort(16)
+                                    )
+                                }
+                            }
+                        } else if (isRegRead) {
+                            if (multiReg) {
+                                MultiRegReadInput(readStartAddr, readCount,
+                                    onAddrChange = { readStartAddr = it },
+                                    onCountChange = { readCount = it }
+                                )
+                            } else {
+                                SingleRegReadInput { addr ->
+                                    paramValues["regAddr"] = addr.toInt(16).toShort().toUShort()
+                                    paramValues["readLen"] = 1
+                                }
+                            }
+                        }
+                    } else {
+                        command.params.forEach { param ->
+                            ParamInput(
+                                param = param,
+                                onValueChange = { value ->
+                                    paramValues[param.name] = value
+                                }
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                     }
 
                     // Execute button
                     Button(
                         onClick = {
-                            val params = buildCommandParams(command, paramValues)
+                            val params = if (isRegWrite && multiReg) {
+                                buildMultiRegWriteParams(regPairs)
+                            } else if (isRegRead && multiReg) {
+                                buildMultiRegReadParams(readStartAddr, readCount)
+                            } else {
+                                buildCommandParams(command, paramValues)
+                            }
                             onExecute(params)
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -237,7 +303,8 @@ private fun CommandCard(
                         Spacer(modifier = Modifier.height(8.dp))
                         CommandResponseView(
                             result = executionState.result,
-                            error = executionState.error
+                            error = executionState.error,
+                            commandKey = executionState.commandKey
                         )
                     }
                 }
@@ -449,6 +516,149 @@ private fun buildCommandParams(command: CommandMeta, paramValues: Map<String, An
         }
     }
     return bytes.toByteArray()
+}
+
+// ── Single / Multi Register Inputs ─────────────────────────────────────
+
+@Composable
+private fun SingleRegWriteInput(onChange: (addr: String, value: String) -> Unit) {
+    var addr by remember { mutableStateOf("") }
+    var value by remember { mutableStateOf("") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = addr,
+            onValueChange = { addr = it; onChange(addr, value) },
+            label = { Text("寄存器地址 (十六进制)") },
+            placeholder = { Text("如: 10") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = { value = it; onChange(addr, value) },
+            label = { Text("写入值 (十六进制)") },
+            placeholder = { Text("如: 1234") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+    }
+}
+
+@Composable
+private fun MultiRegWriteInput(
+    pairs: List<Pair<String, String>>,
+    onChange: (List<Pair<String, String>>) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        pairs.forEachIndexed { index, (addr, value) ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = addr,
+                    onValueChange = { newAddr ->
+                        val newList = pairs.toMutableList()
+                        newList[index] = Pair(newAddr, value)
+                        onChange(newList)
+                    },
+                    label = { Text("地址") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { newVal ->
+                        val newList = pairs.toMutableList()
+                        newList[index] = Pair(addr, newVal)
+                        onChange(newList)
+                    },
+                    label = { Text("值") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                if (pairs.size > 1) {
+                    IconButton(onClick = {
+                        onChange(pairs.toMutableList().also { it.removeAt(index) })
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = "删除")
+                    }
+                }
+            }
+        }
+        OutlinedButton(onClick = {
+            onChange(pairs + Pair("", ""))
+        }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("添加寄存器")
+        }
+    }
+}
+
+@Composable
+private fun SingleRegReadInput(onChange: (String) -> Unit) {
+    var addr by remember { mutableStateOf("") }
+
+    OutlinedTextField(
+        value = addr,
+        onValueChange = { addr = it; onChange(addr) },
+        label = { Text("寄存器地址 (十六进制)") },
+        placeholder = { Text("如: 10") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true
+    )
+}
+
+@Composable
+private fun MultiRegReadInput(
+    addr: String,
+    count: String,
+    onAddrChange: (String) -> Unit,
+    onCountChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = addr,
+            onValueChange = onAddrChange,
+            label = { Text("起始地址 (十六进制)") },
+            placeholder = { Text("如: 10") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = count,
+            onValueChange = onCountChange,
+            label = { Text("读取个数") },
+            placeholder = { Text("1-200") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+    }
+}
+
+private fun buildMultiRegWriteParams(pairs: List<Pair<String, String>>): ByteArray {
+    val shorts = mutableListOf<Short>()
+    pairs.forEach { (addr, value) ->
+        shorts.add(addr.trim().toInt(16).toShort())
+        shorts.add(value.trim().toInt(16).toShort())
+    }
+    return buildCommandParams(
+        Gh3036CommandMeta.getCommandByKey("GH3X_RegsWriteCmd")!!,
+        mapOf("regs" to shorts.toShortArray())
+    )
+}
+
+private fun buildMultiRegReadParams(addr: String, count: String): ByteArray {
+    return buildCommandParams(
+        Gh3036CommandMeta.getCommandByKey("GH3X_RegsReadCmd")!!,
+        mapOf(
+            "regAddr" to addr.trim().toInt(16).toShort().toUShort(),
+            "readLen" to count.trim().toInt()
+        )
+    )
 }
 
 private fun groupIcon(group: CommandGroup): ImageVector = when (group) {

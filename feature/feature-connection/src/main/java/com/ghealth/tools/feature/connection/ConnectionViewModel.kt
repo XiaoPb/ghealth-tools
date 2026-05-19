@@ -301,7 +301,8 @@ class ConnectionViewModel @Inject constructor(
                 it.copy(
                     commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                         isExecuting = false,
-                        error = "未连接主设备"
+                        error = "未连接主设备",
+                        commandKey = key
                     ))
                 )
             }
@@ -311,7 +312,8 @@ class ConnectionViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
-                    isExecuting = true
+                    isExecuting = true,
+                    commandKey = key
                 ))
             )
         }
@@ -325,7 +327,8 @@ class ConnectionViewModel @Inject constructor(
                             it.copy(
                                 commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                                     isExecuting = false,
-                                    result = response
+                                    result = response,
+                                    commandKey = key
                                 ))
                             )
                         }
@@ -336,7 +339,8 @@ class ConnectionViewModel @Inject constructor(
                             it.copy(
                                 commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                                     isExecuting = false,
-                                    error = error.message ?: "命令执行失败"
+                                    error = error.message ?: "命令执行失败",
+                                    commandKey = key
                                 ))
                             )
                         }
@@ -348,7 +352,8 @@ class ConnectionViewModel @Inject constructor(
                     it.copy(
                         commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                             isExecuting = false,
-                            error = e.message ?: "命令执行失败"
+                            error = e.message ?: "命令执行失败",
+                            commandKey = key
                         ))
                     )
                 }

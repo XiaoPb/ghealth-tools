@@ -16,7 +16,7 @@ class FrameBuilder {
     ): ByteArray {
         reset()
         val isArray = key.length > 1
-        val typeKey = TypeKey.build(packType = 3, isArray = isArray, width = 0, secure = secure, fin = fin)
+        val typeKey = TypeKey.build(packType = 2, isArray = isArray, width = 3, secure = secure, fin = fin)
         val keyBytes = if (isArray) byteArrayOf(key.length.toByte()) + key.toByteArray(Charsets.UTF_8)
         else key.toByteArray(Charsets.UTF_8)
         val hasInvokeIdx = secure

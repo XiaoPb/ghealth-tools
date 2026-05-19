@@ -26,6 +26,7 @@ data class CommandMeta(
     val key: String,
     val displayName: String,
     val description: String,
+    val requestFormat: String,
     val params: List<CommandParamDef>,
     val hasResponse: Boolean,
     val responseFormat: String? = null,
@@ -136,6 +137,7 @@ object Gh3036CommandMeta {
             key = KEY_GH3X_CHIP_CTRL,
             displayName = "芯片控制",
             description = "硬件复位、软件复位、休眠控制",
+            requestFormat = FMT_GH3X_CHIP_CTRL,
             params = listOf(
                 CommandParamDef(
                     name = "ctrlType",
@@ -151,6 +153,7 @@ object Gh3036CommandMeta {
             key = KEY_GH3X_SW_FUNCTION_CMD,
             displayName = "功能切换",
             description = "开启/关闭芯片功能模块，支持多选",
+            requestFormat = FMT_GH3X_SW_FUNCTION_CMD,
             params = listOf(
                 CommandParamDef(
                     name = "funcModeBits",
@@ -172,6 +175,7 @@ object Gh3036CommandMeta {
             key = KEY_GH_SET_WORK_MODE_CMD,
             displayName = "设置工作模式",
             description = "设置芯片工作模式",
+            requestFormat = FMT_GH_SET_WORK_MODE_CMD,
             params = listOf(
                 CommandParamDef(
                     name = "workMode",
@@ -187,6 +191,7 @@ object Gh3036CommandMeta {
             key = KEY_GH_LOW_POWER_CMD,
             displayName = "低功耗命令",
             description = "控制芯片进入/退出低功耗模式，支持按功能模块控制",
+            requestFormat = FMT_GH_LOW_POWER_CMD,
             params = listOf(
                 CommandParamDef(
                     name = "funcModeBits",
@@ -208,6 +213,7 @@ object Gh3036CommandMeta {
             key = KEY_DOWNLOAD_CONFIG,
             displayName = "下载配置",
             description = "控制配置下载的开始与结束",
+            requestFormat = FMT_DOWNLOAD_CONFIG,
             params = listOf(
                 CommandParamDef(
                     name = "stage",
@@ -225,6 +231,7 @@ object Gh3036CommandMeta {
             key = KEY_GH3X_REGS_WRITE_CMD,
             displayName = "寄存器写入",
             description = "连续写寄存器：格式 [地址1, 值1, 地址2, 值2, ...]（十六进制，空格分隔）",
+            requestFormat = FMT_GH3X_REGS_WRITE_CMD,
             params = listOf(
                 CommandParamDef(
                     name = "regs",
@@ -240,6 +247,7 @@ object Gh3036CommandMeta {
             key = KEY_GH3X_REGS_READ_CMD,
             displayName = "寄存器读取",
             description = "从指定地址连续读取寄存器值",
+            requestFormat = FMT_GH3X_REGS_READ_CMD,
             params = listOf(
                 CommandParamDef(
                     name = "regAddr",
@@ -263,6 +271,7 @@ object Gh3036CommandMeta {
             key = KEY_GH3X_REG_BIT_FIELD_WRITE_CMD,
             displayName = "寄存器位域写入",
             description = "修改单个寄存器的位域",
+            requestFormat = FMT_GH3X_REG_BIT_FIELD_WRITE_CMD,
             params = listOf(
                 CommandParamDef(
                     name = "regAddr",
@@ -296,6 +305,7 @@ object Gh3036CommandMeta {
             key = KEY_GH3X_REGS_BIT_FIELD_WRITE_CMD,
             displayName = "批量位域写入",
             description = "批量修改多个寄存器的位域：格式 [地址, LSB, MSB, 值, ...]（十六进制）",
+            requestFormat = FMT_GH3X_REGS_BIT_FIELD_WRITE_CMD,
             params = listOf(
                 CommandParamDef(
                     name = "regBits",
@@ -311,6 +321,7 @@ object Gh3036CommandMeta {
             key = KEY_GH3X_REGS_LIST_WRITE_CMD,
             displayName = "寄存器列表写入",
             description = "批量写寄存器地址列表（十六进制，空格分隔）",
+            requestFormat = FMT_GH3X_REGS_LIST_WRITE_CMD,
             params = listOf(
                 CommandParamDef(
                     name = "regs",
@@ -328,6 +339,7 @@ object Gh3036CommandMeta {
             key = KEY_GH3X_GET_VERSION,
             displayName = "获取版本",
             description = "获取芯片各类型版本信息",
+            requestFormat = FMT_GH3X_GET_VERSION,
             params = listOf(
                 CommandParamDef(
                     name = "verType",
@@ -344,6 +356,7 @@ object Gh3036CommandMeta {
             key = KEY_GET_CHIP_LINK_STATUS,
             displayName = "获取连接状态",
             description = "获取芯片链路连接状态",
+            requestFormat = FMT_GET_CHIP_LINK_STATUS,
             params = listOf(
                 CommandParamDef(
                     name = "linkType",
@@ -362,6 +375,7 @@ object Gh3036CommandMeta {
             key = KEY_GH_TIMESTAMP_SET,
             displayName = "设置时间戳",
             description = "设置芯片 Unix 时间戳（秒）",
+            requestFormat = FMT_GH_TIMESTAMP_SET,
             params = listOf(
                 CommandParamDef(
                     name = "ts",
@@ -377,6 +391,7 @@ object Gh3036CommandMeta {
             key = KEY_GH_TIME_SET,
             displayName = "设置时间",
             description = "设置芯片时间与时区偏移",
+            requestFormat = FMT_GH_TIME_SET,
             params = listOf(
                 CommandParamDef(
                     name = "ts",
@@ -401,6 +416,7 @@ object Gh3036CommandMeta {
             key = KEY_F_SET_MODE,
             displayName = "设置测试模式",
             description = "进入指定的工厂测试模式",
+            requestFormat = FMT_F_SET_MODE,
             params = listOf(
                 CommandParamDef(
                     name = "testMode",
@@ -416,6 +432,7 @@ object Gh3036CommandMeta {
             key = KEY_F_GET_MODE,
             displayName = "获取测试模式",
             description = "读取工厂测试模式的测试数据",
+            requestFormat = FMT_F_GET_MODE,
             params = listOf(
                 CommandParamDef(
                     name = "testMode",

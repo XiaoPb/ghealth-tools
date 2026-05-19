@@ -3,6 +3,7 @@
 package com.ghealth.tools.ble.connection
 
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
+import com.ghealth.tools.ble.protocol.rpccore.Unpackage
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
@@ -445,24 +446,18 @@ class BleConnectionManager @Inject constructor(
     suspend fun sendCommand(address: String, key: String, param: ByteArray = ByteArray(0)): Result<ByteArray> {
         val executor = peripherals[address]?.executor
             ?: return Result.failure(Exception("Executor not available for $address"))
-        val format = getFormatForKey(key)
-        val hasResponse = Gh3036CommandMeta.getCommandByKey(key)?.hasResponse ?: true
+        val meta = Gh3036CommandMeta.getCommandByKey(key)
+        val format = meta?.requestFormat ?: return Result.failure(Exception("Unknown command: $key"))
+        val hasResponse = meta.hasResponse
         return if (hasResponse) {
-            executor.call(key, format, param)
+            executor.call(key, format, param).map { raw ->
+                val respFormat = meta.responseFormat ?: format
+                Timber.d("Response raw: key=$key, len=${raw.size}, hex=${raw.toHexString()}, unpackFmt=$respFormat")
+                Unpackage.unpackWithFormat(raw, respFormat).getOrThrow()
+            }
         } else {
             executor.send(key, format, param).map { ByteArray(0) }
         }
-    }
-
-    private fun getFormatForKey(key: String): String = when (key) {
-        "G" -> "<u8*>"
-        "GH3X_GetVersion" -> "<u8>"
-        "GH3X_RegsReadCmd" -> "<u16><d32>"
-        "GH3X_RegsWriteCmd" -> "<u16*>"
-        "GH3X_ChipCtrl" -> "<u8>"
-        "GHSetWorkModeCmd" -> "<u8>"
-        "GH3X_SwFunctionCmd" -> "<u32><u8>"
-        else -> "<u8*>"
     }
 
     @OptIn(ExperimentalUuidApi::class)

@@ -48,18 +48,18 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
         val (hdrRaw, p1) = readVarint(buf, pos); pos = p1
         raw.packHeader = PackHeader(zigzagDecode(hdrRaw))
 
-        Timber.d("decodeSingleFrame: startPos=$start, packHeader bits=${raw.packHeader.bits}")
+        Timber.v("decodeSingleFrame: startPos=$start, packHeader bits=${raw.packHeader.bits}")
 
-        if (raw.packHeader.rawdataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.rawdata = arr; Timber.d("  rawdata: sz=$sz, values=${arr.take(3).toList()}...") }
-        if (raw.packHeader.phyValueEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.phyValue = arr; Timber.d("  phyValue: sz=$sz, values=${arr.take(3).toList()}...") }
-        if (raw.packHeader.gsDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_GS_DATA)); pos = p2; raw.gsData = arr; Timber.d("  gsData: sz=$sz, values=${arr.toList()}") }
-        if (raw.packHeader.flagsEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.flags = arr; Timber.d("  flags: sz=$sz") }
-        if (raw.packHeader.algDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_ALGO_DATA)); pos = p2; raw.algoData = arr; Timber.d("  algoData: sz=$sz, values=${arr.toList()}") }
-        if (raw.packHeader.agcInfoEn) { val (sz, p) = readSigned(buf, pos); pos = p; val size = sz.coerceIn(0, MAX_CHANNELS); val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; val (arrH, p3) = readSignedArray(buf, pos, size); pos = p3; raw.agcInfo = arr; raw.agcInfoHigh = arrH; Timber.d("  agcInfo: sz=$size") }
-        if (raw.packHeader.timestampEn) { val (tsL, p) = readSigned(buf, pos); pos = p; val (tsH, p2) = readSigned(buf, pos); pos = p2; raw.timestamp = tsL; raw.timestampHigh = tsH; Timber.d("  timestamp: tsL=$tsL, tsH=$tsH") }
+        if (raw.packHeader.rawdataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.rawdata = arr; Timber.v("  rawdata: sz=$sz, values=${arr.take(3).toList()}...") }
+        if (raw.packHeader.phyValueEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.phyValue = arr; Timber.v("  phyValue: sz=$sz, values=${arr.take(3).toList()}...") }
+        if (raw.packHeader.gsDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_GS_DATA)); pos = p2; raw.gsData = arr; Timber.v("  gsData: sz=$sz, values=${arr.toList()}") }
+        if (raw.packHeader.flagsEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.flags = arr; Timber.v("  flags: sz=$sz") }
+        if (raw.packHeader.algDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_ALGO_DATA)); pos = p2; raw.algoData = arr; Timber.v("  algoData: sz=$sz, values=${arr.toList()}") }
+        if (raw.packHeader.agcInfoEn) { val (sz, p) = readSigned(buf, pos); pos = p; val size = sz.coerceIn(0, MAX_CHANNELS); val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; val (arrH, p3) = readSignedArray(buf, pos, size); pos = p3; raw.agcInfo = arr; raw.agcInfoHigh = arrH; Timber.v("  agcInfo: sz=$size") }
+        if (raw.packHeader.timestampEn) { val (tsL, p) = readSigned(buf, pos); pos = p; val (tsH, p2) = readSigned(buf, pos); pos = p2; raw.timestamp = tsL; raw.timestampHigh = tsH; Timber.v("  timestamp: tsL=$tsL, tsH=$tsH") }
         val (fid, pf) = readSigned(buf, pos); pos = pf; raw.frameId = fid
-        if (raw.packHeader.funcIdEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.functionId = v; Timber.d("  funcId: $v") }
-        if (raw.packHeader.slotCfgEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.slotCfg = v; Timber.d("  slotCfg: $v") }
+        if (raw.packHeader.funcIdEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.functionId = v; Timber.v("  funcId: $v") }
+        if (raw.packHeader.slotCfgEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.slotCfg = v; Timber.v("  slotCfg: $v") }
         return Pair(pos, raw)
     }
 
