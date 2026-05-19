@@ -40,7 +40,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
@@ -65,6 +67,8 @@ import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import java.text.DecimalFormat
+
+private const val MAX_DISPLAY_POINTS = 500
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -310,24 +314,13 @@ private fun WaveformPanel(
 ) {
     val modelProducer = remember { CartesianChartModelProducer() }
     val lineColor = MaterialTheme.colorScheme.primary.toArgb()
+
+    // Track Y-axis offset for manual range: data shifted by yOffset, formatter adds it back
+    var yOffset by remember { mutableStateOf(0f) }
+
     val yAxisFormatter = remember {
         CartesianValueFormatter { _, value, _ ->
-            val v = value.toDouble()
-            val absV = kotlin.math.abs(v)
-            if (absV == 0.0) {
-                "0"
-            } else {
-                val plainStr = String.format("%.10f", absV)
-                    .trimEnd('0')
-                    .trimEnd('.')
-                if (plainStr.length > 4) {
-                    DecimalFormat("0.##E0").format(v)
-                } else if (v < 0) {
-                    "-$plainStr"
-                } else {
-                    plainStr
-                }
-            }
+            formatYAxisMixed(value.toDouble() + yOffset.toDouble())
         }
     }
 
@@ -335,15 +328,27 @@ private fun WaveformPanel(
         "Frame: ${frameIds.first().toLong()} – ${frameIds.last().toLong()} (${frameIds.size}pts)"
     } else ""
 
+    val dataRef = rememberUpdatedState(data)
+
     LaunchedEffect(Unit) {
-        snapshotFlow { data }
-            .collect { d ->
-                if (d.size >= 2) {
-                    modelProducer.runTransaction {
-                        lineSeries { series(y = d) }
-                    }
+        while (isActive) {
+            val d = dataRef.value
+            if (d.isNotEmpty()) {
+                val windowed = if (d.size > MAX_DISPLAY_POINTS) d.takeLast(MAX_DISPLAY_POINTS) else d
+                // Manual Y-axis: shift data to start from 0, label ticks with real values
+                val yMin = windowed.min()
+                val yMax = windowed.max()
+                val range = yMax - yMin
+                val pad = if (range > 0) range * 0.1f else 10f
+                val yMinPad = yMin - pad
+                yOffset = yMinPad
+                val shifted = windowed.map { it - yMinPad }
+                modelProducer.runTransaction {
+                    lineSeries { series(y = shifted) }
                 }
             }
+            delay(500L)
+        }
     }
 
     Card(
@@ -381,19 +386,7 @@ private fun WaveformPanel(
             }
 
             if (stats != null) {
-                Text(
-                    text = buildString {
-                        append("max:${formatStat(stats.max)} ")
-                        append("min:${formatStat(stats.min)} ")
-                        append("avg:${formatStat(stats.avg)} ")
-                        append("diff:${formatStat(stats.diff)}")
-                    },
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                StatsGrid(stats)
             }
 
             if (frameLabel.isNotEmpty()) {
@@ -409,24 +402,26 @@ private fun WaveformPanel(
 
             Spacer(modifier = Modifier.height(4.dp))
 
+            val lineLayer = rememberLineCartesianLayer(
+                LineCartesianLayer.LineProvider.series(
+                    listOf(LineCartesianLayer.Line(
+                        fill = LineCartesianLayer.LineFill.single(Fill(lineColor))
+                    ))
+                )
+            )
+
             CartesianChartHost(
                 chart = rememberCartesianChart(
-                    rememberLineCartesianLayer(
-                        LineCartesianLayer.LineProvider.series(
-                            listOf(object : LineCartesianLayer.Line(
-                                LineCartesianLayer.LineFill.single(Fill(lineColor))
-                            ) {})
-                        )
-                    ),
+                    lineLayer,
                     startAxis = VerticalAxis.rememberStart(valueFormatter = yAxisFormatter),
                     bottomAxis = HorizontalAxis.rememberBottom(),
-                    getXStep = { 1.0 },
+                    getXStep = { 100.0 },
                 ),
                 modelProducer = modelProducer,
                 animationSpec = null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(220.dp)
             )
         }
     }
@@ -441,7 +436,71 @@ private fun formatStat(value: Float): String {
 }
 
 @Composable
+private fun StatsGrid(stats: WaveformStats) {
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.sp
+    )
+    val valueStyle = MaterialTheme.typography.bodySmall.copy(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp
+    )
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            listOf("max", "min", "avg", "diff").forEach { label ->
+                Text(
+                    text = label,
+                    style = labelStyle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            listOf(stats.max, stats.min, stats.avg, stats.diff).forEach { value ->
+                Text(
+                    text = formatStat(value),
+                    style = valueStyle,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Mixed-mode Y-axis label formatter:
+ * - Scientific notation (e.g. 1.2E4) for |value| >= 10000 or |value| < 0.01 (non-zero)
+ * - Standard decimal otherwise
+ */
+private fun formatYAxisMixed(value: Double): String {
+    val absV = kotlin.math.abs(value)
+    return when {
+        absV == 0.0 -> "0"
+        absV >= 10000.0 || (absV > 0.0 && absV < 0.01) ->
+            DecimalFormat("0.##E0").format(value)
+        else -> {
+            val formatted = String.format("%.6f", absV)
+                .trimEnd('0')
+                .trimEnd('.')
+            if (value < 0) "-$formatted" else formatted
+        }
+    }
+}
+
+@Composable
 private fun AlgorithmResultCard(result: AlgorithmResult, compareHrResults: Map<Int, Int>) {
+    val deviceColumns = remember(compareHrResults) {
+        compareHrResults.keys.sorted().map { it to deviceRoleLabel(it) }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -461,25 +520,52 @@ private fun AlgorithmResultCard(result: AlgorithmResult, compareHrResults: Map<I
                     Text("--", style = MaterialTheme.typography.bodyMedium)
                 }
                 is AlgorithmResult.HR -> {
-                    ResultRow("Heart Rate", "${result.heartRate} BPM")
-                    ResultRow("Valid Score", result.validScore.toString())
-                    ResultRow("SNR", result.snr.toString())
-                    ResultRow("ACC Info", result.accInfo.toString())
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "HR" to { idx: Int ->
+                                val hr = compareHrResults[idx]
+                                if (hr != null) "$hr BPM" else "--"
+                            }
+                        )
+                    )
                 }
                 is AlgorithmResult.SPO2 -> {
-                    ResultRow("SpO2", "${result.spo2}%")
-                    ResultRow("R Value", String.format("%.3f", result.rValue / 1000.0))
-                    ResultRow("Confidence", result.confiCoeff.toString())
-                    ResultRow("Valid Level", result.validLevel.toString())
-                    ResultRow("Hb Mean", result.hbMean.toString())
+                    val rDisplay = if (result.rValue > 0)
+                        String.format("%.3f", result.rValue / 1000.0) else "--"
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "SpO2" to { idx: Int ->
+                                if (idx == 0) "${result.spo2}%" else "--"
+                            },
+                            "R" to { idx: Int ->
+                                if (idx == 0) rDisplay else "--"
+                            },
+                            "HR" to { idx: Int ->
+                                val hr = compareHrResults[idx]
+                                if (hr != null) "$hr BPM" else "--"
+                            }
+                        )
+                    )
                 }
                 is AlgorithmResult.HRV -> {
                     val validRris = result.rri.filter { it > 0 }
-                    if (validRris.isNotEmpty()) {
-                        ResultRow("RRI", validRris.joinToString(", ") + " ms")
-                    }
-                    ResultRow("Confidence", result.confidence.toString())
-                    ResultRow("Valid Count", result.validNum.toString())
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "RRI" to { idx: Int ->
+                                if (idx == 0 && validRris.isNotEmpty())
+                                    validRris.joinToString(", ") + " ms" else "--"
+                            },
+                            "Conf" to { idx: Int ->
+                                if (idx == 0) result.confidence.toString() else "--"
+                            },
+                            "Valid" to { idx: Int ->
+                                if (idx == 0) result.validNum.toString() else "--"
+                            }
+                        )
+                    )
                 }
                 is AlgorithmResult.ADT -> {
                     val wearLabel = when (result.wearEvent) {
@@ -487,33 +573,37 @@ private fun AlgorithmResultCard(result: AlgorithmResult, compareHrResults: Map<I
                         2 -> "Off"
                         else -> result.wearEvent.toString()
                     }
-                    ResultRow("Wear Event", wearLabel)
                     val statusLabel = when (result.detStatus) {
                         1 -> "Detecting"
                         2 -> "Detected"
                         else -> result.detStatus.toString()
                     }
-                    ResultRow("Det Status", statusLabel)
-                    ResultRow("Counter", result.ctr.toString())
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "Wear" to { idx: Int ->
+                                if (idx == 0) wearLabel else "--"
+                            },
+                            "Status" to { idx: Int ->
+                                if (idx == 0) statusLabel else "--"
+                            },
+                            "Ctr" to { idx: Int ->
+                                if (idx == 0) result.ctr.toString() else "--"
+                            }
+                        )
+                    )
                 }
                 is AlgorithmResult.NADT -> {
-                    ResultRow("Wear-Off Detect", result.wearOffDetectRes.toString())
-                    ResultRow("Live Body Conf", result.liveBodyConf.toString())
-                }
-            }
-
-            if (compareHrResults.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Compare HR",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                compareHrResults.entries.sortedBy { it.key }.forEach { (index, hr) ->
-                    Text(
-                        text = "Device $index: $hr BPM",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "WearOff" to { idx: Int ->
+                                if (idx == 0) result.wearOffDetectRes.toString() else "--"
+                            },
+                            "LiveBody" to { idx: Int ->
+                                if (idx == 0) result.liveBodyConf.toString() else "--"
+                            }
+                        )
                     )
                 }
             }
@@ -521,24 +611,69 @@ private fun AlgorithmResultCard(result: AlgorithmResult, compareHrResults: Map<I
     }
 }
 
+private fun deviceRoleLabel(index: Int): String = when (index) {
+    0 -> "Master"
+    1 -> "Slave"
+    else -> "Cmp$index"
+}
+
 @Composable
-private fun ResultRow(label: String, value: String) {
+private fun AlgoGrid(
+    deviceColumns: List<Pair<Int, String>>,
+    rows: List<Pair<String, (Int) -> String>>
+) {
+    val headerStyle = MaterialTheme.typography.labelSmall.copy(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.sp
+    )
+    val cellStyle = MaterialTheme.typography.bodySmall.copy(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp
+    )
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.sp
+    )
+
+    // Header row: empty col + device role labels
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
+        Spacer(modifier = Modifier.width(40.dp))
+        deviceColumns.forEach { (_, label) ->
+            Text(
+                text = label,
+                style = headerStyle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(2.dp))
+
+    // Data rows
+    rows.forEach { (rowLabel, values) ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = rowLabel,
+                style = labelStyle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(40.dp)
+            )
+            deviceColumns.forEach { (idx, _) ->
+                Text(
+                    text = values(idx),
+                    style = cellStyle,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
     }
 }
 
