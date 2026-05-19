@@ -37,11 +37,14 @@ import com.ghealth.tools.core.model.TestScenario
 fun TestConfigDialog(
     deviceName: String,
     onConfirm: (TestConfig) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    defaultName: String = "",
+    defaultScenario: TestScenario = TestScenario.RESTING,
+    defaultRound: Int = 1
 ) {
-    var testerName by remember { mutableStateOf("") }
-    var selectedScenario by remember { mutableStateOf(TestScenario.RESTING) }
-    var testRound by remember { mutableIntStateOf(1) }
+    var testerName by remember { mutableStateOf(defaultName) }
+    var selectedScenario by remember { mutableStateOf(defaultScenario) }
+    var testRound by remember { mutableIntStateOf(defaultRound.coerceAtLeast(1)) }
     var notes by remember { mutableStateOf("") }
     var scenarioExpanded by remember { mutableStateOf(false) }
 
