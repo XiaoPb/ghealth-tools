@@ -44,6 +44,7 @@ data class DemoUiState(
     val waveform2Column: String = "Ipd1",
     val waveform1Stats: WaveformStats? = null,
     val waveform2Stats: WaveformStats? = null,
+    val frameIds: List<Float> = emptyList(),
     val isRecording: Boolean = false,
     val compareHrResults: Map<Int, Int> = emptyMap(),
     val testerName: String = "",
@@ -63,6 +64,7 @@ class DemoViewModel @Inject constructor(
 
     private val perFunctionBuffers = mutableMapOf<FunctionMode, MultiChannelRingBuffer>()
     private val perFunctionPhyBuffers = mutableMapOf<FunctionMode, MultiChannelRingBuffer>()
+    private val perFunctionScalarBuffers = mutableMapOf<FunctionMode, MultiChannelRingBuffer>()
     private var autoRecordingStopped = false
     private val lastColumnValues = mutableMapOf<FunctionMode, MutableMap<String, Any?>>()
     private val algoNonZeroSeen = mutableMapOf<String, Boolean>()
@@ -109,6 +111,7 @@ class DemoViewModel @Inject constructor(
         _uiState.update { it.copy(functionDataMap = emptyMap()) }
         perFunctionBuffers.clear()
         perFunctionPhyBuffers.clear()
+        perFunctionScalarBuffers.clear()
         lastColumnValues.clear()
         algoNonZeroSeen.clear()
         lastAlgoResults.clear()
@@ -117,15 +120,18 @@ class DemoViewModel @Inject constructor(
     fun selectFunction(function: FunctionMode) {
         val chipType = _uiState.value.chipType
         val defaultCols = defaultColumnsForChip(chipType)
+        val w1Data = getColumnData(function, defaultCols.first)
+        val w2Data = getColumnData(function, defaultCols.second)
         _uiState.update {
             it.copy(
                 selectedFunction = function,
                 waveform1Column = defaultCols.first,
                 waveform2Column = defaultCols.second,
-                waveform1Data = getColumnData(function, defaultCols.first),
-                waveform2Data = getColumnData(function, defaultCols.second),
-                waveform1Stats = computeStats(getColumnData(function, defaultCols.first)),
-                waveform2Stats = computeStats(getColumnData(function, defaultCols.second))
+                waveform1Data = w1Data,
+                waveform2Data = w2Data,
+                waveform1Stats = computeStats(w1Data),
+                waveform2Stats = computeStats(w2Data),
+                frameIds = getFrameIds(function)
             )
         }
     }
@@ -194,6 +200,18 @@ class DemoViewModel @Inject constructor(
             phyBuffer.addFrame(frame.phyValue)
         }
 
+        val scalarBuffer = perFunctionScalarBuffers.getOrPut(funcMode) {
+            MultiChannelRingBuffer(maxChannels = 4, capacity = BUFFER_CAPACITY)
+        }
+        scalarBuffer.addFrame(
+            intArrayOf(
+                frame.gsData.getOrNull(0) ?: 0,
+                frame.gsData.getOrNull(1) ?: 0,
+                frame.gsData.getOrNull(2) ?: 0,
+                frame.frameCnt
+            )
+        )
+
         val selectedFunc = _uiState.value.selectedFunction
         if (selectedFunc == funcMode) {
             val w1Col = _uiState.value.waveform1Column
@@ -205,7 +223,8 @@ class DemoViewModel @Inject constructor(
                     waveform1Data = w1Data,
                     waveform2Data = w2Data,
                     waveform1Stats = computeStats(w1Data),
-                    waveform2Stats = computeStats(w2Data)
+                    waveform2Stats = computeStats(w2Data),
+                    frameIds = getFrameIds(funcMode)
                 )
             }
         }
@@ -333,6 +352,15 @@ class DemoViewModel @Inject constructor(
     }
 
     private fun getColumnData(funcMode: FunctionMode, columnName: String): List<Float> {
+        // Scalar columns (no numeric suffix)
+        val scalarBuffer = perFunctionScalarBuffers[funcMode]
+        when (columnName) {
+            "ACCX" -> return scalarBuffer?.getChannel(0) ?: emptyList()
+            "ACCY" -> return scalarBuffer?.getChannel(1) ?: emptyList()
+            "ACCZ" -> return scalarBuffer?.getChannel(2) ?: emptyList()
+            "FRAME_ID" -> return scalarBuffer?.getChannel(3) ?: emptyList()
+        }
+
         val (prefix, index) = parseColumnName(columnName) ?: return emptyList()
         return when (prefix) {
             "Ipd", "CH" -> {
@@ -346,6 +374,10 @@ class DemoViewModel @Inject constructor(
             "ALGO_RESULT" -> emptyList()
             else -> emptyList()
         }
+    }
+
+    private fun getFrameIds(funcMode: FunctionMode): List<Float> {
+        return perFunctionScalarBuffers[funcMode]?.getChannel(3) ?: emptyList()
     }
 
     private fun parseColumnName(name: String): Pair<String, Int>? {
@@ -370,6 +402,10 @@ class DemoViewModel @Inject constructor(
 
         fun availableColumns(chipType: DeviceType): List<String> {
             val columns = mutableListOf<String>()
+            columns.add("ACCX")
+            columns.add("ACCY")
+            columns.add("ACCZ")
+            columns.add("FRAME_ID")
             when (chipType) {
                 DeviceType.GH3036 -> {
                     for (i in 0..31) columns.add("Ipd$i")

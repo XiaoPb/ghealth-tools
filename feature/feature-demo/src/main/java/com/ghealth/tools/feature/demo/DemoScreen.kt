@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
@@ -32,13 +34,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -51,11 +56,15 @@ import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
+import com.patrykandpatrick.vico.core.common.Fill
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
+import java.text.DecimalFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -211,6 +220,7 @@ private fun FunctionDetailScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Row(
@@ -238,6 +248,7 @@ private fun FunctionDetailScreen(
             title = "Waveform 1",
             columnName = state.waveform1Column,
             data = state.waveform1Data,
+            frameIds = state.frameIds,
             stats = state.waveform1Stats,
             availableColumns = availableColumns,
             onColumnSelect = onSelectWaveform1Column,
@@ -251,6 +262,7 @@ private fun FunctionDetailScreen(
             title = "Waveform 2",
             columnName = state.waveform2Column,
             data = state.waveform2Data,
+            frameIds = state.frameIds,
             stats = state.waveform2Stats,
             availableColumns = availableColumns,
             onColumnSelect = onSelectWaveform2Column,
@@ -289,6 +301,7 @@ private fun WaveformPanel(
     title: String,
     columnName: String,
     data: List<Float>,
+    frameIds: List<Float>,
     stats: WaveformStats?,
     availableColumns: List<String>,
     onColumnSelect: (String) -> Unit,
@@ -296,13 +309,41 @@ private fun WaveformPanel(
     onShowDialogChange: (Boolean) -> Unit
 ) {
     val modelProducer = remember { CartesianChartModelProducer() }
-
-    androidx.compose.runtime.LaunchedEffect(data) {
-        if (data.size >= 2) {
-            modelProducer.runTransaction {
-                lineSeries { series(data) }
+    val lineColor = MaterialTheme.colorScheme.primary.toArgb()
+    val yAxisFormatter = remember {
+        CartesianValueFormatter { _, value, _ ->
+            val v = value.toDouble()
+            val absV = kotlin.math.abs(v)
+            if (absV == 0.0) {
+                "0"
+            } else {
+                val plainStr = String.format("%.10f", absV)
+                    .trimEnd('0')
+                    .trimEnd('.')
+                if (plainStr.length > 4) {
+                    DecimalFormat("0.##E0").format(v)
+                } else if (v < 0) {
+                    "-$plainStr"
+                } else {
+                    plainStr
+                }
             }
         }
+    }
+
+    val frameLabel = if (frameIds.size >= 2) {
+        "Frame: ${frameIds.first().toLong()} – ${frameIds.last().toLong()} (${frameIds.size}pts)"
+    } else ""
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { data }
+            .collect { d ->
+                if (d.size >= 2) {
+                    modelProducer.runTransaction {
+                        lineSeries { series(y = d) }
+                    }
+                }
+            }
     }
 
     Card(
@@ -355,15 +396,34 @@ private fun WaveformPanel(
                 )
             }
 
+            if (frameLabel.isNotEmpty()) {
+                Text(
+                    text = frameLabel,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             Spacer(modifier = Modifier.height(4.dp))
 
             CartesianChartHost(
                 chart = rememberCartesianChart(
-                    rememberLineCartesianLayer(),
-                    startAxis = VerticalAxis.rememberStart(),
+                    rememberLineCartesianLayer(
+                        LineCartesianLayer.LineProvider.series(
+                            listOf(object : LineCartesianLayer.Line(
+                                LineCartesianLayer.LineFill.single(Fill(lineColor))
+                            ) {})
+                        )
+                    ),
+                    startAxis = VerticalAxis.rememberStart(valueFormatter = yAxisFormatter),
                     bottomAxis = HorizontalAxis.rememberBottom(),
+                    getXStep = { 1.0 },
                 ),
                 modelProducer = modelProducer,
+                animationSpec = null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
