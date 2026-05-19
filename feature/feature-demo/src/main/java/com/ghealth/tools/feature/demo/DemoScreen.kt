@@ -76,6 +76,8 @@ import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import java.text.DecimalFormat
 
 private const val MAX_DISPLAY_POINTS = 500
+private const val SPO2_MIN = 65f
+private const val SPO2_MAX = 100f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -941,7 +943,7 @@ private fun EditSpo2Dialog(
     onRemove: () -> Unit
 ) {
     var spo2Text by remember {
-        mutableStateOf(spo2Value?.let { formatSpo2Text(it) } ?: "")
+        mutableStateOf(spo2Value?.let { formatSpo2Text(it) } ?: "98")
     }
 
     AlertDialog(
@@ -965,8 +967,8 @@ private fun EditSpo2Dialog(
                         val label = if (delta > 0) "+${delta.toInt()}" else "${delta.toInt()}"
                         TextButton(
                             onClick = {
-                                val current = spo2Text.toFloatOrNull() ?: 0f
-                                spo2Text = formatSpo2Text(current + delta)
+                                val current = spo2Text.toFloatOrNull() ?: 98f
+                                spo2Text = formatSpo2Text((current + delta).coerceIn(SPO2_MIN, SPO2_MAX))
                             }
                         ) { Text(label) }
                     }
@@ -976,7 +978,8 @@ private fun EditSpo2Dialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val value = spo2Text.toFloatOrNull()
+                    val raw = spo2Text.toFloatOrNull()
+                    val value = raw?.coerceIn(SPO2_MIN, SPO2_MAX)
                     onConfirm(value)
                 }
             ) { Text("确定") }
