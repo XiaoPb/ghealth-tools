@@ -68,7 +68,8 @@ class RecordingManager @Inject constructor(
         var lastWrittenSecond: Long = 0L,
         var masterAlgo: String = "",
         var slaveAlgo: String = "",
-        val compareHrs: MutableMap<Int, Int> = mutableMapOf()
+        val compareHrs: MutableMap<Int, Int> = mutableMapOf(),
+        val compareSpo2s: MutableMap<Int, Float> = mutableMapOf()
     )
 
     companion object {
@@ -151,6 +152,31 @@ class RecordingManager @Inject constructor(
         }
     }
 
+    fun updateCompareSpo2(index: Int, spo2: Float?) {
+        for ((_, state) in modeStates) {
+            scope.launch {
+                state.lock.withLock {
+                    if (spo2 != null) {
+                        state.recordsBuffer.compareSpo2s[index] = spo2
+                    } else {
+                        state.recordsBuffer.compareSpo2s.remove(index)
+                    }
+                }
+            }
+        }
+    }
+
+    fun updateAllCompareSpo2(values: Map<Int, Float>) {
+        for ((_, state) in modeStates) {
+            scope.launch {
+                state.lock.withLock {
+                    state.recordsBuffer.compareSpo2s.clear()
+                    state.recordsBuffer.compareSpo2s.putAll(values)
+                }
+            }
+        }
+    }
+
     suspend fun endSession() {
         if (!_isSessionActive.value) return
         Timber.i("Ending recording session...")
@@ -225,8 +251,14 @@ class RecordingManager @Inject constructor(
             createServerWriter(mode, task) ?: return currentRecordsWriter
         }
 
-        // 1. Write server CSV row
-        serverWriter.writeRow(task.columnMap)
+        // 1. Write server CSV row (inject SPO2 compare values into REF_RESULT5+)
+        val serverValues = task.columnMap.toMutableMap()
+        lock.withLock {
+            for ((index, spo2) in recordsBuffer.compareSpo2s) {
+                serverValues["REF_RESULT${5 + index}"] = spo2
+            }
+        }
+        serverWriter.writeRow(serverValues)
 
         // 2. Lazy-create records CSV on first write for this mode
         if (currentRecordsWriter == null) {

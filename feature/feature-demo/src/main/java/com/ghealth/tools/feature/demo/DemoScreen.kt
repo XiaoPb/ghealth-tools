@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.demo
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,14 +24,20 @@ import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -89,7 +96,12 @@ fun DemoScreen(viewModel: DemoViewModel = hiltViewModel()) {
             state = state,
             onSelectWaveform1Column = viewModel::selectWaveform1Column,
             onSelectWaveform2Column = viewModel::selectWaveform2Column,
-            onBack = viewModel::goBack
+            onBack = viewModel::goBack,
+            onAddCompareDevice = viewModel::addManualCompareDevice,
+            onStartEditCompareDevice = viewModel::startEditCompareDevice,
+            onStopEditCompareDevice = viewModel::stopEditCompareDevice,
+            onUpdateCompareSpo2 = viewModel::updateManualCompareSpo2,
+            onRemoveCompareDevice = viewModel::removeManualCompareDevice
         )
     }
 }
@@ -211,7 +223,12 @@ private fun FunctionDetailScreen(
     state: DemoUiState,
     onSelectWaveform1Column: (String) -> Unit,
     onSelectWaveform2Column: (String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onAddCompareDevice: (String) -> Unit,
+    onStartEditCompareDevice: (Int) -> Unit,
+    onStopEditCompareDevice: () -> Unit,
+    onUpdateCompareSpo2: (Int, Float?) -> Unit,
+    onRemoveCompareDevice: (Int) -> Unit
 ) {
     val function = state.selectedFunction ?: return
     val availableColumns = remember(state.chipType) {
@@ -239,6 +256,17 @@ private fun FunctionDetailScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
             )
+            if (function == FunctionMode.SPO2) {
+                Spo2CompareMenu(
+                    devices = state.manualCompareDevices,
+                    editingIndex = state.editingCompareDeviceIndex,
+                    onAddDevice = onAddCompareDevice,
+                    onStartEdit = onStartEditCompareDevice,
+                    onStopEdit = onStopEditCompareDevice,
+                    onUpdateSpo2 = onUpdateCompareSpo2,
+                    onRemoveDevice = onRemoveCompareDevice
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -246,7 +274,8 @@ private fun FunctionDetailScreen(
         AlgorithmResultCard(
             masterResult = state.masterAlgoResult,
             slaveResult = state.slaveAlgoResult,
-            compareHrResults = state.compareHrResults
+            compareHrResults = state.compareHrResults,
+            manualCompareDevices = state.manualCompareDevices
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -499,12 +528,22 @@ private fun formatYAxisMixed(value: Double): String {
 }
 
 @Composable
-private fun AlgorithmResultCard(masterResult: AlgorithmResult, slaveResult: AlgorithmResult?, compareHrResults: Map<Int, Int>) {
-    val deviceColumns = remember(compareHrResults, slaveResult) {
+private fun AlgorithmResultCard(
+    masterResult: AlgorithmResult,
+    slaveResult: AlgorithmResult?,
+    compareHrResults: Map<Int, Int>,
+    manualCompareDevices: List<ManualCompareDevice> = emptyList()
+) {
+    val isSpo2 = masterResult is AlgorithmResult.SPO2 || slaveResult is AlgorithmResult.SPO2
+    val deviceColumns = remember(compareHrResults, slaveResult, manualCompareDevices, isSpo2) {
         buildList {
             add(0 to deviceRoleLabel(0))
             if (slaveResult != null) add(1 to deviceRoleLabel(1))
-            compareHrResults.keys.sorted().mapTo(this) { it to deviceRoleLabel(it) }
+            if (isSpo2) {
+                manualCompareDevices.indices.mapTo(this) { (it + 2) to manualCompareDevices[it].name }
+            } else {
+                compareHrResults.keys.sorted().mapTo(this) { it to deviceRoleLabel(it) }
+            }
         }
     }
 
@@ -536,9 +575,19 @@ private fun AlgorithmResultCard(masterResult: AlgorithmResult, slaveResult: Algo
                     AlgoGrid(
                         deviceColumns = deviceColumns,
                         rows = listOf(
-                            "SpO2" to { idx: Int -> spo2Cell(resultFor(idx, mr, sr)) },
-                            "R" to { idx: Int -> rCell(resultFor(idx, mr, sr)) },
-                            "HR" to { idx: Int -> spo2HrCell(resultFor(idx, mr, sr)) }
+                            "SpO2" to { idx: Int ->
+                                val manual = manualCompareDevices.getOrNull(idx - 2)
+                                if (manual != null) manual.spo2?.let { "${formatStat(it)}%" } ?: "--"
+                                else spo2Cell(resultFor(idx, mr, sr))
+                            },
+                            "R" to { idx: Int ->
+                                if (manualCompareDevices.getOrNull(idx - 2) != null) "--"
+                                else rCell(resultFor(idx, mr, sr))
+                            },
+                            "HR" to { idx: Int ->
+                                if (manualCompareDevices.getOrNull(idx - 2) != null) "--"
+                                else spo2HrCell(resultFor(idx, mr, sr))
+                            }
                         )
                     )
                 }
@@ -669,7 +718,7 @@ private fun <T : AlgorithmResult> resultFor(idx: Int, master: T?, slave: T?): Al
 private fun deviceRoleLabel(index: Int): String = when (index) {
     0 -> "Master"
     1 -> "Slave"
-    else -> "Cmp${index - 1}" // compare devices start at UI index 2
+    else -> "Ref_${index - 1}" // compare devices start at UI index 2
 }
 
 @Composable
@@ -777,4 +826,176 @@ private fun ColumnSelectDialog(
             }
         }
     )
+}
+
+@Composable
+private fun Spo2CompareMenu(
+    devices: List<ManualCompareDevice>,
+    editingIndex: Int?,
+    onAddDevice: (String) -> Unit,
+    onStartEdit: (Int) -> Unit,
+    onStopEdit: () -> Unit,
+    onUpdateSpo2: (Int, Float?) -> Unit,
+    onRemoveDevice: (Int) -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newDeviceName by remember { mutableStateOf("") }
+
+    Box {
+        IconButton(onClick = { menuExpanded = true }) {
+            Icon(Icons.Default.MoreVert, contentDescription = "对比设备菜单")
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("添加对比设备") },
+                onClick = {
+                    menuExpanded = false
+                    showAddDialog = true
+                    newDeviceName = ""
+                },
+                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
+            )
+            if (devices.isNotEmpty()) {
+                HorizontalDivider()
+                devices.forEachIndexed { index, device ->
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(device.name, modifier = Modifier.weight(1f))
+                                if (device.spo2 != null) {
+                                    Text(
+                                        text = "${formatStat(device.spo2)}%",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onStartEdit(index)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text("添加对比设备") },
+            text = {
+                OutlinedTextField(
+                    value = newDeviceName,
+                    onValueChange = { newDeviceName = it },
+                    label = { Text("设备名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newDeviceName.isNotBlank()) {
+                            onAddDevice(newDeviceName.trim())
+                            showAddDialog = false
+                        }
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (editingIndex != null && editingIndex in devices.indices) {
+        val device = devices[editingIndex]
+        EditSpo2Dialog(
+            deviceName = device.name,
+            spo2Value = device.spo2,
+            onConfirm = { newValue ->
+                onUpdateSpo2(editingIndex, newValue)
+                onStopEdit()
+            },
+            onDismiss = onStopEdit,
+            onRemove = {
+                onRemoveDevice(editingIndex)
+                onStopEdit()
+            }
+        )
+    }
+}
+
+@Composable
+private fun EditSpo2Dialog(
+    deviceName: String,
+    spo2Value: Float?,
+    onConfirm: (Float?) -> Unit,
+    onDismiss: () -> Unit,
+    onRemove: () -> Unit
+) {
+    var spo2Text by remember {
+        mutableStateOf(spo2Value?.let { formatSpo2Text(it) } ?: "")
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(deviceName) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = spo2Text,
+                    onValueChange = { spo2Text = it },
+                    label = { Text("血氧值 (%)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    listOf(+5f, +3f, +1f, -1f, -3f, -5f).forEach { delta ->
+                        val label = if (delta > 0) "+${delta.toInt()}" else "${delta.toInt()}"
+                        TextButton(
+                            onClick = {
+                                val current = spo2Text.toFloatOrNull() ?: 0f
+                                spo2Text = formatSpo2Text(current + delta)
+                            }
+                        ) { Text(label) }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val value = spo2Text.toFloatOrNull()
+                    onConfirm(value)
+                }
+            ) { Text("确定") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onRemove) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        }
+    )
+}
+
+private fun formatSpo2Text(value: Float): String {
+    return if (value == value.toLong().toFloat()) {
+        value.toLong().toString()
+    } else {
+        "%.1f".format(value)
+    }
 }

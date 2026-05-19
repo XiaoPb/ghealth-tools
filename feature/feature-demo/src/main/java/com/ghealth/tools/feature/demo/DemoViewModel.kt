@@ -34,6 +34,11 @@ data class WaveformStats(
     val diff: Float
 )
 
+data class ManualCompareDevice(
+    val name: String,
+    val spo2: Float? = null
+)
+
 data class DemoUiState(
     val functionDataMap: Map<FunctionMode, FunctionData> = emptyMap(),
     val selectedFunction: FunctionMode? = null,
@@ -51,7 +56,10 @@ data class DemoUiState(
     val slaveAlgoResult: AlgorithmResult? = null,
     val testerName: String = "",
     val scenario: String = "",
-    val testRound: Int = 0
+    val testRound: Int = 0,
+    val manualCompareDevices: List<ManualCompareDevice> = emptyList(),
+    val showAddCompareDialog: Boolean = false,
+    val editingCompareDeviceIndex: Int? = null
 )
 
 @HiltViewModel
@@ -183,6 +191,55 @@ class DemoViewModel @Inject constructor(
 
     fun goBack() {
         _uiState.update { it.copy(selectedFunction = null) }
+    }
+
+    fun showAddCompareDialog() {
+        _uiState.update { it.copy(showAddCompareDialog = true) }
+    }
+
+    fun hideAddCompareDialog() {
+        _uiState.update { it.copy(showAddCompareDialog = false) }
+    }
+
+    fun addManualCompareDevice(name: String) {
+        _uiState.update { state ->
+            state.copy(
+                manualCompareDevices = state.manualCompareDevices + ManualCompareDevice(name = name),
+                showAddCompareDialog = false
+            )
+        }
+    }
+
+    fun startEditCompareDevice(index: Int) {
+        _uiState.update { it.copy(editingCompareDeviceIndex = index) }
+    }
+
+    fun stopEditCompareDevice() {
+        _uiState.update { it.copy(editingCompareDeviceIndex = null) }
+    }
+
+    fun updateManualCompareSpo2(index: Int, spo2: Float?) {
+        _uiState.update { state ->
+            val updated = state.manualCompareDevices.toMutableList()
+            if (index in updated.indices) {
+                updated[index] = updated[index].copy(spo2 = spo2)
+            }
+            state.copy(manualCompareDevices = updated)
+        }
+        recordingManager.updateCompareSpo2(index, spo2)
+    }
+
+    fun removeManualCompareDevice(index: Int) {
+        _uiState.update { state ->
+            state.copy(manualCompareDevices = state.manualCompareDevices.toMutableList().also {
+                if (index in it.indices) it.removeAt(index)
+            })
+        }
+        // Rebuild SPO2 buffer with re-indexed values
+        val spo2s = _uiState.value.manualCompareDevices
+            .mapIndexedNotNull { i, d -> d.spo2?.let { i to it } }
+            .toMap()
+        recordingManager.updateAllCompareSpo2(spo2s)
     }
 
     private fun onFrameReceived(deviceAddress: String, frame: GhFuncFrame) {
