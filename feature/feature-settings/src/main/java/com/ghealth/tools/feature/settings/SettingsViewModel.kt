@@ -23,7 +23,8 @@ data class SettingsUiState(
     val appVersion: String = "",
     val exportedLogPath: String? = null,
     val themeMode: ThemeMode = ThemeMode.SKY_BLUE,
-    val availableThemes: List<ThemeMode> = ThemeMode.entries
+    val availableThemes: List<ThemeMode> = ThemeMode.entries,
+    val selectedChip: String = "gh3036"
 )
 
 @HiltViewModel
@@ -60,6 +61,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             blePreferences.themeMode.collect { key ->
                 _uiState.update { it.copy(themeMode = ThemeMode.fromKey(key)) }
+            }
+        }
+        viewModelScope.launch {
+            blePreferences.selectedChip.collect { chip ->
+                _uiState.update { it.copy(selectedChip = chip) }
             }
         }
     }

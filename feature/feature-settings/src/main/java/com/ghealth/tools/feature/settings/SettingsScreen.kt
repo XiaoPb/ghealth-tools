@@ -217,19 +217,10 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
         SectionHeader("支持的芯片")
         Card(modifier = Modifier.fillMaxWidth()) {
+            val chipInfo = chipCompatibility[state.selectedChip] ?: chipCompatibility["gh3036"]!!
             ListItem(
-                headlineContent = { Text("GH3036") },
-                supportingContent = { Text("GH3036 / GH3038 / GH3038Q") }
-            )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("GH3300") },
-                supportingContent = { Text("GH3300 / GH3310 / GH3030") }
-            )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("GH3220") },
-                supportingContent = { Text("GH3220 / GH3020 / GH3036 / GH3228T") }
+                headlineContent = { Text(chipInfo.first) },
+                supportingContent = { Text(chipInfo.second) }
             )
         }
 
@@ -262,6 +253,12 @@ fun SettingsScreen(
     }
     }
 }
+
+private val chipCompatibility = mapOf(
+    "gh3036" to ("GH3036" to "GH3036 / GH3038 / GH3038Q"),
+    "gh3300" to ("GH3300" to "GH3300 / GH3310 / GH3030"),
+    "gh3220" to ("GH3220" to "GH3220 / GH3020 / GH3036 / GH3228T")
+)
 
 @Composable
 private fun ThemeColorPreview(theme: ThemeMode) {
