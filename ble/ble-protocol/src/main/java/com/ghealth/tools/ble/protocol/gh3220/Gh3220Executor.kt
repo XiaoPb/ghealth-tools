@@ -1,0 +1,88 @@
+package com.ghealth.tools.ble.protocol.gh3220
+
+import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
+import com.ghealth.tools.ble.protocol.rpccore.GHealthExecutor
+import com.ghealth.tools.ble.protocol.rpccore.InvokeContext
+import com.ghealth.tools.ble.protocol.rpccore.ParseResult
+import com.ghealth.tools.ble.protocol.rpccore.RpcConfig
+import com.ghealth.tools.ble.protocol.rpccore.RpcCore
+import com.ghealth.tools.ble.protocol.rpccore.unpackU8Array
+import timber.log.Timber
+
+/**
+ * GH3220 (GH3x2x series) BLE protocol executor.
+ *
+ * Builds on [RpcCore] for RPC command dispatch and uses [Gh3220FrameDecoder]
+ * for G-protocol sensor data parsing.
+ *
+ * C reference: .claude/gh_protocol/c/gh3220/gh3220_data_package.c
+ */
+class Gh3220Executor(
+    config: RpcConfig = RpcConfig()
+) : GHealthExecutor {
+    private val core = RpcCore(config)
+    private val frameDecoder = Gh3220FrameDecoder()
+    private var frameCallback: ((GhFuncFrame) -> Unit)? = null
+
+    override fun setSendFunction(func: (ByteArray) -> Result<Unit>) {
+        core.setSendFunction(func)
+    }
+
+    override fun registerFrameCallback(callback: (GhFuncFrame) -> Unit) {
+        frameCallback = callback
+    }
+
+    override suspend fun registerGHandler(): Result<Unit> {
+        val handler: (ByteArray, Int, InvokeContext) -> Unit = { data, _, _ ->
+            handleGData(data)
+        }
+        return core.register("G", handler)
+    }
+
+    private fun handleGData(data: ByteArray) {
+        try {
+            val unpacked = unpackU8Array(data).toByteArray()
+            val frames = frameDecoder.decode(unpacked)
+
+            frames.forEach { frame ->
+                Timber.v("GH3220 GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}")
+                frameCallback?.invoke(frame)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "GH3220 handleGData error")
+        }
+    }
+
+    override suspend fun process(data: ByteArray): List<Result<ParseResult>> {
+        return core.process(data)
+    }
+
+    override suspend fun call(key: String, format: String, params: ByteArray): Result<ByteArray> {
+        return core.call(key, format, params)
+    }
+
+    override suspend fun send(key: String, format: String, params: ByteArray): Result<Unit> {
+        return core.send(key, format, params)
+    }
+
+    override fun publish(key: String, params: ByteArray): Result<Unit> {
+        return core.publish(key, params)
+    }
+
+    override suspend fun sall(key: String, format: String, params: ByteArray): Result<ByteArray> {
+        return core.sall(key, format, params)
+    }
+
+    override fun register(key: String, handler: (ByteArray, Int, InvokeContext) -> Unit): Result<Unit> {
+        return core.register(key, handler)
+    }
+
+    override fun reset() {
+        core.reset()
+        frameDecoder.reset()
+    }
+
+    override fun resetFrameDecoder() {
+        frameDecoder.reset()
+    }
+}
