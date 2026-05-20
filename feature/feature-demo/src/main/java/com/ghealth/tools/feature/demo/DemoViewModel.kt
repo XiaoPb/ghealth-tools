@@ -7,6 +7,7 @@ import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
+import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
 import com.ghealth.tools.core.model.TestConfig
@@ -70,11 +71,21 @@ data class DemoUiState(
 class DemoViewModel @Inject constructor(
     private val connectionManager: BleConnectionManager,
     private val recordingManager: RecordingManager,
+    private val blePreferences: BlePreferences,
     @Named("app_version") private val appVersion: String
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DemoUiState())
     val uiState: StateFlow<DemoUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            blePreferences.selectedChip.collect { chipName ->
+                val deviceType = DeviceType.entries.find { it.chipName == chipName } ?: DeviceType.GH3036
+                _uiState.update { it.copy(chipType = deviceType) }
+            }
+        }
+    }
 
     private val perFunctionBuffers = mutableMapOf<FunctionMode, MultiChannelRingBuffer>()
     private val perFunctionPhyBuffers = mutableMapOf<FunctionMode, MultiChannelRingBuffer>()
