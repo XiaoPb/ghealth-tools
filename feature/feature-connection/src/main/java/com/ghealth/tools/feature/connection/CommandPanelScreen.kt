@@ -90,7 +90,8 @@ fun CommandPanelScreen(
     commandExecutionStates: Map<String, CommandExecutionState>,
     onNavigateBack: () -> Unit,
     onExecute: (String, ByteArray) -> Unit,
-    showBackButton: Boolean = true
+    showBackButton: Boolean = true,
+    chipName: String = "gh3036"
 ) {
     var expandedKey by remember { mutableStateOf<String?>(null) }
 
@@ -130,7 +131,8 @@ fun CommandPanelScreen(
                             onToggle = {
                                 expandedKey = if (expandedKey == command.key) null else command.key
                             },
-                            onExecute = { params -> onExecute(command.key, params) }
+                            onExecute = { params -> onExecute(command.key, params) },
+                            chipName = chipName
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
@@ -166,7 +168,8 @@ private fun CommandCard(
     isExpanded: Boolean,
     executionState: CommandExecutionState,
     onToggle: () -> Unit,
-    onExecute: (ByteArray) -> Unit
+    onExecute: (ByteArray) -> Unit,
+    chipName: String = "gh3036"
 ) {
     val paramValues = remember { mutableStateMapOf<String, Any>() }
     val isRegWrite = command.key == "GH3X_RegsWriteCmd"
@@ -266,6 +269,7 @@ private fun CommandCard(
                         command.params.forEach { param ->
                             ParamInput(
                                 param = param,
+                                chipName = chipName,
                                 onValueChange = { value ->
                                     paramValues[param.name] = value
                                 }
@@ -321,7 +325,8 @@ private fun CommandCard(
 @Composable
 private fun ParamInput(
     param: CommandParamDef,
-    onValueChange: (Any) -> Unit
+    onValueChange: (Any) -> Unit,
+    chipName: String = "gh3036"
 ) {
     var textValue by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
@@ -330,6 +335,7 @@ private fun ParamInput(
         // Multi-select func mode bits
         param.type == ParamType.FUNC_MODE_BITS -> {
             val selectedBits = remember { mutableStateMapOf<String, Boolean>() }
+            val funcBits = remember(chipName) { Gh3036CommandMeta.getFuncModeBits(chipName) }
             Column {
                 Text(
                     text = param.label,
@@ -340,13 +346,13 @@ private fun ParamInput(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Gh3036CommandMeta.FUNC_MODE_BITS_GH3036.forEach { bit ->
+                    funcBits.forEach { bit ->
                         val selected = selectedBits[bit.name] ?: false
                         FilterChip(
                             selected = selected,
                             onClick = {
                                 selectedBits[bit.name] = !selected
-                                val mask = Gh3036CommandMeta.FUNC_MODE_BITS_GH3036
+                                val mask = funcBits
                                     .filter { selectedBits[it.name] == true }
                                     .fold(0) { acc, b -> acc or (1 shl b.bit) }
                                 onValueChange(mask)

@@ -132,7 +132,8 @@ private fun ConnectionScreenLandscape(
                         commandExecutionStates = state.commandExecutionStates,
                         onNavigateBack = { showCommandPanel = false },
                         onExecute = { key, params -> viewModel.executeCommand(key, params) },
-                        showBackButton = false
+                        showBackButton = false,
+                        chipName = state.selectedChip
                     )
                 }
                 else -> {
@@ -283,7 +284,8 @@ private fun ConnectionScreenCompact(
             CommandPanelScreen(
                 commandExecutionStates = state.commandExecutionStates,
                 onNavigateBack = { navController.popBackStack() },
-                onExecute = { key, params -> viewModel.executeCommand(key, params) }
+                onExecute = { key, params -> viewModel.executeCommand(key, params) },
+                chipName = state.selectedChip
             )
         }
     }

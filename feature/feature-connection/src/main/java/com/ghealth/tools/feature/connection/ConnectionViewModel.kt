@@ -47,14 +47,16 @@ data class ConnectionUiState(
     val commandExecutionStates: Map<String, CommandExecutionState> = emptyMap(),
     val showTestConfigDialog: Boolean = false,
     val masterDeviceName: String? = null,
-    val dataMonitorState: DataMonitorState = DataMonitorState()
+    val dataMonitorState: DataMonitorState = DataMonitorState(),
+    val selectedChip: String = "gh3036"
 )
 
 @HiltViewModel
 class ConnectionViewModel @Inject constructor(
     private val bleScanner: BleScanner,
     private val connectionManager: BleConnectionManager,
-    private val recordingManager: com.ghealth.tools.core.storage.RecordingManager
+    private val recordingManager: com.ghealth.tools.core.storage.RecordingManager,
+    private val blePreferences: com.ghealth.tools.core.datastore.BlePreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ConnectionUiState())
@@ -118,6 +120,12 @@ class ConnectionViewModel @Inject constructor(
                 if (_uiState.value.dataMonitorState.isMonitoring) {
                     stopMonitoring()
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            blePreferences.selectedChip.collect { chip ->
+                _uiState.update { it.copy(selectedChip = chip) }
             }
         }
 

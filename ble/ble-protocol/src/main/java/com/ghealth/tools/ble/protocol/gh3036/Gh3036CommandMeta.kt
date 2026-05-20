@@ -129,6 +129,57 @@ object Gh3036CommandMeta {
         FuncModeBit("SLOT", "SLOT", 8)
     )
 
+    val FUNC_MODE_BITS_GH3220 = listOf(
+        FuncModeBit("ADT", "ADT", 0),
+        FuncModeBit("HR", "HR", 1),
+        FuncModeBit("HRV", "HRV", 2),
+        FuncModeBit("HSM", "HSM", 3),
+        FuncModeBit("FPBP", "FPBP", 4),
+        FuncModeBit("PWA", "PWA", 5),
+        FuncModeBit("SPO2", "SpO2", 6),
+        FuncModeBit("ECG", "ECG", 7),
+        FuncModeBit("PWTT", "PWTT", 8),
+        FuncModeBit("SOFT_ADT_GREEN", "SOFT_ADT_GREEN", 9),
+        FuncModeBit("BT", "BT", 10),
+        FuncModeBit("RESP", "RESP", 11),
+        FuncModeBit("AF", "AF", 12),
+        FuncModeBit("TEST1", "TEST1", 13),
+        FuncModeBit("TEST2", "TEST2", 14),
+        FuncModeBit("SOFT_ADT_IR", "SOFT_ADT_IR", 15),
+        FuncModeBit("RS0", "RS0", 16),
+        FuncModeBit("RS1", "RS1", 17),
+        FuncModeBit("RS2", "RS2", 18),
+        FuncModeBit("LEAD_DET", "LEAD_DET", 19)
+    )
+
+    val FUNC_MODE_BITS_GH3300 = listOf(
+        FuncModeBit("ADT", "ADT", 0),
+        FuncModeBit("HR", "HR", 1),
+        FuncModeBit("HRV", "HRV", 2),
+        FuncModeBit("HSM", "HSM", 3),
+        FuncModeBit("FPBP", "FPBP", 4),
+        FuncModeBit("PWA", "PWA", 5),
+        FuncModeBit("SPO2", "SpO2", 6),
+        FuncModeBit("ECG", "ECG", 7),
+        FuncModeBit("PWTT", "PWTT", 8),
+        FuncModeBit("SOFT_ADT_GREEN", "SOFT_ADT_GREEN", 9),
+        FuncModeBit("BT", "BT", 10),
+        FuncModeBit("RESP", "RESP", 11),
+        FuncModeBit("AF", "AF", 12),
+        FuncModeBit("TEST1", "TEST1", 13),
+        FuncModeBit("TEST2", "TEST2", 14),
+        FuncModeBit("SOFT_ADT_IR", "SOFT_ADT_IR", 15),
+        FuncModeBit("BIA", "BIA", 16),
+        FuncModeBit("GSR", "GSR", 17),
+        FuncModeBit("LEAD", "LEAD", 18)
+    )
+
+    fun getFuncModeBits(chipName: String): List<FuncModeBit> = when (chipName.lowercase()) {
+        "gh3220" -> FUNC_MODE_BITS_GH3220
+        "gh3300" -> FUNC_MODE_BITS_GH3300
+        else -> FUNC_MODE_BITS_GH3036
+    }
+
     // ── All Commands ─────────────────────────────────────────────────
 
     val ALL_COMMANDS: List<CommandMeta> = listOf(
