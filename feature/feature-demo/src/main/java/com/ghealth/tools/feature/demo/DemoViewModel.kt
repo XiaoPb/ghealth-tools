@@ -322,7 +322,8 @@ class DemoViewModel @Inject constructor(
                 DeviceRole.COMPARE -> StorageDeviceRole.COMPARE
                 null -> StorageDeviceRole.MASTER
             }
-            recordingManager.writeFrame(deviceAddress, funcMode.name, frame.toColumnMap(funcMode), role)
+            val chipType = _uiState.value.chipType
+            recordingManager.writeFrame(deviceAddress, funcMode.name, frame.toColumnMap(funcMode, chipType), role)
         }
     }
 
@@ -338,7 +339,7 @@ class DemoViewModel @Inject constructor(
         }
     }
 
-    private fun GhFuncFrame.toColumnMap(funcMode: FunctionMode): Map<String, Any?> {
+    private fun GhFuncFrame.toColumnMap(funcMode: FunctionMode, chipType: DeviceType): Map<String, Any?> {
         val map = mutableMapOf<String, Any?>()
         val cache = lastColumnValues.getOrPut(funcMode) { mutableMapOf() }
         map["TimeStamp"] = timestamp
@@ -347,16 +348,36 @@ class DemoViewModel @Inject constructor(
         putCached(map, cache, "ACCX", gsData.getOrNull(0)?.takeIf { gsData.size > 0 })
         putCached(map, cache, "ACCY", gsData.getOrNull(1)?.takeIf { gsData.size > 1 })
         putCached(map, cache, "ACCZ", gsData.getOrNull(2)?.takeIf { gsData.size > 2 })
-        fillRangeCached(map, cache, "Ipd", 0, 31, phyValue)
-        fillRangeCached(map, cache, "FLAG", 0, 7, flags)
-        fillRangeCached(map, cache, "REF_RESULT", 0, 15, null)
-        fillRangeCached(map, cache, "ALGO_RESULT", 0, 15, algoData)
-        fillRangeCached(map, cache, "Rawdata", 0, 31, rawdata)
-        fillRangeCached(map, cache, "AGC_INFO_CH", 0, 31, agcInfo)
-        fillRangeCached(map, cache, "LED_INFO_CH", 0, 31, agcInfoHigh)
-        putCached(map, cache, "GYRO_X", null)
-        putCached(map, cache, "GYRO_Y", null)
-        putCached(map, cache, "GYRO_Z", null)
+
+        when (chipType) {
+            DeviceType.GH3036 -> {
+                fillRangeCached(map, cache, "Ipd", 0, 31, phyValue)
+                fillRangeCached(map, cache, "FLAG", 0, 7, flags)
+                fillRangeCached(map, cache, "REF_RESULT", 0, 15, null)
+                fillRangeCached(map, cache, "ALGO_RESULT", 0, 15, algoData)
+                fillRangeCached(map, cache, "Rawdata", 0, 31, rawdata)
+                fillRangeCached(map, cache, "AGC_INFO_CH", 0, 31, agcInfo)
+                fillRangeCached(map, cache, "LED_INFO_CH", 0, 31, agcInfoHigh)
+                putCached(map, cache, "GYRO_X", null)
+                putCached(map, cache, "GYRO_Y", null)
+                putCached(map, cache, "GYRO_Z", null)
+            }
+            DeviceType.GH3220, DeviceType.GH3300 -> {
+                fillRangeCached(map, cache, "CH", 0, 31, rawdata)
+                fillRangeCached(map, cache, "FLAG", 0, 7, flags)
+                fillRangeCached(map, cache, "REF_RESULT", 0, 15, null)
+                fillRangeCached(map, cache, "ALGO_RESULT", 0, 15, algoData)
+                fillRangeCached(map, cache, "AGC_INFO_CH", 0, 31, agcInfo)
+                fillRangeCached(map, cache, "AMB_CH", 0, 15, phyValue)
+                putCached(map, cache, "GYRO_X", null)
+                putCached(map, cache, "GYRO_Y", null)
+                putCached(map, cache, "GYRO_Z", null)
+                // CH16-31 is a literal column name (not expanded)
+                putCached(map, cache, "CH16-31", null)
+                fillRangeCached(map, cache, "CAP_CH", 0, 3, null)
+                fillRangeCached(map, cache, "TEMP_CH", 0, 3, null)
+            }
+        }
         return map
     }
 
@@ -429,6 +450,7 @@ class DemoViewModel @Inject constructor(
         if (masterDevice != null) {
             recordingManager.startSession(
                 config = config,
+                chip = _uiState.value.chipType.chipName,
                 masterDeviceName = masterDevice.name ?: "Unknown",
                 masterDeviceAddress = masterDevice.address,
                 slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },
@@ -459,8 +481,13 @@ class DemoViewModel @Inject constructor(
 
         val (prefix, index) = parseColumnName(columnName) ?: return emptyList()
         return when (prefix) {
-            "Ipd", "CH" -> {
+            "Ipd" -> {
                 val buffer = perFunctionPhyBuffers[funcMode] ?: return emptyList()
+                buffer.getChannel(index)
+            }
+            "CH" -> {
+                // GH3036 = no CH columns; GH3220/GH3300 = CH from rawdata
+                val buffer = perFunctionBuffers[funcMode] ?: return emptyList()
                 buffer.getChannel(index)
             }
             "Rawdata" -> {
@@ -534,6 +561,14 @@ class DemoViewModel @Inject constructor(
         GhFuncId.ECG -> FunctionMode.ECG
         GhFuncId.GSR -> FunctionMode.GSR
         GhFuncId.BIA -> FunctionMode.BIA
+        GhFuncId.HSM -> FunctionMode.HSM
+        GhFuncId.FPBP -> FunctionMode.FPBP
+        GhFuncId.PWA -> FunctionMode.PWA
+        GhFuncId.PWTT -> FunctionMode.PWTT
+        GhFuncId.BT -> FunctionMode.BT
+        GhFuncId.RESP -> FunctionMode.RESP
+        GhFuncId.AF -> FunctionMode.AF
+        GhFuncId.LEAD -> FunctionMode.LEAD
         else -> null
     }
 }

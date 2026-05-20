@@ -1,5 +1,6 @@
 package com.ghealth.tools.ble.protocol.gh3036
 
+import com.ghealth.tools.ble.protocol.rpccore.GHealthExecutor
 import com.ghealth.tools.ble.protocol.rpccore.InvokeContext
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.rpccore.RpcConfig
@@ -7,24 +8,22 @@ import com.ghealth.tools.ble.protocol.rpccore.RpcCore
 import com.ghealth.tools.ble.protocol.rpccore.unpackU8Array
 import timber.log.Timber
 
-typealias FrameCallback = (GhFuncFrame) -> Unit
-
 class Gh3036Executor(
     config: RpcConfig = RpcConfig()
-) {
+) : GHealthExecutor {
     private val core = RpcCore(config)
     private val frameDecoder = Gh3036FrameDecoder()
-    private var frameCallback: FrameCallback? = null
+    private var frameCallback: ((GhFuncFrame) -> Unit)? = null
 
-    fun setSendFunction(func: (ByteArray) -> Result<Unit>) {
+    override fun setSendFunction(func: (ByteArray) -> Result<Unit>) {
         core.setSendFunction(func)
     }
 
-    fun registerFrameCallback(callback: FrameCallback) {
+    override fun registerFrameCallback(callback: (GhFuncFrame) -> Unit) {
         frameCallback = callback
     }
 
-    suspend fun registerGHandler(): Result<Unit> {
+    override suspend fun registerGHandler(): Result<Unit> {
         val handler: (ByteArray, Int, InvokeContext) -> Unit = { data, _, _ ->
             handleGData(data)
         }
@@ -41,36 +40,36 @@ class Gh3036Executor(
         }
     }
 
-    suspend fun process(data: ByteArray): List<Result<ParseResult>> {
+    override suspend fun process(data: ByteArray): List<Result<ParseResult>> {
         return core.process(data)
     }
 
-    suspend fun call(key: String, format: String, params: ByteArray): Result<ByteArray> {
+    override suspend fun call(key: String, format: String, params: ByteArray): Result<ByteArray> {
         return core.call(key, format, params)
     }
 
-    suspend fun send(key: String, format: String, params: ByteArray): Result<Unit> {
+    override suspend fun send(key: String, format: String, params: ByteArray): Result<Unit> {
         return core.send(key, format, params)
     }
 
-    fun publish(key: String, params: ByteArray): Result<Unit> {
+    override fun publish(key: String, params: ByteArray): Result<Unit> {
         return core.publish(key, params)
     }
 
-    suspend fun sall(key: String, format: String, params: ByteArray): Result<ByteArray> {
+    override suspend fun sall(key: String, format: String, params: ByteArray): Result<ByteArray> {
         return core.sall(key, format, params)
     }
 
-    fun register(key: String, handler: (ByteArray, Int, InvokeContext) -> Unit): Result<Unit> {
+    override fun register(key: String, handler: (ByteArray, Int, InvokeContext) -> Unit): Result<Unit> {
         return core.register(key, handler)
     }
 
-    fun reset() {
+    override fun reset() {
         core.reset()
         frameDecoder.reset()
     }
 
-    fun resetFrameDecoder() {
+    override fun resetFrameDecoder() {
         frameDecoder.reset()
     }
 }

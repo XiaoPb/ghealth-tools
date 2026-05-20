@@ -46,6 +46,7 @@ class RecordingManager @Inject constructor(
     private data class SessionConfig(
         val scenario: String,
         val tester: String,
+        val chip: String,
         val masterName: String,
         val masterAddress: String,
         val slaveNames: Map<String, String>,
@@ -80,6 +81,7 @@ class RecordingManager @Inject constructor(
 
     fun startSession(
         config: TestConfig,
+        chip: String = "gh3036",
         masterDeviceName: String,
         masterDeviceAddress: String,
         slaveDevices: Map<String, String> = emptyMap(),
@@ -92,6 +94,7 @@ class RecordingManager @Inject constructor(
         currentConfig = SessionConfig(
             scenario = config.scenario.name,
             tester = config.testerName.takeIf { it.isNotBlank() } ?: "unknown",
+            chip = chip,
             masterName = masterDeviceName,
             masterAddress = masterDeviceAddress,
             slaveNames = slaveDevices,
@@ -300,9 +303,9 @@ class RecordingManager @Inject constructor(
         }
 
         val rule = if (cfg.compareNames.isNotEmpty()) {
-            CsvRuleParser.forChipWithCompareDevices("gh3036", cfg.compareNames)
+            CsvRuleParser.forChipWithCompareDevices(cfg.chip, cfg.compareNames)
         } else {
-            CsvRuleParser.forChip("gh3036")
+            CsvRuleParser.forChip(cfg.chip)
         }
 
         val path = StoragePath(
@@ -310,7 +313,7 @@ class RecordingManager @Inject constructor(
             deviceRole = role,
             scenario = cfg.scenario,
             tester = cfg.tester,
-            chip = "gh3036",
+            chip = cfg.chip,
             deviceName = deviceName,
             deviceAddress = task.deviceAddress,
             appVersion = appVersion,

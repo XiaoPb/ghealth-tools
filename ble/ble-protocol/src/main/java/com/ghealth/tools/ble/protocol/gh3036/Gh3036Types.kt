@@ -17,12 +17,28 @@ data class PackHeader(val bits: Int) {
     val slotCfgEn: Boolean get() = (bits and (1 shl 9)) != 0
 }
 
-enum class GhFuncId(val id: Int) {
-    ADT(0), HR(1), SPO2(2), HRV(3),
-    NADT_GREEN(4), NADT_IR(5),
-    TEST1(6), TEST2(7), EVK(8),
-    ECG(9), GSR(10), BIA(11),
-    UNKNOWN(-1);
+enum class GhFuncId(val id: Int, val label: String) {
+    ADT(0, "ADT"),
+    HR(1, "HR"),
+    SPO2(2, "SpO2"),
+    HRV(3, "HRV"),
+    NADT_GREEN(4, "NADT-GREEN"),
+    NADT_IR(5, "NADT-IR"),
+    TEST1(6, "TEST1"),
+    TEST2(7, "TEST2"),
+    EVK(8, "EVK"),
+    ECG(9, "ECG"),
+    GSR(10, "GSR"),
+    BIA(11, "BIA"),
+    HSM(12, "HSM"),
+    FPBP(13, "FPBP"),
+    PWA(14, "PWA"),
+    PWTT(15, "PWTT"),
+    BT(16, "BT"),
+    RESP(17, "RESP"),
+    AF(18, "AF"),
+    LEAD(19, "LEAD"),
+    UNKNOWN(-1, "UNKNOWN");
 
     companion object {
         fun from(value: Int): GhFuncId = entries.find { it.id == value } ?: UNKNOWN

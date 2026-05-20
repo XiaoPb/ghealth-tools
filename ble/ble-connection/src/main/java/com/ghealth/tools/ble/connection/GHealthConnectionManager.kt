@@ -2,13 +2,16 @@
 
 package com.ghealth.tools.ble.connection
 
+import com.ghealth.tools.ble.protocol.rpccore.GHealthExecutor
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.rpccore.Unpackage
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
+import com.ghealth.tools.ble.protocol.gh3300.Gh3300Executor
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.TestConfig
 import com.ghealth.tools.core.storage.LogManager
 import com.juul.kable.ExperimentalApi
@@ -76,7 +79,7 @@ sealed class ConnectionConstraint {
 data class GHealthPeripheral(
     val peripheral: Peripheral,
     val role: DeviceRole,
-    val executor: Gh3036Executor?
+    val executor: GHealthExecutor?
 ) {
     val address: String get() = peripheral.identifier.toString()
     val name: String? get() = peripheral.name
@@ -209,12 +212,8 @@ class BleConnectionManager @Inject constructor(
             peripheral.connect()
 
             val executor = when (role) {
-                DeviceRole.MASTER -> Gh3036Executor().also {
-                    setupExecutor(it, address)
-                }
-                DeviceRole.SLAVE -> Gh3036Executor().also {
-                    setupExecutor(it, address)
-                }
+                DeviceRole.MASTER -> createExecutor(address)
+                DeviceRole.SLAVE -> createExecutor(address)
                 DeviceRole.COMPARE -> null
             }
 
@@ -479,7 +478,18 @@ class BleConnectionManager @Inject constructor(
         Timber.d("Wrote ${data.size} bytes to $address: ${data.toHexString()}")
     }
 
-    private fun setupExecutor(executor: Gh3036Executor, address: String) {
+    private suspend fun createExecutor(address: String): GHealthExecutor {
+        val chipName = blePreferences.selectedChip.first()
+        val deviceType = DeviceType.entries.find { it.chipName == chipName } ?: DeviceType.GH3036
+        val executor: GHealthExecutor = when (deviceType) {
+            DeviceType.GH3300 -> Gh3300Executor()
+            else -> Gh3036Executor()
+        }
+        setupExecutor(executor, address)
+        return executor
+    }
+
+    private fun setupExecutor(executor: GHealthExecutor, address: String) {
         executor.setSendFunction { data ->
             try {
                 kotlinx.coroutines.runBlocking {

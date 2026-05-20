@@ -59,9 +59,18 @@ object CsvRuleParser {
         )
     }
 
+    val gh3300: CsvRule by lazy {
+        // GH3300 columns match GH3220 (per gh3300.yaml)
+        CsvRule(
+            chip = "gh3300",
+            columns = expandColumns(gh3220Columns)
+        )
+    }
+
     fun forChip(chip: String): CsvRule = when (chip.lowercase()) {
         "gh3036" -> gh3036
         "gh3220" -> gh3220
+        "gh3300" -> gh3300
         else -> throw IllegalArgumentException("Unknown chip: $chip")
     }
 

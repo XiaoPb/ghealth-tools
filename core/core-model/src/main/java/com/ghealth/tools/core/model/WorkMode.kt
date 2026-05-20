@@ -18,5 +18,13 @@ enum class FunctionMode(val displayName: String, val code: String) {
     EVK("EVK", "EVK"),
     ECG("ECG", "ECG"),
     GSR("GSR", "GSR"),
-    BIA("BIA", "BIA");
+    BIA("BIA", "BIA"),
+    HSM("HSM", "HSM"),
+    FPBP("FPBP", "FPBP"),
+    PWA("PWA", "PWA"),
+    PWTT("PWTT", "PWTT"),
+    BT("BT", "BT"),
+    RESP("RESP", "RESP"),
+    AF("AF", "AF"),
+    LEAD("LEAD", "LEAD");
 }
