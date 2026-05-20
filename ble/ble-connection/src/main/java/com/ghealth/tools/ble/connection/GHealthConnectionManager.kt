@@ -8,6 +8,7 @@ import com.ghealth.tools.ble.protocol.rpccore.Unpackage
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
+import com.ghealth.tools.ble.protocol.gh3220.Gh3220Executor
 import com.ghealth.tools.ble.protocol.gh3300.Gh3300Executor
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.model.ConnectionState
@@ -79,7 +80,8 @@ sealed class ConnectionConstraint {
 data class GHealthPeripheral(
     val peripheral: Peripheral,
     val role: DeviceRole,
-    val executor: GHealthExecutor?
+    val executor: GHealthExecutor?,
+    val deviceType: DeviceType = DeviceType.GH3036
 ) {
     val address: String get() = peripheral.identifier.toString()
     val name: String? get() = peripheral.name
@@ -211,18 +213,20 @@ class BleConnectionManager @Inject constructor(
         try {
             peripheral.connect()
 
-            val executor = when (role) {
+            val (executor, deviceType) = when (role) {
                 DeviceRole.MASTER -> createExecutor(address)
                 DeviceRole.SLAVE -> createExecutor(address)
-                DeviceRole.COMPARE -> null
+                DeviceRole.COMPARE -> null to DeviceType.GH3036
             }
 
             val gHealthPeripheral = GHealthPeripheral(
                 peripheral = peripheral,
                 role = role,
-                executor = executor
+                executor = executor,
+                deviceType = deviceType
             )
             peripherals[address] = gHealthPeripheral
+            _devices.value = _devices.value + (address to _devices.value[address]!!.copy(deviceType = deviceType))
 
             peripheral.state.onEach { state ->
                 when (state) {
@@ -478,15 +482,16 @@ class BleConnectionManager @Inject constructor(
         Timber.d("Wrote ${data.size} bytes to $address: ${data.toHexString()}")
     }
 
-    private suspend fun createExecutor(address: String): GHealthExecutor {
+    private suspend fun createExecutor(address: String): Pair<GHealthExecutor, DeviceType> {
         val chipName = blePreferences.selectedChip.first()
         val deviceType = DeviceType.entries.find { it.chipName == chipName } ?: DeviceType.GH3036
         val executor: GHealthExecutor = when (deviceType) {
             DeviceType.GH3300 -> Gh3300Executor()
+            DeviceType.GH3220 -> com.ghealth.tools.ble.protocol.gh3220.Gh3220Executor()
             else -> Gh3036Executor()
         }
         setupExecutor(executor, address)
-        return executor
+        return executor to deviceType
     }
 
     private fun setupExecutor(executor: GHealthExecutor, address: String) {

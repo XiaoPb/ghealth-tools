@@ -215,6 +215,25 @@ fun SettingsScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+        SectionHeader("支持的芯片")
+        Card(modifier = Modifier.fillMaxWidth()) {
+            ListItem(
+                headlineContent = { Text("GH3036") },
+                supportingContent = { Text("GH3036 / GH3038 / GH3038Q") }
+            )
+            HorizontalDivider()
+            ListItem(
+                headlineContent = { Text("GH3300") },
+                supportingContent = { Text("GH3300 / GH3310 / GH3030") }
+            )
+            HorizontalDivider()
+            ListItem(
+                headlineContent = { Text("GH3220") },
+                supportingContent = { Text("GH3220 / GH3020 / GH3036 / GH3228T") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
         SectionHeader("数据与日志")
         Card(modifier = Modifier.fillMaxWidth()) {
             ListItem(

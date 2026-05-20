@@ -1,5 +1,6 @@
 package com.ghealth.tools.navigation
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -164,10 +165,19 @@ private fun WideMainLayout(
             modifier = Modifier.weight(1f),
             topBar = {
                 TopAppBar(
-                    title = { Text(currentDestination?.let { dest ->
-                        TopLevelRoute.entries.find { it.route == dest.route }?.label
-                            ?: if (dest.route == "device_info") "设备信息" else "GHealth Tools"
-                    } ?: "GHealth Tools") },
+                    title = {
+                        Column {
+                            Text(currentDestination?.let { dest ->
+                                TopLevelRoute.entries.find { it.route == dest.route }?.label
+                                    ?: if (dest.route == "device_info") "设备信息" else "GHealth Tools"
+                            } ?: "GHealth Tools")
+                            Text(
+                                text = "芯片: ${demoState.chipType.name}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
                     actions = {
                         val isRecording = demoState.isRecording
                         Icon(
@@ -237,10 +247,19 @@ private fun CompactMainLayout(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(currentDestination?.let { dest ->
-                    TopLevelRoute.entries.find { it.route == dest.route }?.label
-                        ?: if (dest.route == "device_info") "设备信息" else "GHealth Tools"
-                } ?: "GHealth Tools") },
+                title = {
+                    Column {
+                        Text(currentDestination?.let { dest ->
+                            TopLevelRoute.entries.find { it.route == dest.route }?.label
+                                ?: if (dest.route == "device_info") "设备信息" else "GHealth Tools"
+                        } ?: "GHealth Tools")
+                        Text(
+                            text = "芯片: ${demoState.chipType.name}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
                 actions = {
                     if (isTopLevelRoute) {
                         val isRecording = demoState.isRecording
