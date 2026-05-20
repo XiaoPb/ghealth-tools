@@ -1,10 +1,12 @@
 package com.ghealth.tools.feature.demo
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +37,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,16 +56,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
+import com.ghealth.tools.core.ui.adaptive.shouldUseLandscapeLayout
 import com.ghealth.tools.core.ui.component.EmptyStateView
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
@@ -82,11 +89,23 @@ private const val MAX_DISPLAY_POINTS = 500
 private const val SPO2_MIN = 65f
 private const val SPO2_MAX = 100f
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun DemoScreen(viewModel: DemoViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val windowSizeClass = calculateWindowSizeClass(context as Activity)
+    val isWide = windowSizeClass.shouldUseLandscapeLayout
 
+    if (isWide) {
+        DemoScreenWide(state, viewModel)
+    } else {
+        DemoScreenCompact(state, viewModel)
+    }
+}
+
+@Composable
+private fun DemoScreenCompact(state: DemoUiState, viewModel: DemoViewModel) {
     if (state.selectedFunction == null) {
         FunctionListScreen(
             functionDataMap = state.functionDataMap,
@@ -106,8 +125,50 @@ fun DemoScreen(viewModel: DemoViewModel = hiltViewModel()) {
             onStartEditCompareDevice = viewModel::startEditCompareDevice,
             onStopEditCompareDevice = viewModel::stopEditCompareDevice,
             onUpdateCompareSpo2 = viewModel::updateManualCompareSpo2,
-            onRemoveCompareDevice = viewModel::removeManualCompareDevice
+            onRemoveCompareDevice = viewModel::removeManualCompareDevice,
+            isWide = false
         )
+    }
+}
+
+@Composable
+private fun DemoScreenWide(state: DemoUiState, viewModel: DemoViewModel) {
+    Row(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.weight(0.35f).fillMaxHeight()) {
+            FunctionListScreen(
+                functionDataMap = state.functionDataMap,
+                isRecording = state.isRecording,
+                testerName = state.testerName,
+                scenario = state.scenario,
+                testRound = state.testRound,
+                onSelect = viewModel::selectFunction
+            )
+        }
+
+        VerticalDivider()
+
+        Box(modifier = Modifier.weight(0.65f).fillMaxHeight()) {
+            if (state.selectedFunction != null) {
+                FunctionDetailScreen(
+                    state = state,
+                    onSelectWaveform1Column = viewModel::selectWaveform1Column,
+                    onSelectWaveform2Column = viewModel::selectWaveform2Column,
+                    onBack = viewModel::goBack,
+                    onAddCompareDevice = viewModel::addManualCompareDevice,
+                    onStartEditCompareDevice = viewModel::startEditCompareDevice,
+                    onStopEditCompareDevice = viewModel::stopEditCompareDevice,
+                    onUpdateCompareSpo2 = viewModel::updateManualCompareSpo2,
+                    onRemoveCompareDevice = viewModel::removeManualCompareDevice,
+                    isWide = true
+                )
+            } else {
+                EmptyStateView(
+                    icon = Icons.Default.ShowChart,
+                    title = "选择一个功能",
+                    subtitle = "从左侧列表中选择一个功能以查看详细数据和波形"
+                )
+            }
+        }
     }
 }
 
@@ -233,7 +294,8 @@ private fun FunctionDetailScreen(
     onStartEditCompareDevice: (Int) -> Unit,
     onStopEditCompareDevice: () -> Unit,
     onUpdateCompareSpo2: (Int, Float?) -> Unit,
-    onRemoveCompareDevice: (Int) -> Unit
+    onRemoveCompareDevice: (Int) -> Unit,
+    isWide: Boolean = false
 ) {
     val function = state.selectedFunction ?: return
     val availableColumns = remember(state.chipType) {
@@ -242,6 +304,7 @@ private fun FunctionDetailScreen(
 
     var showColumnDialog1 by remember { mutableStateOf(false) }
     var showColumnDialog2 by remember { mutableStateOf(false) }
+    val chartHeight = if (isWide) 280.dp else 180.dp
 
     Column(
         modifier = Modifier
@@ -253,8 +316,10 @@ private fun FunctionDetailScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            if (!isWide) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
             }
             Text(
                 text = function.displayName,
@@ -294,7 +359,8 @@ private fun FunctionDetailScreen(
             availableColumns = availableColumns,
             onColumnSelect = onSelectWaveform1Column,
             showDialog = showColumnDialog1,
-            onShowDialogChange = { showColumnDialog1 = it }
+            onShowDialogChange = { showColumnDialog1 = it },
+            chartHeight = chartHeight
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -308,7 +374,8 @@ private fun FunctionDetailScreen(
             availableColumns = availableColumns,
             onColumnSelect = onSelectWaveform2Column,
             showDialog = showColumnDialog2,
-            onShowDialogChange = { showColumnDialog2 = it }
+            onShowDialogChange = { showColumnDialog2 = it },
+            chartHeight = chartHeight
         )
     }
 
@@ -347,7 +414,8 @@ private fun WaveformPanel(
     availableColumns: List<String>,
     onColumnSelect: (String) -> Unit,
     showDialog: Boolean,
-    onShowDialogChange: (Boolean) -> Unit
+    onShowDialogChange: (Boolean) -> Unit,
+    chartHeight: androidx.compose.ui.unit.Dp = 180.dp
 ) {
     val modelProducer = remember { CartesianChartModelProducer() }
     val lineColor = MaterialTheme.colorScheme.primary.toArgb()
@@ -458,7 +526,7 @@ private fun WaveformPanel(
                 animationSpec = null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(chartHeight)
             )
         }
     }
@@ -744,18 +812,18 @@ private fun AlgoGrid(
         fontSize = 10.sp
     )
 
-    // Header row: empty col + device role labels
+    // Header row: row-label col + device role labels
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Spacer(modifier = Modifier.width(60.dp))
+        Spacer(modifier = Modifier.weight(0.15f))
         deviceColumns.forEach { (_, label) ->
             Text(
                 text = label,
                 style = headerStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(0.85f / deviceColumns.size)
             )
         }
     }
@@ -772,14 +840,14 @@ private fun AlgoGrid(
                 text = rowLabel,
                 style = labelStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(60.dp)
+                modifier = Modifier.weight(0.15f)
             )
             deviceColumns.forEach { (idx, _) ->
                 Text(
                     text = values(idx),
                     style = cellStyle,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(0.85f / deviceColumns.size)
                 )
             }
         }

@@ -1,6 +1,8 @@
 package com.ghealth.tools.feature.settings
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -28,23 +31,33 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ghealth.tools.core.ui.adaptive.CONTENT_MAX_WIDTH
+import com.ghealth.tools.core.ui.adaptive.isWide
 import androidx.hilt.navigation.compose.hiltViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun DeviceInfoScreen(
     onNavigateBack: () -> Unit,
     viewModel: DeviceInfoViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val windowSizeClass = calculateWindowSizeClass(context as Activity)
+    val isWide = windowSizeClass.widthSizeClass.isWide
+    val maxW = if (isWide) CONTENT_MAX_WIDTH else Dp.Infinity
 
     Scaffold(
         topBar = {
@@ -70,18 +83,42 @@ fun DeviceInfoScreen(
             )
         }
     ) { padding ->
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(padding),
+            contentAlignment = Alignment.TopCenter
         ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = maxW)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
             ConnectionStatusCard(state)
             Spacer(modifier = Modifier.height(16.dp))
-            VersionGroupCard(title = "基本版本", versions = state.basicVersions)
-            Spacer(modifier = Modifier.height(12.dp))
-            VersionGroupCard(title = "算法版本", versions = state.algoVersions)
+            if (isWide) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    VersionGroupCard(
+                        title = "基本版本",
+                        versions = state.basicVersions,
+                        modifier = Modifier.weight(1f)
+                    )
+                    VersionGroupCard(
+                        title = "算法版本",
+                        versions = state.algoVersions,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
+                VersionGroupCard(title = "基本版本", versions = state.basicVersions)
+                Spacer(modifier = Modifier.height(12.dp))
+                VersionGroupCard(title = "算法版本", versions = state.algoVersions)
+            }
 
             state.errorMessage?.let { error ->
                 Spacer(modifier = Modifier.height(16.dp))
@@ -99,6 +136,7 @@ fun DeviceInfoScreen(
                 }
             }
         }
+    }
     }
 }
 
@@ -148,8 +186,12 @@ private fun ConnectionStatusCard(state: DeviceInfoUiState) {
 }
 
 @Composable
-private fun VersionGroupCard(title: String, versions: List<VersionEntry>) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun VersionGroupCard(
+    title: String,
+    versions: List<VersionEntry>,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

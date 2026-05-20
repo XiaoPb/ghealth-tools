@@ -89,7 +89,8 @@ data class CommandExecutionState(
 fun CommandPanelScreen(
     commandExecutionStates: Map<String, CommandExecutionState>,
     onNavigateBack: () -> Unit,
-    onExecute: (String, ByteArray) -> Unit
+    onExecute: (String, ByteArray) -> Unit,
+    showBackButton: Boolean = true
 ) {
     var expandedKey by remember { mutableStateOf<String?>(null) }
 
@@ -101,7 +102,10 @@ fun CommandPanelScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(
+                    imageVector = if (showBackButton) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Close,
+                    contentDescription = if (showBackButton) "返回" else "关闭"
+                )
             }
             Text("命令面板", style = MaterialTheme.typography.titleMedium)
         }

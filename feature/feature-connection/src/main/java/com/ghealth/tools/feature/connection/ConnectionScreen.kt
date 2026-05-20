@@ -1,10 +1,13 @@
 package com.ghealth.tools.feature.connection
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,6 +42,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -58,6 +65,8 @@ import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.core.model.BleDevice
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.ui.adaptive.shouldUseLandscapeLayout
+import com.ghealth.tools.core.ui.component.EmptyStateView
 import com.ghealth.tools.core.ui.component.StatusBadge
 import com.ghealth.tools.core.ui.component.ConnectionStatus
 
@@ -66,56 +75,31 @@ private object CommandRoutes {
     const val COMMAND_PANEL = "command_panel"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
-    val navController = rememberNavController()
+    val context = LocalContext.current
+    val windowSizeClass = calculateWindowSizeClass(context as Activity)
+    val isLandscape = windowSizeClass.shouldUseLandscapeLayout
 
-    NavHost(
-        navController = navController,
-        startDestination = CommandRoutes.MAIN
-    ) {
-        composable(CommandRoutes.MAIN) {
-            ConnectionMainContent(
-                viewModel = viewModel,
-                state = state,
-                onNavigateToCommands = {
-                    navController.navigate(CommandRoutes.COMMAND_PANEL)
-                }
-            )
-        }
-        composable(CommandRoutes.COMMAND_PANEL) {
-            CommandPanelScreen(
-                commandExecutionStates = state.commandExecutionStates,
-                onNavigateBack = { navController.popBackStack() },
-                onExecute = { key, params ->
-                    viewModel.executeCommand(key, params)
-                }
-            )
-        }
+    if (isLandscape) {
+        ConnectionScreenLandscape(viewModel, state)
+    } else {
+        ConnectionScreenCompact(viewModel, state)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConnectionMainContent(
+private fun ConnectionScreenLandscape(
     viewModel: ConnectionViewModel,
-    state: ConnectionUiState,
-    onNavigateToCommands: () -> Unit
+    state: ConnectionUiState
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (state.isScanning) {
-            ScanSection(
-                results = state.scanResults,
-                role = state.scanForRole,
-                minRssi = state.minRssi,
-                onSelect = { device, _ -> viewModel.connectDevice(device) },
-                onStop = viewModel::stopScan,
-                onRssiChange = viewModel::setMinRssi,
-                onSortByRssi = viewModel::sortScanResultsByRssi
-            )
-        } else {
+    var showCommandPanel by remember { mutableStateOf(false) }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.weight(0.5f).fillMaxHeight()) {
             MainMenuContent(
                 state = state,
                 onScanMaster = { viewModel.startScan(DeviceRole.MASTER) },
@@ -124,13 +108,47 @@ private fun ConnectionMainContent(
                 onDisconnectAll = viewModel::disconnectAll,
                 onDisconnectDevice = viewModel::disconnectDevice,
                 onWorkMode = viewModel::showWorkModeDialog,
-                onCommand = onNavigateToCommands
+                onCommand = { showCommandPanel = true }
             )
+        }
+
+        VerticalDivider()
+
+        Box(modifier = Modifier.weight(0.5f).fillMaxHeight()) {
+            when {
+                state.isScanning -> {
+                    ScanSection(
+                        results = state.scanResults,
+                        role = state.scanForRole,
+                        minRssi = state.minRssi,
+                        onSelect = { device, _ -> viewModel.connectDevice(device) },
+                        onStop = viewModel::stopScan,
+                        onRssiChange = viewModel::setMinRssi,
+                        onSortByRssi = viewModel::sortScanResultsByRssi
+                    )
+                }
+                showCommandPanel -> {
+                    CommandPanelScreen(
+                        commandExecutionStates = state.commandExecutionStates,
+                        onNavigateBack = { showCommandPanel = false },
+                        onExecute = { key, params -> viewModel.executeCommand(key, params) },
+                        showBackButton = false
+                    )
+                }
+                else -> {
+                    EmptyStateView(
+                        icon = Icons.Default.Bluetooth,
+                        title = "主界面",
+                        subtitle = "使用左侧菜单连接设备或执行操作"
+                    )
+                }
+            }
         }
     }
 
     if (state.showWorkModeDialog) {
         WorkModeDialog(
+            currentMode = state.currentWorkMode,
             onSelect = viewModel::setWorkMode,
             onDismiss = viewModel::dismissWorkModeDialog
         )
@@ -142,7 +160,6 @@ private fun ConnectionMainContent(
             onDismiss = viewModel::dismissFunctionDialog
         )
     }
-
     if (state.showTestConfigDialog && state.masterDeviceName != null) {
         TestConfigDialog(
             deviceName = state.masterDeviceName,
@@ -150,20 +167,16 @@ private fun ConnectionMainContent(
             onDismiss = viewModel::dismissTestConfigDialog
         )
     }
-
     state.scanError?.let { error ->
         AlertDialog(
             onDismissRequest = viewModel::clearScanError,
             title = { Text("扫描错误") },
             text = { Text(error) },
             confirmButton = {
-                TextButton(onClick = viewModel::clearScanError) {
-                    Text("确定")
-                }
+                TextButton(onClick = viewModel::clearScanError) { Text("确定") }
             }
         )
     }
-
     state.connectionError?.let { error ->
         AlertDialog(
             onDismissRequest = viewModel::clearConnectionError,
@@ -175,11 +188,104 @@ private fun ConnectionMainContent(
                 }
             },
             confirmButton = {
-                TextButton(onClick = viewModel::clearConnectionError) {
-                    Text("确定")
-                }
+                TextButton(onClick = viewModel::clearConnectionError) { Text("确定") }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConnectionScreenCompact(
+    viewModel: ConnectionViewModel,
+    state: ConnectionUiState
+) {
+    val navController = rememberNavController()
+
+    NavHost(
+        navController = navController,
+        startDestination = CommandRoutes.MAIN
+    ) {
+        composable(CommandRoutes.MAIN) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (state.isScanning) {
+                    ScanSection(
+                        results = state.scanResults,
+                        role = state.scanForRole,
+                        minRssi = state.minRssi,
+                        onSelect = { device, _ -> viewModel.connectDevice(device) },
+                        onStop = viewModel::stopScan,
+                        onRssiChange = viewModel::setMinRssi,
+                        onSortByRssi = viewModel::sortScanResultsByRssi
+                    )
+                } else {
+                    MainMenuContent(
+                        state = state,
+                        onScanMaster = { viewModel.startScan(DeviceRole.MASTER) },
+                        onScanSlave = { viewModel.startScan(DeviceRole.SLAVE) },
+                        onScanCompare = { viewModel.startScan(DeviceRole.COMPARE) },
+                        onDisconnectAll = viewModel::disconnectAll,
+                        onDisconnectDevice = viewModel::disconnectDevice,
+                        onWorkMode = viewModel::showWorkModeDialog,
+                        onCommand = { navController.navigate(CommandRoutes.COMMAND_PANEL) }
+                    )
+                }
+            }
+
+            if (state.showWorkModeDialog) {
+                WorkModeDialog(
+                    currentMode = state.currentWorkMode,
+                    onSelect = viewModel::setWorkMode,
+                    onDismiss = viewModel::dismissWorkModeDialog
+                )
+            }
+            if (state.showFunctionDialog) {
+                FunctionSelectDialog(
+                    selected = state.selectedFunctions,
+                    onConfirm = viewModel::setSelectedFunctions,
+                    onDismiss = viewModel::dismissFunctionDialog
+                )
+            }
+            if (state.showTestConfigDialog && state.masterDeviceName != null) {
+                TestConfigDialog(
+                    deviceName = state.masterDeviceName,
+                    onConfirm = viewModel::confirmTestConfig,
+                    onDismiss = viewModel::dismissTestConfigDialog
+                )
+            }
+            state.scanError?.let { error ->
+                AlertDialog(
+                    onDismissRequest = viewModel::clearScanError,
+                    title = { Text("扫描错误") },
+                    text = { Text(error) },
+                    confirmButton = {
+                        TextButton(onClick = viewModel::clearScanError) { Text("确定") }
+                    }
+                )
+            }
+            state.connectionError?.let { error ->
+                AlertDialog(
+                    onDismissRequest = viewModel::clearConnectionError,
+                    title = { Text("连接错误") },
+                    text = {
+                        Column {
+                            Text("设备: ${state.connectionErrorDevice ?: "未知"}")
+                            Text(error)
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = viewModel::clearConnectionError) { Text("确定") }
+                    }
+                )
+            }
+        }
+        composable(CommandRoutes.COMMAND_PANEL) {
+            CommandPanelScreen(
+                commandExecutionStates = state.commandExecutionStates,
+                onNavigateBack = { navController.popBackStack() },
+                onExecute = { key, params -> viewModel.executeCommand(key, params) }
+            )
+        }
     }
 }
 

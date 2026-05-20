@@ -25,6 +25,7 @@ import com.ghealth.tools.core.model.WorkMode
 
 @Composable
 fun WorkModeDialog(
+    currentMode: WorkMode?,
     onSelect: (WorkMode) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -34,20 +35,23 @@ fun WorkModeDialog(
         text = {
             Column {
                 WorkMode.entries.forEach { mode ->
+                    val isSelected = mode == currentMode
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onSelect(mode) }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = false,
-                            onClick = null
+                            selected = isSelected,
+                            onClick = { onSelect(mode) }
                         )
                         Text(
                             text = mode.displayName,
-                            style = MaterialTheme.typography.bodyLarge
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
