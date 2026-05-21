@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":ble:ble-scanner"))
     implementation(project(":ble:ble-connection"))
     implementation(project(":ble:ble-protocol"))
+    implementation(project(":feature:feature-factory"))
     implementation(libs.kable.core.android)
 
     implementation(platform(libs.compose.bom))

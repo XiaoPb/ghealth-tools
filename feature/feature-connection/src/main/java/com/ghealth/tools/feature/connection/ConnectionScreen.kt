@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Cable
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Stop
@@ -77,16 +78,19 @@ private object CommandRoutes {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
-fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
+fun ConnectionScreen(
+    viewModel: ConnectionViewModel = hiltViewModel(),
+    onFactoryTest: () -> Unit = {}
+) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val windowSizeClass = calculateWindowSizeClass(context as Activity)
     val isLandscape = windowSizeClass.shouldUseLandscapeLayout
 
     if (isLandscape) {
-        ConnectionScreenLandscape(viewModel, state)
+        ConnectionScreenLandscape(viewModel, state, onFactoryTest)
     } else {
-        ConnectionScreenCompact(viewModel, state)
+        ConnectionScreenCompact(viewModel, state, onFactoryTest)
     }
 }
 
@@ -94,7 +98,8 @@ fun ConnectionScreen(viewModel: ConnectionViewModel = hiltViewModel()) {
 @Composable
 private fun ConnectionScreenLandscape(
     viewModel: ConnectionViewModel,
-    state: ConnectionUiState
+    state: ConnectionUiState,
+    onFactoryTest: () -> Unit = {}
 ) {
     var showCommandPanel by remember { mutableStateOf(false) }
 
@@ -108,7 +113,8 @@ private fun ConnectionScreenLandscape(
                 onDisconnectAll = viewModel::disconnectAll,
                 onDisconnectDevice = viewModel::disconnectDevice,
                 onWorkMode = viewModel::showWorkModeDialog,
-                onCommand = { showCommandPanel = true }
+                onCommand = { showCommandPanel = true },
+                onFactoryTest = onFactoryTest
             )
         }
 
@@ -133,7 +139,12 @@ private fun ConnectionScreenLandscape(
                         onNavigateBack = { showCommandPanel = false },
                         onExecute = { key, params -> viewModel.executeCommand(key, params) },
                         showBackButton = false,
-                        chipName = state.selectedChip
+                        chipName = state.selectedChip,
+                        registerConfigDownloadState = state.registerConfigDownloadState,
+                        onLoadRegisterConfigs = viewModel::loadRegisterConfigFiles,
+                        onSelectRegisterConfigFile = viewModel::selectRegisterConfigFile,
+                        onExecuteRegisterConfigDownload = viewModel::executeRegisterConfigDownload,
+                        onResetRegisterConfigDownload = viewModel::resetRegisterConfigDownload
                     )
                 }
                 else -> {
@@ -199,7 +210,8 @@ private fun ConnectionScreenLandscape(
 @Composable
 private fun ConnectionScreenCompact(
     viewModel: ConnectionViewModel,
-    state: ConnectionUiState
+    state: ConnectionUiState,
+    onFactoryTest: () -> Unit = {}
 ) {
     val navController = rememberNavController()
 
@@ -228,7 +240,8 @@ private fun ConnectionScreenCompact(
                         onDisconnectAll = viewModel::disconnectAll,
                         onDisconnectDevice = viewModel::disconnectDevice,
                         onWorkMode = viewModel::showWorkModeDialog,
-                        onCommand = { navController.navigate(CommandRoutes.COMMAND_PANEL) }
+                        onCommand = { navController.navigate(CommandRoutes.COMMAND_PANEL) },
+                        onFactoryTest = onFactoryTest
                     )
                 }
             }
@@ -285,7 +298,12 @@ private fun ConnectionScreenCompact(
                 commandExecutionStates = state.commandExecutionStates,
                 onNavigateBack = { navController.popBackStack() },
                 onExecute = { key, params -> viewModel.executeCommand(key, params) },
-                chipName = state.selectedChip
+                chipName = state.selectedChip,
+                registerConfigDownloadState = state.registerConfigDownloadState,
+                onLoadRegisterConfigs = viewModel::loadRegisterConfigFiles,
+                onSelectRegisterConfigFile = viewModel::selectRegisterConfigFile,
+                onExecuteRegisterConfigDownload = viewModel::executeRegisterConfigDownload,
+                onResetRegisterConfigDownload = viewModel::resetRegisterConfigDownload
             )
         }
     }
@@ -300,7 +318,8 @@ private fun MainMenuContent(
     onDisconnectAll: () -> Unit,
     onDisconnectDevice: (String) -> Unit,
     onWorkMode: () -> Unit,
-    onCommand: () -> Unit
+    onCommand: () -> Unit,
+    onFactoryTest: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -356,6 +375,12 @@ private fun MainMenuContent(
             title = "命令操作",
             subtitle = "发送 RPC 命令到设备",
             onClick = onCommand
+        )
+        MenuItemCard(
+            icon = Icons.Default.Science,
+            title = "产测",
+            subtitle = "自动化产测流程",
+            onClick = onFactoryTest
         )
     }
 }

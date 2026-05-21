@@ -2,6 +2,7 @@ package com.ghealth.tools.feature.connection
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -91,7 +93,12 @@ fun CommandPanelScreen(
     onNavigateBack: () -> Unit,
     onExecute: (String, ByteArray) -> Unit,
     showBackButton: Boolean = true,
-    chipName: String = "gh3036"
+    chipName: String = "gh3036",
+    registerConfigDownloadState: RegisterConfigDownloadState = RegisterConfigDownloadState(),
+    onLoadRegisterConfigs: (String) -> Unit = {},
+    onSelectRegisterConfigFile: (ConfigFileInfo) -> Unit = {},
+    onExecuteRegisterConfigDownload: () -> Unit = {},
+    onResetRegisterConfigDownload: () -> Unit = {}
 ) {
     var expandedKey by remember { mutableStateOf<String?>(null) }
 
@@ -133,6 +140,24 @@ fun CommandPanelScreen(
                             },
                             onExecute = { params -> onExecute(command.key, params) },
                             chipName = chipName
+                        )
+                    }
+                    if (group == CommandGroup.FACTORY) {
+                        val downloadExpanded = expandedKey == "REGISTER_CONFIG_DOWNLOAD"
+                        RegisterConfigDownloadCard(
+                            chipName = chipName,
+                            downloadState = registerConfigDownloadState,
+                            isExpanded = downloadExpanded,
+                            onToggle = {
+                                expandedKey = if (downloadExpanded) null else "REGISTER_CONFIG_DOWNLOAD"
+                                if (!downloadExpanded) {
+                                    onLoadRegisterConfigs(chipName)
+                                }
+                            },
+                            onLoadConfigs = onLoadRegisterConfigs,
+                            onSelectConfig = onSelectRegisterConfigFile,
+                            onExecute = onExecuteRegisterConfigDownload,
+                            onReset = onResetRegisterConfigDownload
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
@@ -669,6 +694,258 @@ private fun buildMultiRegReadParams(addr: String, count: String): ByteArray {
             "readLen" to count.trim().toInt()
         )
     )
+}
+
+// ── 寄存器配置下载卡片 ─────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RegisterConfigDownloadCard(
+    chipName: String,
+    downloadState: RegisterConfigDownloadState,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    onLoadConfigs: (String) -> Unit,
+    onSelectConfig: (ConfigFileInfo) -> Unit,
+    onExecute: () -> Unit,
+    onReset: () -> Unit
+) {
+    var configExpanded by remember { mutableStateOf(false) }
+    var selectedLabel by remember(downloadState.selectedConfig) {
+        mutableStateOf(downloadState.selectedConfig?.displayPath ?: "请选择配置文件")
+    }
+
+    Card(
+        onClick = if (!isExpanded) onToggle else ({ }),
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isExpanded)
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            else
+                MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "寄存器配置下载",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "从配置文件加载寄存器并批量写入芯片",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onToggle) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandMore
+                        else Icons.Default.ChevronRight,
+                        contentDescription = if (isExpanded) "收起" else "展开",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = isExpanded) {
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    // Config file selection
+                    OutlinedButton(
+                        onClick = { onLoadConfigs(chipName) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = downloadState.status != DownloadStatus.LOADING_CONFIGS
+                                && downloadState.status != DownloadStatus.DOWNLOADING
+                    ) {
+                        if (downloadState.status == DownloadStatus.LOADING_CONFIGS) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text("加载配置文件 ($chipName)")
+                    }
+
+                    if (downloadState.availableConfigs.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ExposedDropdownMenuBox(
+                            expanded = configExpanded,
+                            onExpandedChange = {
+                                if (downloadState.status != DownloadStatus.DOWNLOADING) {
+                                    configExpanded = !configExpanded
+                                }
+                            }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedLabel,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("选择配置") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = configExpanded) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = configExpanded,
+                                onDismissRequest = { configExpanded = false }
+                            ) {
+                                downloadState.availableConfigs.forEach { info ->
+                                    DropdownMenuItem(
+                                        text = { Text(info.displayPath) },
+                                        onClick = {
+                                            selectedLabel = info.displayPath
+                                            configExpanded = false
+                                            onSelectConfig(info)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Step progress
+                    val isDownloading = downloadState.status == DownloadStatus.DOWNLOADING
+                    val isCompleted = downloadState.status == DownloadStatus.COMPLETED
+                    val isError = downloadState.status == DownloadStatus.ERROR
+                    val activeStep = downloadState.activeStep
+                    val completedSteps = downloadState.completedSteps
+
+                    if (isDownloading || isCompleted || (isError && completedSteps.isNotEmpty())) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            StepIndicator(
+                                label = "开始配置",
+                                isActive = activeStep == DownloadStep.START_CONFIG,
+                                isCompleted = DownloadStep.START_CONFIG in completedSteps,
+                                isError = isError && activeStep == DownloadStep.START_CONFIG
+                            )
+                            Text("→", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            StepIndicator(
+                                label = "写入寄存器",
+                                isActive = activeStep == DownloadStep.WRITE_REGS,
+                                isCompleted = DownloadStep.WRITE_REGS in completedSteps,
+                                isError = isError && activeStep == DownloadStep.WRITE_REGS
+                            )
+                            Text("→", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            StepIndicator(
+                                label = "结束配置",
+                                isActive = activeStep == DownloadStep.END_CONFIG,
+                                isCompleted = DownloadStep.END_CONFIG in completedSteps,
+                                isError = isError && activeStep == DownloadStep.END_CONFIG
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Execute button
+                    Button(
+                        onClick = onExecute,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = downloadState.selectedConfig != null
+                                && downloadState.status != DownloadStatus.DOWNLOADING
+                    ) {
+                        if (isDownloading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("下载中...")
+                        } else {
+                            Text("开始下载")
+                        }
+                    }
+
+                    // Status messages
+                    downloadState.error?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    if (downloadState.status == DownloadStatus.COMPLETED) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "寄存器配置下载完成 (${downloadState.availableConfigs.find { it == downloadState.selectedConfig }?.let { "${it.displayPath}" } ?: ""})",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    // Reset button
+                    if (isCompleted || isError) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                selectedLabel = "请选择配置文件"
+                                onReset()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("重置")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepIndicator(
+    label: String,
+    isActive: Boolean,
+    isCompleted: Boolean,
+    isError: Boolean
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        when {
+            isActive -> CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp
+            )
+            isError -> Text(
+                text = "✗",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.titleSmall
+            )
+            isCompleted -> Text(
+                text = "✓",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleSmall
+            )
+            else -> Text(
+                text = "○",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.titleSmall
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = when {
+                isActive -> MaterialTheme.colorScheme.primary
+                isCompleted -> MaterialTheme.colorScheme.primary
+                isError -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+    }
 }
 
 private fun groupIcon(group: CommandGroup): ImageVector = when (group) {
