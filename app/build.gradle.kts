@@ -67,6 +67,7 @@ dependencies {
     implementation(project(":feature:feature-login"))
     implementation(project(":feature:feature-connection"))
     implementation(project(":feature:feature-demo"))
+    implementation(project(":feature:feature-factory"))
     implementation(project(":feature:feature-settings"))
 
     implementation(project(":ble:ble-scanner"))

@@ -52,6 +52,7 @@ import com.ghealth.tools.core.ui.adaptive.shouldUseLandscapeLayout
 import com.ghealth.tools.feature.connection.ConnectionScreen
 import com.ghealth.tools.feature.connection.TestConfigDialog
 import com.ghealth.tools.feature.demo.DemoScreen
+import com.ghealth.tools.feature.factory.FactoryScreen
 import com.ghealth.tools.feature.demo.DemoUiState
 import com.ghealth.tools.feature.demo.DemoViewModel
 import com.ghealth.tools.feature.login.LoginScreen
@@ -213,7 +214,11 @@ private fun WideMainLayout(
                 startDestination = TopLevelRoute.Connection.route,
                 modifier = Modifier.padding(innerPadding)
             ) {
-                composable(TopLevelRoute.Connection.route) { ConnectionScreen() }
+                composable(TopLevelRoute.Connection.route) {
+                    ConnectionScreen(
+                        onFactoryTest = { navController.navigate("factory") }
+                    )
+                }
                 composable(TopLevelRoute.Demo.route) { DemoScreen(viewModel = demoViewModel) }
                 composable(TopLevelRoute.Settings.route) {
                     SettingsScreen(
@@ -227,6 +232,11 @@ private fun WideMainLayout(
                         onNavigateBack = {
                             navController.popBackStack()
                         }
+                    )
+                }
+                composable("factory") {
+                    FactoryScreen(
+                        onNavigateBack = { navController.popBackStack() }
                     )
                 }
             }
@@ -325,7 +335,11 @@ private fun CompactMainLayout(
             startDestination = TopLevelRoute.Connection.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(TopLevelRoute.Connection.route) { ConnectionScreen() }
+            composable(TopLevelRoute.Connection.route) {
+                ConnectionScreen(
+                    onFactoryTest = { navController.navigate("factory") }
+                )
+            }
             composable(TopLevelRoute.Demo.route) { DemoScreen(viewModel = demoViewModel) }
             composable(TopLevelRoute.Settings.route) {
                 SettingsScreen(
@@ -339,6 +353,11 @@ private fun CompactMainLayout(
                     onNavigateBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+            composable("factory") {
+                FactoryScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
         }

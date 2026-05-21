@@ -1,0 +1,56 @@
+{
+  "project": "L-EVK-T2-GH3038Q",
+  "version": "1.0",
+  "description": "L-EVK-GH3038Q 产测卡控配置文件，包含底噪、PPG噪声、LPCTR和LPLCTR测试项的规则定义。",
+  "global": {
+    "default_operator": "le",
+    "fail_action": "continue"
+  },
+  "chip": "gh3036",
+  "tests": {
+    "base_noise": {
+      "enabled": true,
+      "description": "底噪测试",
+      "mode": 4,
+      "channels": 2,
+      "unit": "LSB",
+      "global_threshold": {
+        "operator": "le",
+        "value": 100
+      }
+    },
+    "ppg_noise": {
+      "enabled": true,
+      "description": "PPG噪声测试",
+      "mode": 8,
+      "channels": 2,
+      "unit": "LSB",
+      "global_threshold": {
+        "operator": "le",
+        "value": 200
+      }
+    },
+    "lpctr": {
+      "enabled": true,
+      "description": "LPCTR测试",
+      "mode": 16,
+      "channels": 32,
+      "unit": "counts",
+      "global_threshold": {
+        "operator": "ge",
+        "value": 100
+      }
+    },
+    "lplctr": {
+      "enabled": true,
+      "description": "LPLCTR测试",
+      "mode": 32,
+      "channels": 32,
+      "unit": "counts",
+      "global_threshold": {
+        "operator": "le",
+        "value": 4
+      }
+    }
+  }
+}

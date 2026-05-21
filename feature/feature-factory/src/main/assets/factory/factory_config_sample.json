@@ -1,0 +1,98 @@
+{
+  "_format_comment": "产测配置文件格式参考。新建项目时参考此文件，修改 project/chip/tests 等字段。",
+  "_field_reference": {
+    "project": "项目名称（必填），显示在项目下拉框中",
+    "version": "配置版本号（选填）",
+    "description": "项目描述（选填）",
+    "chip": "目标芯片类型（必填），可选: gh3036 / gh3220 / gh3300",
+    "global": {
+      "default_operator": "默认判定操作符（选填，默认 le），可选: lt/le/gt/ge/eq/ne/range",
+      "fail_action": "失败行为（选填，默认 continue），可选: continue(继续后续测试) / abort(终止测试)"
+    },
+    "tests": {
+      "{test_key}": {
+        "enabled": "是否启用该测试项（必填）",
+        "description": "测试项描述（选填）",
+        "mode": "F_SetMode/F_GetMode 的 mode 值（必填）。0x01=CHIP_INIT/0x02=CHIP_UID/0x04=BASE_NOISE/0x08=PPG_NOISE/0x10=LPCTR/0x20=LPLCTR",
+        "channels": "该测试项的通道数（必填）",
+        "unit": "值的单位（选填），如 LSB/counts/mV等",
+        "global_threshold": {
+          "operator": "判定操作符（必填），可选: lt(<)/le(<=)/gt(>)/ge(>=)/eq(==)/ne(!=)/range(between)",
+          "value": "阈值（必填）。普通操作用单个数值，range 用 [min, max] 数组"
+        }
+      }
+    }
+  },
+  "_chip_test_mode_map": {
+    "chip_init": { "mode": 1, "channels": 1 },
+    "chip_uid": { "mode": 2, "channels": 1 },
+    "base_noise": { "mode": 4, "channels": 32 },
+    "ppg_noise": { "mode": 8, "channels": 32 },
+    "lpctr": { "mode": 16, "channels": 32 },
+    "lplctr": { "mode": 32, "channels": 32 }
+  },
+  "_supported_operators": {
+    "lt": "小于 (<)",
+    "le": "小于等于 (<=)",
+    "gt": "大于 (>)",
+    "ge": "大于等于 (>=)",
+    "eq": "等于 (=)",
+    "ne": "不等于 (!=)",
+    "range": "在范围内 (min <= x <= max)，value 格式为 [min, max]"
+  },
+
+  "project": "EXAMPLE-PROJECT-NAME",
+  "version": "1.0",
+  "description": "这是一个产测配置文件示例，请根据实际项目修改",
+  "global": {
+    "default_operator": "le",
+    "fail_action": "continue"
+  },
+  "chip": "gh3036",
+  "tests": {
+    "base_noise": {
+      "enabled": true,
+      "description": "底噪测试",
+      "mode": 4,
+      "channels": 32,
+      "unit": "LSB",
+      "global_threshold": {
+        "operator": "le",
+        "value": 100
+      }
+    },
+    "ppg_noise": {
+      "enabled": true,
+      "description": "PPG噪声测试",
+      "mode": 8,
+      "channels": 32,
+      "unit": "LSB",
+      "global_threshold": {
+        "operator": "le",
+        "value": 200
+      }
+    },
+    "lpctr": {
+      "enabled": true,
+      "description": "LPCTR测试",
+      "mode": 16,
+      "channels": 32,
+      "unit": "counts",
+      "global_threshold": {
+        "operator": "ge",
+        "value": 100
+      }
+    },
+    "lplctr": {
+      "enabled": true,
+      "description": "LPLCTR测试",
+      "mode": 32,
+      "channels": 32,
+      "unit": "counts",
+      "global_threshold": {
+        "operator": "le",
+        "value": 4
+      }
+    }
+  }
+}

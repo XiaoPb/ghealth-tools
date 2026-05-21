@@ -31,6 +31,7 @@ include(":core:core-storage")
 include(":feature:feature-login")
 include(":feature:feature-connection")
 include(":feature:feature-demo")
+include(":feature:feature-factory")
 include(":feature:feature-settings")
 
 include(":ble:ble-scanner")
