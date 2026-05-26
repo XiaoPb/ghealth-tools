@@ -36,6 +36,7 @@ class CsvUploadManager @Inject constructor(
     private val pendingUploads = Collections.synchronizedSet(LinkedHashSet<File>())
 
     private val maxQueueSize = 20
+    private val minFileSize = 500L * 1024
     private val maxFileSize = 50L * 1024 * 1024
 
     init {
@@ -56,9 +57,15 @@ class CsvUploadManager @Inject constructor(
                     return@launch
                 }
 
-                if (file.length() > maxFileSize) {
-                    Timber.w("File too large (${file.length() / 1024 / 1024}MB): ${file.name}")
-                    showToast("文件过大(${file.length() / 1024 / 1024}MB)，跳过上传: ${file.name}")
+                val fileLength = file.length()
+                if (fileLength < minFileSize) {
+                    Timber.d("File too small (${fileLength / 1024}KB): ${file.name}, skipping upload")
+                    return@launch
+                }
+
+                if (fileLength > maxFileSize) {
+                    Timber.w("File too large (${fileLength / 1024 / 1024}MB): ${file.name}")
+                    showToast("文件过大(${fileLength / 1024 / 1024}MB)，跳过上传: ${file.name}")
                     return@launch
                 }
 
