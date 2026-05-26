@@ -14,8 +14,9 @@
         "enabled": "是否启用该测试项（必填）",
         "description": "测试项描述（选填）",
         "mode": "F_SetMode/F_GetMode 的 mode 值（必填）。0x01=CHIP_INIT/0x02=CHIP_UID/0x04=BASE_NOISE/0x08=PPG_NOISE/0x10=LPCTR/0x20=LPLCTR",
-        "channels": "该测试项的通道数（必填）",
-        "unit": "值的单位（选填），如 LSB/counts/mV等",
+        "mode_2_note": "chip_uid(mode=2) 无需 channels/unit/global_threshold 字段，自动解析为两个UUID",
+        "channels": "通道数（chip_uid 除外，其余必填）。JSON中为上限值，实际判定以设备返回通道数为准",
+        "unit": "值的单位（选填），如 LSB/counts/mV等（chip_uid 除外）",
         "global_threshold": {
           "operator": "判定操作符（必填），可选: lt(<)/le(<=)/gt(>)/ge(>=)/eq(==)/ne(!=)/range(between)",
           "value": "阈值（必填）。普通操作用单个数值，range 用 [min, max] 数组"
@@ -24,12 +25,12 @@
     }
   },
   "_chip_test_mode_map": {
-    "chip_init": { "mode": 1, "channels": 1 },
-    "chip_uid": { "mode": 2, "channels": 1 },
-    "base_noise": { "mode": 4, "channels": 32 },
-    "ppg_noise": { "mode": 8, "channels": 32 },
-    "lpctr": { "mode": 16, "channels": 32 },
-    "lplctr": { "mode": 32, "channels": 32 }
+    "chip_init": { "mode": 1, "channels": 1, "note": "通道测试，需 channels/unit/threshold" },
+    "chip_uid": { "mode": 2, "note": "UUID测试，无需 channels/unit/threshold，返回两个128bit UUID，判定非全0即可" },
+    "base_noise": { "mode": 4, "channels": 8, "note": "底噪，CSV固定8列" },
+    "ppg_noise": { "mode": 8, "channels": 32, "note": "PPG噪声，CSV固定32列" },
+    "lpctr": { "mode": 16, "channels": 32, "note": "LPCTR，CSV固定32列" },
+    "lplctr": { "mode": 32, "channels": 32, "note": "LPLCTR，CSV固定32列" }
   },
   "_supported_operators": {
     "lt": "小于 (<)",
@@ -50,11 +51,26 @@
   },
   "chip": "gh3036",
   "tests": {
+    "chip_init": {
+      "enabled": true,
+      "description": "芯片初始化测试",
+      "mode": 1,
+      "channels": 1,
+      "unit": "status",
+      "global_threshold": {
+        "operator": "eq",
+        "value": 1
+      }
+    },
+    "chip_uid": {
+      "enabled": true,
+      "description": "芯片UID测试，返回两个128bit UUID，判定条件为非全0"
+    },
     "base_noise": {
       "enabled": true,
       "description": "底噪测试",
       "mode": 4,
-      "channels": 32,
+      "channels": 8,
       "unit": "LSB",
       "global_threshold": {
         "operator": "le",

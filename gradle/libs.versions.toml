@@ -20,6 +20,7 @@ junit-platform = "1.10.3"
 mockk = "1.13.12"
 turbine = "1.1.0"
 kable = "0.42.0"
+kotlin-csv = "1.10.0"
 
 [libraries]
 # Compose
@@ -66,6 +67,9 @@ moshi = { group = "com.squareup.moshi", name = "moshi-kotlin", version.ref = "mo
 
 # BLE
 kable-core-android = { group = "com.juul.kable", name = "kable-core-android", version.ref = "kable" }
+
+# CSV
+kotlin-csv = { group = "com.github.doyaaaaaken", name = "kotlin-csv-jvm", version.ref = "kotlin-csv" }
 
 # Charts
 vico-compose = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }

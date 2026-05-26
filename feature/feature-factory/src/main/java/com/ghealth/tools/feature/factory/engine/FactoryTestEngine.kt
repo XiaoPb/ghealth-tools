@@ -89,9 +89,8 @@ class FactoryTestEngine @Inject constructor(
             } else if (failAction == "abort") return
 
             // Step 3: CHIP_UID
-            val chipUidResults = runSingleTest(
-                deviceAddress, chip, factoryConfig, TestType.CHIP_UID,
-                registerConfigs, onEvent, currentStep, totalSteps
+            val chipUidResults = runUidTest(
+                deviceAddress, onEvent, currentStep, totalSteps
             )
             if (chipUidResults != null) {
                 currentStep++
@@ -128,7 +127,9 @@ class FactoryTestEngine @Inject constructor(
             }
 
             // Step 5: Exit factory mode
+            currentStep++
             onEvent(TestEngineEvent.StepStarted("退出MCU在线模式"))
+            onEvent(TestEngineEvent.Progress(currentStep, totalSteps))
             val exitResult = sendSimpleCommand(
                 deviceAddress, KEY_GH_SET_WORK_MODE_CMD,
                 Package.packU8(0)
@@ -209,12 +210,27 @@ class FactoryTestEngine @Inject constructor(
         }
 
         val channelValues = parseU16ArrayResponse(getResult.getOrThrow())
-        val thresholdDef = testDef.globalThreshold
-        @Suppress("UNUSED_EXPRESSION")
-        val operator = ThresholdOperator.fromKey(thresholdDef?.operator ?: factoryConfig.global.defaultOperator)
+        val actualChannels = channelValues.size
+        val maxChannels = testDef.channels
 
-        for (ch in 0 until testDef.channels) {
-            val value = if (ch < channelValues.size) channelValues[ch] else 0
+        if (actualChannels == 0) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN, "${testType.displayName}: 设备未返回通道数据"))
+            onEvent(TestEngineEvent.TestCompleted(testType, emptyList()))
+            return emptyList()
+        }
+
+        if (actualChannels < maxChannels) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+                "${testType.displayName}: 配置最大${maxChannels}通道，设备返回${actualChannels}通道，以实际通道为准"))
+        } else if (actualChannels > maxChannels) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                "${testType.displayName}: 配置最大${maxChannels}通道，设备实际返回${actualChannels}通道"))
+        }
+
+        val thresholdDef = testDef.globalThreshold
+
+        for (ch in 0 until actualChannels) {
+            val value = channelValues[ch]
             val passed = if (thresholdDef != null) {
                 ThresholdOperator.fromKey(thresholdDef.operator).evaluate(value, thresholdDef)
             } else true
@@ -239,6 +255,97 @@ class FactoryTestEngine @Inject constructor(
 
         onEvent(TestEngineEvent.TestCompleted(testType, results))
         return results
+    }
+
+    private suspend fun runUidTest(
+        deviceAddress: String,
+        onEvent: suspend (TestEngineEvent) -> Unit,
+        stepIndex: Int,
+        totalSteps: Int
+    ): List<TestResult>? {
+        val testType = TestType.CHIP_UID
+        onEvent(TestEngineEvent.StepStarted(testType.displayName))
+        onEvent(TestEngineEvent.Progress(stepIndex, totalSteps))
+        onEvent(TestEngineEvent.LogMessage(LogLevel.INFO, "开始: ${testType.displayName}"))
+
+        // F_SetMode
+        val setResult = sendSimpleCommand(
+            deviceAddress, KEY_F_SET_MODE,
+            Package.packU8(testType.mode.toByte())
+        )
+        if (setResult.isFailure) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_SetMode 失败"))
+            return null
+        }
+
+        delay(500)
+
+        // F_GetMode — returns u16 array, each u16 is 2 bytes LE
+        val getResult = sendSimpleCommand(
+            deviceAddress, KEY_F_GET_MODE,
+            Package.packU8(testType.mode.toByte())
+        )
+        if (getResult.isFailure) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_GetMode 失败"))
+            return null
+        }
+
+        val u16Values = parseU16ArrayResponse(getResult.getOrThrow())
+        if (u16Values.size < 16) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                "${testType.displayName}: 预期32字节UUID数据，实际${u16Values.size * 2}字节"))
+            return null
+        }
+
+        // Reconstruct 32 raw bytes from 16 u16 LE values
+        val rawBytes = ByteArray(u16Values.size * 2)
+        for (i in u16Values.indices) {
+            rawBytes[i * 2] = (u16Values[i] and 0xFF).toByte()
+            rawBytes[i * 2 + 1] = ((u16Values[i] shr 8) and 0xFF).toByte()
+        }
+
+        // Two 128-bit UUIDs
+        val uuid1 = formatUuid128(rawBytes.copyOfRange(0, 16))
+        val uuid2 = formatUuid128(rawBytes.copyOfRange(16, 32))
+        val passed1 = !rawBytes.copyOfRange(0, 16).all { it == 0.toByte() }
+        val passed2 = !rawBytes.copyOfRange(16, 32).all { it == 0.toByte() }
+
+        val results = listOf(
+            TestResult(
+                testType = testType,
+                channelIndex = 0,
+                value = if (passed1) 1 else 0,
+                unit = "",
+                threshold = "非全0",
+                passed = passed1,
+                displayValue = uuid1
+            ),
+            TestResult(
+                testType = testType,
+                channelIndex = 1,
+                value = if (passed2) 1 else 0,
+                unit = "",
+                threshold = "非全0",
+                passed = passed2,
+                displayValue = uuid2
+            )
+        )
+
+        val passCount = results.count { it.passed }
+        onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+            "${testType.displayName}: $passCount/${results.size} UUID通过"))
+        if (passed1 && passed2) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.INFO, "UUID1: $uuid1"))
+            onEvent(TestEngineEvent.LogMessage(LogLevel.INFO, "UUID2: $uuid2"))
+        }
+
+        onEvent(TestEngineEvent.TestCompleted(testType, results))
+        return results
+    }
+
+    private fun formatUuid128(bytes: ByteArray): String {
+        val hex = bytes.joinToString("") { "%02X".format(it) }
+        return "${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}"
     }
 
     private suspend fun runHardwareTest(
@@ -344,11 +451,28 @@ class FactoryTestEngine @Inject constructor(
 
         // Evaluate results
         val channelValues = parseU16ArrayResponse(getResult.getOrThrow())
+        val actualChannels = channelValues.size
+        val maxChannels = testDef.channels
+
+        if (actualChannels == 0) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN, "${testType.displayName}: 设备未返回通道数据"))
+            onEvent(TestEngineEvent.TestCompleted(testType, emptyList()))
+            return emptyList()
+        }
+
+        if (actualChannels < maxChannels) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+                "${testType.displayName}: 配置最大${maxChannels}通道，设备返回${actualChannels}通道，以实际通道为准"))
+        } else if (actualChannels > maxChannels) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                "${testType.displayName}: 配置最大${maxChannels}通道，设备实际返回${actualChannels}通道"))
+        }
+
         val thresholdDef = testDef.globalThreshold
         val results = mutableListOf<TestResult>()
 
-        for (ch in 0 until testDef.channels) {
-            val value = if (ch < channelValues.size) channelValues[ch] else 0
+        for (ch in 0 until actualChannels) {
+            val value = channelValues[ch]
             val passed = if (thresholdDef != null) {
                 ThresholdOperator.fromKey(thresholdDef.operator).evaluate(value, thresholdDef)
             } else true

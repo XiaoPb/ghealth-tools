@@ -226,9 +226,10 @@ class RecordingManager @Inject constructor(
         numCompareDevices: Int
     ) {
         var recordsWriter: CsvWriter? = null
+        val frameZeroCounts = mutableMapOf<String, Int>()
         for (task in channel) {
             try {
-                recordsWriter = writeTaskToCsv(mode, task, serverWriters, recordsWriter, recordsBuffer, lock, numCompareDevices)
+                recordsWriter = writeTaskToCsv(mode, task, serverWriters, recordsWriter, recordsBuffer, lock, numCompareDevices, frameZeroCounts)
             } catch (e: Exception) {
                 Timber.e(e, "Error writing task for mode=$mode device=${task.deviceAddress}")
             }
@@ -244,10 +245,26 @@ class RecordingManager @Inject constructor(
         recordsWriter: CsvWriter?,
         recordsBuffer: RecordsBufferState,
         lock: Mutex,
-        numCompareDevices: Int
+        numCompareDevices: Int,
+        frameZeroCounts: MutableMap<String, Int>
     ): CsvWriter? {
         var currentRecordsWriter = recordsWriter
         val writerKey = "${task.deviceAddress}_$mode"
+
+        // FRAME_ID=0 rotation: close current file, create new one with fresh timestamp
+        val frameId = (task.columnMap["FRAME_ID"] as? Number)?.toInt() ?: -1
+        if (frameId == 0) {
+            val count = frameZeroCounts.getOrDefault(writerKey, 0) + 1
+            frameZeroCounts[writerKey] = count
+            Timber.d("FRAME_ID=0 detected for key=$writerKey, count=$count")
+            if (count > 1) {
+                serverWriters[writerKey]?.let { old ->
+                    old.close()
+                    Timber.d("Closed rotated file for key=$writerKey")
+                }
+                serverWriters.remove(writerKey)
+            }
+        }
 
         // Lazy-create server CSV writer on first frame for this device+mode
         val serverWriter = serverWriters.getOrPut(writerKey) {
@@ -287,7 +304,8 @@ class RecordingManager @Inject constructor(
 
     private suspend fun createServerWriter(mode: String, task: WriteTask): CsvWriter? {
         val cfg = currentConfig ?: return null
-        val dateStr = DATE_FORMAT.format(sessionDate)
+        val now = Date()
+        val dateStr = DATE_FORMAT.format(now)
 
         val deviceName: String
         val role: DeviceRole
@@ -317,7 +335,7 @@ class RecordingManager @Inject constructor(
             deviceName = deviceName,
             deviceAddress = task.deviceAddress,
             appVersion = appVersion,
-            date = sessionDate
+            date = now
         )
 
         val serverFile = File(baseDir, path.serverPath())

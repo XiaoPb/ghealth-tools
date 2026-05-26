@@ -3,6 +3,7 @@ package com.ghealth.tools.feature.factory.exporter
 import com.ghealth.tools.feature.factory.model.TestResult
 import com.ghealth.tools.feature.factory.model.TestSummary
 import com.ghealth.tools.feature.factory.model.TestType
+import com.github.doyaaaaaken.kotlincsv.dsl.csvWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -23,21 +24,20 @@ class CsvResultExporter @Inject constructor() {
             val now = Date(summary.timestamp)
             val dateStr = dateFormat.format(now)
             val timeStr = timeFormat.format(now)
-            val fileName = timeStr.replace(":", "-").replace(" ", "_") + ".csv"
+            val fileName = "$dateStr.csv"
 
             val resultDir = File(baseDir,
                 "factory/result/${summary.chipType}/${summary.projectName}/$dateStr")
             resultDir.mkdirs()
 
             val file = File(resultDir, fileName)
-            file.bufferedWriter().use { writer ->
-                // Header
-                writer.write(buildHeaderRow())
-                writer.newLine()
+            val isNew = !file.exists() || file.length() == 0L
+            val headerRow = buildHeaderRow()
+            val dataRow = buildDataRow(summary, timeStr)
 
-                // Data row
-                writer.write(buildDataRow(summary, now))
-                writer.newLine()
+            csvWriter().open(file, append = !isNew) {
+                if (isNew) writeRow(headerRow)
+                writeRow(dataRow)
             }
             file
         } catch (e: Exception) {
@@ -45,56 +45,47 @@ class CsvResultExporter @Inject constructor() {
         }
     }
 
-    private fun buildHeaderRow(): String {
-        val sb = StringBuilder()
-        sb.append("timestamp,datetime,overall_result,error_code,device_info,")
-        sb.append("chip_init_status,uuid")
-
-        val maxChannels = 32
-        for (i in 0 until maxChannels) sb.append(",base_noise_$i")
-        for (i in 0 until maxChannels) sb.append(",ppg_noise_$i,lpctr_$i,lplctr_$i")
-
-        return sb.toString()
+    private fun buildHeaderRow(): List<String> {
+        val columns = mutableListOf<String>()
+        columns.addAll(listOf(
+            "timestamp", "datetime", "overall_result", "error_code",
+            "device_info", "device_addr", "chip_init", "uuid"
+        ))
+        for (i in 0 until 8) columns.add("base_noise_$i")
+        for (i in 0 until 32) {
+            columns.add("ppg_noise_$i")
+            columns.add("lpctr_$i")
+            columns.add("lplctr_$i")
+        }
+        return columns
     }
 
-    private fun buildDataRow(summary: TestSummary, now: Date): String {
-        val sb = StringBuilder()
-        val timeStr = timeFormat.format(now)
+    private fun buildDataRow(summary: TestSummary, timeStr: String): List<String> {
+        val row = mutableListOf<String>()
+        row.add(summary.timestamp.toString())
+        row.add(timeStr)
+        row.add(if (summary.overallPassed) "PASS" else "FAIL")
+        row.add(summary.errorCodeString)
+        row.add(summary.deviceInfo)
+        row.add(summary.deviceAddress)
+        row.add(summary.chipInitStatus)
+        row.add(summary.uuid)
 
-        sb.append("${summary.timestamp},$timeStr,")
-        sb.append(if (summary.overallPassed) "PASS" else "FAIL")
-        sb.append(",")
-        sb.append("\"${summary.errorCodeString}\"")
-        sb.append(",")
-        sb.append("\"${summary.deviceInfo}\"")
-        sb.append(",")
-        sb.append("\"${summary.chipInitStatus}\"")
-        sb.append(",")
-        sb.append("\"${summary.uuid}\"")
-
-        val maxChannels = 32
-
-        // base_noise channels
         val baseNoiseResults = summary.results[TestType.BASE_NOISE] ?: emptyList()
-        for (i in 0 until maxChannels) {
-            sb.append(",")
-            sb.append(getChannelValue(baseNoiseResults, i))
+        for (i in 0 until 8) {
+            row.add(getChannelValue(baseNoiseResults, i))
         }
 
-        // ppg_noise, lpctr, lplctr channels (interleaved per channel)
         val ppgResults = summary.results[TestType.PPG_NOISE] ?: emptyList()
         val lpctrResults = summary.results[TestType.LPCTR] ?: emptyList()
         val lplctrResults = summary.results[TestType.LPLCTR] ?: emptyList()
-        for (i in 0 until maxChannels) {
-            sb.append(",")
-            sb.append(getChannelValue(ppgResults, i))
-            sb.append(",")
-            sb.append(getChannelValue(lpctrResults, i))
-            sb.append(",")
-            sb.append(getChannelValue(lplctrResults, i))
+        for (i in 0 until 32) {
+            row.add(getChannelValue(ppgResults, i))
+            row.add(getChannelValue(lpctrResults, i))
+            row.add(getChannelValue(lplctrResults, i))
         }
 
-        return sb.toString()
+        return row
     }
 
     private fun getChannelValue(results: List<TestResult>, channel: Int): String {

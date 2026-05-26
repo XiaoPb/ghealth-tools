@@ -37,4 +37,62 @@ class FrameBuilder {
         buffer[pos++] = crc
         return buffer.copyOf(pos)
     }
+
+    fun buildMultiFrame(
+        key: String,
+        param: ByteArray,
+        secure: Boolean = false,
+        invokeIdx: Byte = 0
+    ): List<ByteArray> {
+        val isArray = key.length > 1
+        val keyBytes = if (isArray) byteArrayOf(key.length.toByte()) + key.toByteArray(Charsets.UTF_8)
+        else key.toByteArray(Charsets.UTF_8)
+
+        // Overhead for intermediate frames (with frameIdx):
+        //   2 (headers) + 1 (length) + 1 (typeKey) + keyBytes + 1 (CRC) + frameIdx
+        //   + (secure ? 1 : 0) for invokeIdx
+        val intOverhead = 6 + keyBytes.size + (if (secure) 1 else 0)
+        // Final frame: no frameIdx, but offset may differ
+        val finalOverhead = 5 + keyBytes.size + (if (secure) 1 else 0)
+
+        val maxPayloadInt = MAX_FRAME_SIZE - intOverhead
+        val maxPayloadFinal = MAX_FRAME_SIZE - finalOverhead
+
+        if (maxPayloadInt <= 0 || maxPayloadFinal <= 0) {
+            // Key too long to fit in a single frame — fall back to single-frame attempt
+            return listOf(build(key, param, secure, fin = true, invokeIdx))
+        }
+
+        if (param.size <= maxPayloadFinal) {
+            return listOf(build(key, param, secure, fin = true, invokeIdx))
+        }
+
+        val frames = mutableListOf<ByteArray>()
+        var offset = 0
+        var frameIdx: Byte = 0
+
+        while (offset < param.size) {
+            val remaining = param.size - offset
+            val isLast = remaining <= maxPayloadFinal
+            val maxForThisFrame = if (isLast) maxPayloadFinal else maxPayloadInt
+            val chunkSize = minOf(remaining, maxForThisFrame)
+            val chunk = param.copyOfRange(offset, offset + chunkSize)
+
+            frames.add(
+                build(
+                    key = key,
+                    param = chunk,
+                    secure = secure,
+                    fin = isLast,
+                    invokeIdx = invokeIdx,
+                    frameIdx = if (isLast) LAST_FRAME_INDEX else frameIdx
+                )
+            )
+
+            offset += chunkSize
+            frameIdx = (frameIdx + 1).toByte()
+        }
+
+        return frames
+    }
 }

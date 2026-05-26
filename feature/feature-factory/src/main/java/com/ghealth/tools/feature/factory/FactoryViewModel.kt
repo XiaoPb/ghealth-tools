@@ -313,11 +313,16 @@ class FactoryViewModel @Inject constructor(
 
     private suspend fun exportResults(project: ProjectConfig) {
         val state = _uiState.value
+        val uidResults = state.results[TestType.CHIP_UID] ?: emptyList()
+        val initResults = state.results[TestType.CHIP_INIT] ?: emptyList()
         val summary = TestSummary(
             projectName = project.projectName,
             chipType = project.chip,
             deviceInfo = state.deviceName.ifEmpty { state.deviceAddress },
-            results = state.results
+            deviceAddress = state.deviceAddress,
+            results = state.results,
+            uuid = uidResults.joinToString("") { it.displayValue ?: "" },
+            chipInitStatus = initResults.firstOrNull()?.value?.toString() ?: ""
         )
 
         val file = csvExporter.export(summary, baseDir)

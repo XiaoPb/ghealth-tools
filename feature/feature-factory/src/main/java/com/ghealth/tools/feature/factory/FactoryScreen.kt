@@ -431,51 +431,72 @@ private fun ExpandableResultCard(
                         )
                         .padding(12.dp)
                 ) {
-                    // Header row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("通道", style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.weight(0.15f))
-                        Text("值", style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.weight(0.2f))
-                        Text("单位", style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.weight(0.15f))
-                        Text("阈值", style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.weight(0.25f))
-                        Text("结果", style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.weight(0.25f))
-                    }
-
-                    results.forEach { result ->
+                    if (testType == TestType.CHIP_UID) {
+                        // UUID display: show each UUID string and overall result
+                        for (result in results) {
+                            val label = if (results.size == 1) "UUID" else "UUID${result.channelIndex + 1}"
+                            Text(
+                                "$label: ${result.formattedValue}",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val overallUidPass = results.all { it.passed }
+                        Text(
+                            if (overallUidPass) "结果: PASS" else "结果: FAIL",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (overallUidPass) Color(0xFF2E7D32) else Color(0xFFC62828)
+                        )
+                    } else {
+                        // Channel/value/threshold table
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(bottom = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("${result.channelIndex}",
-                                style = MaterialTheme.typography.bodySmall,
+                            Text("通道", style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.weight(0.15f))
-                            Text("${result.value}",
-                                style = MaterialTheme.typography.bodySmall,
+                            Text("值", style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.weight(0.2f))
-                            Text(result.unit,
-                                style = MaterialTheme.typography.bodySmall,
+                            Text("单位", style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.weight(0.15f))
-                            Text(result.threshold,
-                                style = MaterialTheme.typography.bodySmall,
+                            Text("阈值", style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.weight(0.25f))
-                            Text(
-                                if (result.passed) "PASS" else "FAIL",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (result.passed) Color(0xFF2E7D32) else Color(0xFFC62828),
-                                modifier = Modifier.weight(0.25f)
-                            )
+                            Text("结果", style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.weight(0.25f))
+                        }
+
+                        results.forEach { result ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("${result.channelIndex}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(0.15f))
+                                Text("${result.formattedValue}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(0.2f))
+                                Text(result.unit,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(0.15f))
+                                Text(result.threshold,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(0.25f))
+                                Text(
+                                    if (result.passed) "PASS" else "FAIL",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (result.passed) Color(0xFF2E7D32) else Color(0xFFC62828),
+                                    modifier = Modifier.weight(0.25f)
+                                )
+                            }
                         }
                     }
                 }

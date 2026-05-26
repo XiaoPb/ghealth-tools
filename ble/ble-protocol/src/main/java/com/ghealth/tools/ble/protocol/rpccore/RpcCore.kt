@@ -181,26 +181,27 @@ class RpcCore(
 
             val invokeIdx = nextInvokeIndex()
 
-            val frames = frameBuilder.build(
+            val frames = frameBuilder.buildMultiFrame(
                 key = key,
                 param = packed,
                 secure = false,
                 invokeIdx = invokeIdx
             )
 
-            val pending = PendingCall(invokeIdx, key)
-            pendingCalls[key] = pending
-
             val sendFn = sendFunction
             if (sendFn == null) {
-                pendingCalls.remove(key)
                 return@withContext Result.failure(ProtocolError.ChannelClosed)
             }
 
-            val sendResult = sendFn.invoke(frames)
-            if (sendResult.isFailure) {
-                pendingCalls.remove(key)
-                return@withContext Result.failure(ProtocolError.ChannelClosed)
+            val pending = PendingCall(invokeIdx, key)
+            pendingCalls[key] = pending
+
+            for (frame in frames) {
+                val sendResult = sendFn.invoke(frame)
+                if (sendResult.isFailure) {
+                    pendingCalls.remove(key)
+                    return@withContext Result.failure(ProtocolError.ChannelClosed)
+                }
             }
 
             pending.waitForResponse(config.timeoutMs)
@@ -215,26 +216,27 @@ class RpcCore(
 
             val invokeIdx = nextInvokeIndex()
 
-            val frames = frameBuilder.build(
+            val frames = frameBuilder.buildMultiFrame(
                 key = key,
                 param = packed,
                 secure = true,
                 invokeIdx = invokeIdx
             )
 
-            val pending = PendingCall(invokeIdx, key)
-            pendingCalls[key] = pending
-
             val sendFn = sendFunction
             if (sendFn == null) {
-                pendingCalls.remove(key)
                 return@withContext Result.failure(ProtocolError.ChannelClosed)
             }
 
-            val sendResult = sendFn.invoke(frames)
-            if (sendResult.isFailure) {
-                pendingCalls.remove(key)
-                return@withContext Result.failure(ProtocolError.ChannelClosed)
+            val pending = PendingCall(invokeIdx, key)
+            pendingCalls[key] = pending
+
+            for (frame in frames) {
+                val sendResult = sendFn.invoke(frame)
+                if (sendResult.isFailure) {
+                    pendingCalls.remove(key)
+                    return@withContext Result.failure(ProtocolError.ChannelClosed)
+                }
             }
 
             pending.waitForResponse(config.timeoutMs).map { }
@@ -242,14 +244,18 @@ class RpcCore(
     }
 
     fun publish(key: String, params: ByteArray): Result<Unit> {
-        val frames = frameBuilder.build(
+        val frames = frameBuilder.buildMultiFrame(
             key = key,
             param = params,
             secure = false
         )
 
         val sendFn = sendFunction ?: return Result.failure(ProtocolError.ChannelClosed)
-        return sendFn.invoke(frames)
+        for (frame in frames) {
+            val result = sendFn.invoke(frame)
+            if (result.isFailure) return result
+        }
+        return Result.success(Unit)
     }
 
     suspend fun sall(key: String, format: String, params: ByteArray): Result<ByteArray> {
@@ -260,26 +266,27 @@ class RpcCore(
 
             val invokeIdx = nextInvokeIndex()
 
-            val frames = frameBuilder.build(
+            val frames = frameBuilder.buildMultiFrame(
                 key = key,
                 param = packed,
                 secure = true,
                 invokeIdx = invokeIdx
             )
 
-            val pending = PendingCall(invokeIdx, key)
-            pendingCalls[key] = pending
-
             val sendFn = sendFunction
             if (sendFn == null) {
-                pendingCalls.remove(key)
                 return@withContext Result.failure(ProtocolError.ChannelClosed)
             }
 
-            val sendResult = sendFn.invoke(frames)
-            if (sendResult.isFailure) {
-                pendingCalls.remove(key)
-                return@withContext Result.failure(ProtocolError.ChannelClosed)
+            val pending = PendingCall(invokeIdx, key)
+            pendingCalls[key] = pending
+
+            for (frame in frames) {
+                val sendResult = sendFn.invoke(frame)
+                if (sendResult.isFailure) {
+                    pendingCalls.remove(key)
+                    return@withContext Result.failure(ProtocolError.ChannelClosed)
+                }
             }
 
             pending.waitForResponse(config.timeoutMs)

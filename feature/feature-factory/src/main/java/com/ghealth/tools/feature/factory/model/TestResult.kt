@@ -25,8 +25,12 @@ data class TestResult(
     val unit: String,
     val threshold: String,
     val passed: Boolean,
-    val errorCode: Int = 0
+    val errorCode: Int = 0,
+    val displayValue: String? = null
 ) {
     val errorCodeComputed: Int
         get() = if (passed) 0 else testType.errorBase + channelIndex
+
+    val formattedValue: String
+        get() = displayValue ?: value.toString()
 }

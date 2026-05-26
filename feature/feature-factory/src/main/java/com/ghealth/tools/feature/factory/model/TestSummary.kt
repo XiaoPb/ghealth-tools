@@ -5,6 +5,7 @@ data class TestSummary(
     val chipType: String,
     val timestamp: Long = System.currentTimeMillis(),
     val deviceInfo: String = "",
+    val deviceAddress: String = "",
     val chipInitStatus: String = "",
     val uuid: String = "",
     val results: Map<TestType, List<TestResult>> = emptyMap()

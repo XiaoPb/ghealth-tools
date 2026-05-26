@@ -25,4 +25,5 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.moshi)
+    implementation(libs.kotlin.csv)
 }

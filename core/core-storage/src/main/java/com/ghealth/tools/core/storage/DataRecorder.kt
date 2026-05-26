@@ -13,11 +13,52 @@ enum class RecordingState {
     IDLE, RECORDING, PAUSED
 }
 
-data class DeviceRecorder(
+class DeviceRecorder(
     val deviceAddress: String,
     val deviceRole: DeviceRole,
-    val serverWriter: CsvWriter
-)
+    var serverWriter: CsvWriter,
+    private val baseDir: File,
+    private val config: RecordingConfig,
+    private val csvRule: CsvRule,
+    private val infoJsonStr: String
+) {
+    @Volatile
+    private var frameZeroCount = 0
+
+    suspend fun checkAndRotate(frameId: Int) {
+        if (frameId != 0) return
+        frameZeroCount++
+        Timber.d("FRAME_ID=0 detected, frameZeroCount=$frameZeroCount")
+        if (frameZeroCount > 1) {
+            rotate()
+        }
+    }
+
+    private suspend fun rotate() {
+        serverWriter.close()
+        val path = StoragePath(
+            mode = config.mode,
+            deviceRole = config.deviceRole,
+            scenario = config.scenario,
+            tester = config.tester,
+            chip = config.chip,
+            deviceName = config.deviceName,
+            deviceAddress = config.deviceAddress,
+            phoneDevice = config.phoneDevice,
+            appVersion = config.appVersion,
+            sdkVersion = config.sdkVersion,
+            hrVersion = config.hrVersion,
+            spo2Version = config.spo2Version,
+            nadtVersion = config.nadtVersion,
+            hrvVersion = config.hrvVersion,
+            date = java.util.Date()
+        )
+        val newFile = File(baseDir, path.serverPath())
+        serverWriter = CsvWriter(newFile, csvRule, infoJsonStr)
+        serverWriter.open()
+        Timber.d("Rotated to new file: ${newFile.name}")
+    }
+}
 
 data class RecordingConfig(
     val deviceAddress: String,
@@ -38,9 +79,13 @@ data class RecordingConfig(
     val compareDeviceAddresses: List<String> = emptyList()
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Singleton
 class DataRecorder @Inject constructor() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Single-threaded writer dispatcher — serializes all CSV writes to prevent
+    // race conditions on frameZeroCount and serverWriter from multi-threaded IO pool
+    private val writeDispatcher = Dispatchers.IO.limitedParallelism(1)
+    private val scope = CoroutineScope(SupervisorJob() + writeDispatcher)
     private val deviceRecorders = mutableMapOf<String, DeviceRecorder>()
     private val recordsBuffers = mutableMapOf<String, RecordsBuffer>()
     private val modeRecordingCounts = mutableMapOf<String, Int>()
@@ -92,7 +137,11 @@ class DataRecorder @Inject constructor() {
         deviceRecorders[key] = DeviceRecorder(
             deviceAddress = deviceAddress,
             deviceRole = config.deviceRole,
-            serverWriter = serverWriter
+            serverWriter = serverWriter,
+            baseDir = baseDir,
+            config = config,
+            csvRule = rule,
+            infoJsonStr = infoJson
         )
 
         scope.launch {
@@ -161,6 +210,8 @@ class DataRecorder @Inject constructor() {
         if (globalState != RecordingState.RECORDING) return
         val recorder = deviceRecorders[recorderKey(deviceAddress, mode)] ?: return
 
+        val frameId = (values["FRAME_ID"] as? Number)?.toInt() ?: -1
+
         val buffer = recordsBuffers[mode]
         if (buffer != null) {
             val mutableValues = values.toMutableMap()
@@ -169,7 +220,9 @@ class DataRecorder @Inject constructor() {
                     mutableValues["REF_RESULT$index"] = hr
                 }
             }
+            // Rotate and write in same coroutine — rotation must happen before write
             scope.launch {
+                if (frameId == 0) recorder.checkAndRotate(frameId)
                 recorder.serverWriter.writeRow(mutableValues)
             }
 
@@ -191,6 +244,7 @@ class DataRecorder @Inject constructor() {
             }
         } else {
             scope.launch {
+                if (frameId == 0) recorder.checkAndRotate(frameId)
                 recorder.serverWriter.writeRow(values)
             }
         }
