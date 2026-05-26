@@ -56,6 +56,8 @@ import com.ghealth.tools.feature.factory.FactoryScreen
 import com.ghealth.tools.feature.demo.DemoUiState
 import com.ghealth.tools.feature.demo.DemoViewModel
 import com.ghealth.tools.feature.login.LoginScreen
+import com.ghealth.tools.feature.login.ProjectSelectionScreen
+import com.ghealth.tools.feature.login.RegisterScreen
 import com.ghealth.tools.feature.settings.DeviceInfoScreen
 import com.ghealth.tools.feature.settings.SettingsScreen
 
@@ -75,6 +77,40 @@ fun GHealthNavHost() {
                 onLoginSuccess = {
                     navController.navigate("main") {
                         popUpTo("login") { inclusive = true }
+                    }
+                },
+                onNavigateToRegister = {
+                    navController.navigate("register")
+                },
+                onOnlineLoginSuccess = {
+                    navController.navigate("project_selection") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable("register") {
+            RegisterScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onRegisterSuccess = {
+                    navController.navigate("project_selection") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable("project_selection") {
+            ProjectSelectionScreen(
+                onProjectSelected = {
+                    navController.navigate("main") {
+                        popUpTo("project_selection") { inclusive = true }
+                    }
+                },
+                onSkip = {
+                    navController.navigate("main") {
+                        popUpTo("project_selection") { inclusive = true }
                     }
                 }
             )

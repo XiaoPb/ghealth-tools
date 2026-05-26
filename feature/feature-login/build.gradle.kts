@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":core:core-model"))
     implementation(project(":core:core-data"))
     implementation(project(":core:core-datastore"))
+    implementation(project(":core:core-network"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.navigation.compose)
@@ -20,4 +21,6 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    
+    implementation(libs.timber)
 }

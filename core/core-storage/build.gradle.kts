@@ -11,6 +11,8 @@ android {
 dependencies {
     implementation(project(":core:core-model"))
     implementation(project(":core:core-common"))
+    implementation(project(":core:core-network"))
+    implementation(project(":core:core-datastore"))
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

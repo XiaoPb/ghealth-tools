@@ -64,4 +64,5 @@ class CsvWriter(
     }
 
     val isOpen: Boolean get() = writer != null
+    val outputFile: File get() = file
 }

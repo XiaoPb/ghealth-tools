@@ -81,9 +81,9 @@ data class RecordingConfig(
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Singleton
-class DataRecorder @Inject constructor() {
-    // Single-threaded writer dispatcher — serializes all CSV writes to prevent
-    // race conditions on frameZeroCount and serverWriter from multi-threaded IO pool
+class DataRecorder @Inject constructor(
+    private val csvUploadManager: CsvUploadManager
+) {
     private val writeDispatcher = Dispatchers.IO.limitedParallelism(1)
     private val scope = CoroutineScope(SupervisorJob() + writeDispatcher)
     private val deviceRecorders = mutableMapOf<String, DeviceRecorder>()
@@ -292,6 +292,11 @@ class DataRecorder @Inject constructor() {
         val recorder = deviceRecorders.remove(recorderKey(deviceAddress, mode)) ?: return
         scope.launch {
             recorder.serverWriter.close()
+            
+            val csvFile = recorder.serverWriter.outputFile
+            if (csvFile.exists()) {
+                csvUploadManager.uploadCsvFile(csvFile)
+            }
         }
         Timber.d("Recording stopped for device $deviceAddress mode $mode")
 
