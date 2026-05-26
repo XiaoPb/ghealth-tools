@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.Toast
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.network.NetworkMonitor
+import com.ghealth.tools.core.network.NetworkStatus
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.UploadApi
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,6 +19,8 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import timber.log.Timber
 import java.io.File
+import java.util.Collections
+import java.util.LinkedHashSet
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,42 +33,52 @@ class CsvUploadManager @Inject constructor(
     private val networkMonitor: NetworkMonitor
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val pendingUploads = mutableListOf<File>()
+    private val pendingUploads = Collections.synchronizedSet(LinkedHashSet<File>())
+
+    private val maxQueueSize = 20
+    private val maxFileSize = 50L * 1024 * 1024
+
+    init {
+        scope.launch {
+            networkMonitor.networkStatus.collect { status ->
+                if (status.isAvailable) {
+                    retryPendingUploads()
+                }
+            }
+        }
+    }
 
     fun uploadCsvFile(file: File) {
         scope.launch {
             try {
-                val isLoggedIn = tokenManager.isLoggedIn.first()
-                val projectId = userPreferences.selectedProjectId.first()
-                val isNetworkAvailable = networkMonitor.isNetworkAvailable()
-
-                if (!isNetworkAvailable) {
-                    Timber.d("Network not available, adding to pending uploads")
-                    pendingUploads.add(file)
-                    showToast("无网络连接，稍后自动上传")
-                    return@launch
-                }
-
-                if (!isLoggedIn) {
-                    Timber.d("User not logged in, skipping CSV upload")
-                    return@launch
-                }
-
-                if (projectId == null || projectId <= 0) {
-                    Timber.d("No project selected, skipping CSV upload")
-                    return@launch
-                }
-
                 if (!file.exists()) {
                     Timber.w("CSV file does not exist: ${file.absolutePath}")
+                    return@launch
+                }
+
+                if (file.length() > maxFileSize) {
+                    Timber.w("File too large (${file.length() / 1024 / 1024}MB): ${file.name}")
+                    showToast("文件过大(${file.length() / 1024 / 1024}MB)，跳过上传: ${file.name}")
+                    return@launch
+                }
+
+                val isLoggedIn = tokenManager.isLoggedInSync()
+                val isNetworkAvailable = networkMonitor.isNetworkAvailable()
+                val projectId = userPreferences.selectedProjectId.first()
+
+                if (!isNetworkAvailable || !isLoggedIn || projectId == null || projectId <= 0) {
+                    if (!isNetworkAvailable) {
+                        Timber.d("Network not available, adding to pending uploads")
+                        addToPending(file)
+                        showToast("无网络连接，稍后自动上传")
+                    }
                     return@launch
                 }
 
                 uploadFile(file, projectId)
             } catch (e: Exception) {
                 Timber.e(e, "CSV upload failed")
-                pendingUploads.add(file)
-                showToast("CSV上传失败: ${e.message}")
+                addToPending(file)
             }
         }
     }
@@ -80,17 +93,17 @@ class CsvUploadManager @Inject constructor(
 
             if (response.isSuccessful && response.body()?.code == 200) {
                 Timber.i("CSV uploaded successfully: ${file.name}")
+                pendingUploads.remove(file)
                 withContext(Dispatchers.Main) {
                     showToast("CSV已上传: ${file.name}")
                 }
-                pendingUploads.remove(file)
             } else {
                 val errorMsg = response.body()?.message ?: "上传失败: ${response.code()}"
                 Timber.w("CSV upload failed: $errorMsg")
+                addToPending(file)
                 withContext(Dispatchers.Main) {
                     showToast("CSV上传失败: $errorMsg")
                 }
-                pendingUploads.add(file)
             }
         } catch (e: Exception) {
             Timber.e(e, "CSV upload error")
@@ -98,9 +111,22 @@ class CsvUploadManager @Inject constructor(
         }
     }
 
+    private fun addToPending(file: File) {
+        synchronized(pendingUploads) {
+            if (pendingUploads.size >= maxQueueSize) {
+                val first = pendingUploads.firstOrNull()
+                if (first != null) {
+                    pendingUploads.remove(first)
+                    Timber.w("Pending queue full, dropping oldest: ${first.name}")
+                }
+            }
+            pendingUploads.add(file)
+        }
+    }
+
     fun retryPendingUploads() {
         scope.launch {
-            val isLoggedIn = tokenManager.isLoggedIn.first()
+            val isLoggedIn = tokenManager.isLoggedInSync()
             val projectId = userPreferences.selectedProjectId.first()
             val isNetworkAvailable = networkMonitor.isNetworkAvailable()
 
@@ -108,8 +134,10 @@ class CsvUploadManager @Inject constructor(
                 return@launch
             }
 
-            val filesToRetry = pendingUploads.toList()
-            pendingUploads.clear()
+            val filesToRetry: List<File>
+            synchronized(pendingUploads) {
+                filesToRetry = pendingUploads.toList()
+            }
 
             for (file in filesToRetry) {
                 try {

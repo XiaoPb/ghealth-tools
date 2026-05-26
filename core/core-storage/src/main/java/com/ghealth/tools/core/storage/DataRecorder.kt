@@ -290,10 +290,10 @@ class DataRecorder @Inject constructor(
 
     fun stopRecording(deviceAddress: String, mode: String) {
         val recorder = deviceRecorders.remove(recorderKey(deviceAddress, mode)) ?: return
+        val filePath = recorder.serverWriter.outputFile.absolutePath
         scope.launch {
             recorder.serverWriter.close()
-            
-            val csvFile = recorder.serverWriter.outputFile
+            val csvFile = File(filePath)
             if (csvFile.exists()) {
                 csvUploadManager.uploadCsvFile(csvFile)
             }

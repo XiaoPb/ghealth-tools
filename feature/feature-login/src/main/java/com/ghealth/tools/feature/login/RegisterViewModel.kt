@@ -136,8 +136,9 @@ class RegisterViewModel @Inject constructor(
                         _uiState.update { it.copy(isLoading = false) }
                         onSuccess()
                     } else {
-                        _uiState.update { it.copy(isLoading = false) }
-                        onSuccess()
+                        _uiState.update {
+                            it.copy(isLoading = false, errorMessage = "注册成功但自动登录失败，请返回手动登录")
+                        }
                     }
                 } else {
                     val errorMsg = response.body()?.message ?: "注册失败: ${response.code()}"

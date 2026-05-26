@@ -5,7 +5,6 @@ import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.network.model.ProductionTestConfigResponse
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -13,21 +12,25 @@ import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
 class ConfigDownloader @Inject constructor(
     @ApplicationContext private val context: Context,
     private val projectApi: ProjectApi,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    @Named("baseUrl") private val baseUrl: String
 ) {
+    private val maxConfigFileSize = 5 * 1024 * 1024L
+
     suspend fun downloadProductionTestConfig(
         projectId: Int,
         targetDir: File
     ): Result<File?> = withContext(Dispatchers.IO) {
         try {
             val response = projectApi.getProductionTestConfig(projectId)
-            
+
             if (!response.isSuccessful || response.body()?.data == null) {
                 return@withContext Result.failure(
                     Exception(response.body()?.message ?: "获取配置失败: ${response.code()}")
@@ -51,7 +54,7 @@ class ConfigDownloader @Inject constructor(
             targetDir.mkdirs()
         }
 
-        val token = tokenManager.getAccessToken()
+        val token = tokenManager.getAccessTokenSync()
         val client = OkHttpClient.Builder().build()
 
         val filesToDownload = listOfNotNull(
@@ -66,11 +69,11 @@ class ConfigDownloader @Inject constructor(
 
         for ((url, filename) in filesToDownload) {
             if (url == null) continue
-            
+
             try {
                 val file = File(targetDir, filename)
                 downloadFile(client, url, file, token)
-                
+
                 if (filename == "factory_config.json") {
                     downloadedJsonFile = file
                 }
@@ -89,8 +92,9 @@ class ConfigDownloader @Inject constructor(
         targetFile: File,
         token: String?
     ) {
-        val fullUrl = if (url.startsWith("http")) url else "http://192.168.1.100$url"
-        
+        val baseUrlStripped = baseUrl.trimEnd('/')
+        val fullUrl = if (url.startsWith("http")) url else "$baseUrlStripped$url"
+
         val requestBuilder = Request.Builder().url(fullUrl)
         if (!token.isNullOrEmpty()) {
             requestBuilder.addHeader("Authorization", "Bearer $token")
@@ -99,9 +103,25 @@ class ConfigDownloader @Inject constructor(
         val request = requestBuilder.build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw Exception("Download failed: ${response.code}")
+                throw Exception("Download HTTP ${response.code}")
             }
-            
+
+            val contentType = response.header("Content-Type")
+            val contentLength = response.body?.contentLength() ?: 0L
+            val validContentType = contentType?.let {
+                it.startsWith("application/json") ||
+                    it.startsWith("application/octet-stream") ||
+                    it.startsWith("text/plain")
+            } ?: false
+
+            if (!validContentType && contentLength > 0) {
+                Timber.w("Unexpected Content-Type: $contentType for $fullUrl")
+            }
+
+            if (contentLength > maxConfigFileSize) {
+                throw Exception("Config file too large: $contentLength bytes")
+            }
+
             response.body?.byteStream()?.use { input ->
                 FileOutputStream(targetFile).use { output ->
                     input.copyTo(output)

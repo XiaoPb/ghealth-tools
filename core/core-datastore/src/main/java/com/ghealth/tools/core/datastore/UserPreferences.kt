@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -30,7 +31,7 @@ class UserPreferences @Inject constructor(
         val USER_ID = intPreferencesKey("user_id")
         val USERNAME = stringPreferencesKey("username")
         val EMAIL = stringPreferencesKey("email")
-        val IS_STAFF = stringPreferencesKey("is_staff")
+        val IS_STAFF = booleanPreferencesKey("is_staff")
         val PROJECT_COUNT = intPreferencesKey("project_count")
         val SELECTED_PROJECT_ID = intPreferencesKey("selected_project_id")
         val SELECTED_PROJECT_NAME = stringPreferencesKey("selected_project_name")
@@ -41,7 +42,7 @@ class UserPreferences @Inject constructor(
             id = prefs[Keys.USER_ID] ?: 0,
             username = prefs[Keys.USERNAME] ?: "",
             email = prefs[Keys.EMAIL] ?: "",
-            isStaff = prefs[Keys.IS_STAFF] == "true",
+            isStaff = prefs[Keys.IS_STAFF] ?: false,
             projectCount = prefs[Keys.PROJECT_COUNT] ?: 0
         )
     }
@@ -66,7 +67,7 @@ class UserPreferences @Inject constructor(
             prefs[Keys.USER_ID] = id
             prefs[Keys.USERNAME] = username
             prefs[Keys.EMAIL] = email
-            prefs[Keys.IS_STAFF] = if (isStaff) "true" else "false"
+            prefs[Keys.IS_STAFF] = isStaff
             prefs[Keys.PROJECT_COUNT] = projectCount
         }
     }

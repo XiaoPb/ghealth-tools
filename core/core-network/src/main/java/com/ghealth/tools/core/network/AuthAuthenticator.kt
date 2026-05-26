@@ -13,30 +13,42 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import timber.log.Timber
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
 class AuthAuthenticator @Inject constructor(
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    @Named("baseUrl") private val baseUrl: String
 ) : Authenticator {
 
+    @Volatile
+    private var retryCount = 0
+
     override fun authenticate(route: Route?, response: Response): Request? {
-        val request = response.request
-        if (response.code != 401) return null
+        if (retryCount >= 1) {
+            retryCount = 0
+            tokenManager.clearTokensSync()
+            return null
+        }
 
         synchronized(this) {
-            val currentToken = runBlocking { tokenManager.getAccessToken() }
+            val request = response.request
+
+            val currentToken = tokenManager.getAccessTokenSync()
             val requestToken = request.header("Authorization")?.removePrefix("Bearer ")
-            
-            if (currentToken != null && currentToken != requestToken) {
+
+            if (!currentToken.isNullOrEmpty() && currentToken != requestToken) {
+                retryCount = 0
                 return request.newBuilder()
                     .header("Authorization", "Bearer $currentToken")
                     .build()
             }
 
-            val refreshToken = runBlocking { tokenManager.getRefreshToken() }
+            val refreshToken = tokenManager.getRefreshTokenSync()
             if (refreshToken.isNullOrEmpty()) {
-                runBlocking { tokenManager.clearTokens() }
+                retryCount = 0
+                tokenManager.clearTokensSync()
                 return null
             }
 
@@ -48,17 +60,20 @@ class AuthAuthenticator @Inject constructor(
                 if (newTokenResponse.isSuccessful && newTokenResponse.body()?.data != null) {
                     val newAccessToken = newTokenResponse.body()!!.data!!.access
                     runBlocking { tokenManager.updateAccessToken(newAccessToken) }
-                    
+                    retryCount++
+
                     request.newBuilder()
                         .header("Authorization", "Bearer $newAccessToken")
                         .build()
                 } else {
-                    runBlocking { tokenManager.clearTokens() }
+                    retryCount = 0
+                    tokenManager.clearTokensSync()
                     null
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Token refresh failed")
-                runBlocking { tokenManager.clearTokens() }
+                retryCount = 0
+                tokenManager.clearTokensSync()
                 null
             }
         }
@@ -66,7 +81,7 @@ class AuthAuthenticator @Inject constructor(
 
     private fun createRefreshClient(): AuthApi {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.BASIC
         }
 
         val client = OkHttpClient.Builder()
@@ -74,7 +89,7 @@ class AuthAuthenticator @Inject constructor(
             .build()
 
         return Retrofit.Builder()
-            .baseUrl("http://localhost/api/")
+            .baseUrl(baseUrl)
             .client(client)
             .addConverterFactory(MoshiConverterFactory.create())
             .build()

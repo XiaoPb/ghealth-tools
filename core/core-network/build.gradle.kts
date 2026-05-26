@@ -6,6 +6,9 @@ plugins {
 
 android {
     namespace = "com.ghealth.tools.core.network"
+    buildFeatures {
+        buildConfig = true
+    }
 }
 
 dependencies {

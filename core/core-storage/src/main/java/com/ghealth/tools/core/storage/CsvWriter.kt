@@ -6,6 +6,7 @@ import timber.log.Timber
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
+import java.io.IOException
 
 class CsvWriter(
     private val file: File,
@@ -33,22 +34,30 @@ class CsvWriter(
         val line = rule.columns.joinToString(rule.delimiter) { col ->
             values[col]?.toString() ?: ""
         }
-        w.write(line)
-        w.newLine()
-        rowCount++
-        if (rowCount % 100 == 0) {
-            w.flush()
+        try {
+            w.write(line)
+            w.newLine()
+            rowCount++
+            if (rowCount % 100 == 0) {
+                w.flush()
+            }
+        } catch (e: IOException) {
+            Timber.e(e, "CsvWriter writeRow failed")
         }
     }
 
     suspend fun writeRawRow(values: List<Any?>) = withContext(Dispatchers.IO) {
         val w = writer ?: return@withContext
         val line = values.joinToString(rule.delimiter) { it?.toString() ?: "" }
-        w.write(line)
-        w.newLine()
-        rowCount++
-        if (rowCount % 100 == 0) {
-            w.flush()
+        try {
+            w.write(line)
+            w.newLine()
+            rowCount++
+            if (rowCount % 100 == 0) {
+                w.flush()
+            }
+        } catch (e: IOException) {
+            Timber.e(e, "CsvWriter writeRawRow failed")
         }
     }
 
@@ -57,8 +66,12 @@ class CsvWriter(
     }
 
     suspend fun close() = withContext(Dispatchers.IO) {
-        writer?.flush()
-        writer?.close()
+        try {
+            writer?.flush()
+            writer?.close()
+        } catch (e: IOException) {
+            Timber.e(e, "CsvWriter close failed")
+        }
         writer = null
         Timber.d("CsvWriter closed: ${file.absolutePath}, rows=$rowCount")
     }

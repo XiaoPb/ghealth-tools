@@ -19,16 +19,24 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val BASE_URL = "http://192.168.1.100/api/"
+    private const val DEFAULT_BASE_URL = "http://192.168.1.100/api/"
     private const val CONNECT_TIMEOUT = 30L
     private const val READ_TIMEOUT = 30L
     private const val WRITE_TIMEOUT = 60L
+
+    @Provides
+    @Singleton
+    @Named("baseUrl")
+    fun provideBaseUrl(): String {
+        return DEFAULT_BASE_URL
+    }
 
     @Provides
     @Singleton
@@ -57,9 +65,10 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideAuthAuthenticator(
-        tokenManager: TokenManager
+        tokenManager: TokenManager,
+        @Named("baseUrl") baseUrl: String
     ): AuthAuthenticator {
-        return AuthAuthenticator(tokenManager)
+        return AuthAuthenticator(tokenManager, baseUrl)
     }
 
     @Provides
@@ -69,7 +78,11 @@ object NetworkModule {
         authAuthenticator: AuthAuthenticator
     ): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = if (com.ghealth.tools.core.network.BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BODY
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
         }
 
         return OkHttpClient.Builder()
@@ -86,10 +99,11 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(
         okHttpClient: OkHttpClient,
-        moshi: Moshi
+        moshi: Moshi,
+        @Named("baseUrl") baseUrl: String
     ): Retrofit {
         return Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(baseUrl)
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
