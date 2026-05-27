@@ -37,19 +37,21 @@ class ProjectSelectionViewModel @Inject constructor(
         loadProjects()
     }
 
+    private var hasLoaded = false
+
     fun loadProjects() {
+        if (hasLoaded) return
+        hasLoaded = true
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
             try {
                 val response = projectApi.getProjects()
-
                 if (response.isSuccessful && response.body() != null) {
-                    val projects = response.body()!!.results
+                    val projects = response.body()!!
                     _uiState.update {
                         it.copy(
-                            projects = projects,
-                            isLoading = false
+                            isLoading = false,
+                            projects = projects
                         )
                     }
                 } else {

@@ -46,10 +46,12 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavDestination
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.ghealth.tools.core.ui.adaptive.shouldUseLandscapeLayout
 import com.ghealth.tools.feature.connection.ConnectionScreen
 import com.ghealth.tools.feature.connection.TestConfigDialog
@@ -57,6 +59,7 @@ import com.ghealth.tools.feature.demo.DemoScreen
 import com.ghealth.tools.feature.factory.FactoryScreen
 import com.ghealth.tools.feature.demo.DemoUiState
 import com.ghealth.tools.feature.demo.DemoViewModel
+import com.ghealth.tools.feature.login.ProjectConfigUploadScreen
 import com.ghealth.tools.feature.login.LoginScreen
 import com.ghealth.tools.feature.login.ProjectSelectionScreen
 import com.ghealth.tools.feature.login.ProjectCreateScreen
@@ -121,14 +124,35 @@ fun GHealthNavHost() {
                 onNavigateBack = {
                     navController.popBackStack()
                 },
-                onProjectCreated = {
-                    navController.navigate("project_selection") {
+                onProjectCreated = { projectId, projectName ->
+                    navController.navigate("config_upload/$projectId/$projectName") {
                         popUpTo("project_create") { inclusive = true }
                     }
                 }
             )
         }
+        composable(
+            "config_upload/{projectId}/{projectName}",
+            arguments = listOf(
+                navArgument("projectId") { type = NavType.IntType },
+                navArgument("projectName") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
+            val projectName = backStackEntry.arguments?.getString("projectName") ?: ""
+            ProjectConfigUploadScreen(
+                projectId = projectId,
+                projectName = projectName,
+                onNavigateBack = { navController.popBackStack() },
+                onUploadComplete = {
+                    navController.navigate("project_selection") {
+                        popUpTo("config_upload/{projectId}/{projectName}") { inclusive = true }
+                    }
+                }
+            )
+        }
         composable("main") {
+            val outerNavController = navController
             val loginViewModel: com.ghealth.tools.feature.login.LoginViewModel = hiltViewModel()
             val scope = rememberCoroutineScope()
             MainScreen(
@@ -139,6 +163,11 @@ fun GHealthNavHost() {
                             popUpTo(0) { inclusive = true }
                         }
                     }
+                },
+                onSwitchProject = {
+                    outerNavController.navigate("project_selection") {
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -147,7 +176,7 @@ fun GHealthNavHost() {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
-fun MainScreen(onLogout: () -> Unit) {
+fun MainScreen(onLogout: () -> Unit, onSwitchProject: () -> Unit = {}) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -160,9 +189,9 @@ fun MainScreen(onLogout: () -> Unit) {
     val demoState by demoViewModel.uiState.collectAsState()
 
     if (isWide) {
-        WideMainLayout(navController, currentDestination, demoViewModel, demoState, onLogout)
+        WideMainLayout(navController, currentDestination, demoViewModel, demoState, onLogout, onSwitchProject)
     } else {
-        CompactMainLayout(navController, currentDestination, isTopLevelRoute, demoViewModel, demoState, onLogout)
+        CompactMainLayout(navController, currentDestination, isTopLevelRoute, demoViewModel, demoState, onLogout, onSwitchProject)
     }
 
     if (demoState.showRestartConfigDialog) {
@@ -185,6 +214,7 @@ private fun WideMainLayout(
     demoViewModel: DemoViewModel,
     demoState: DemoUiState,
     onLogout: () -> Unit,
+    onSwitchProject: () -> Unit
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail(
@@ -279,11 +309,7 @@ private fun WideMainLayout(
                         onNavigateToDeviceinfo = {
                             navController.navigate("device_info")
                         },
-                        onSwitchProject = {
-                            navController.navigate("project_selection") {
-                                launchSingleTop = true
-                            }
-                        }
+                        onSwitchProject = onSwitchProject
                     )
                 }
                 composable("device_info") {
@@ -312,6 +338,7 @@ private fun CompactMainLayout(
     demoViewModel: DemoViewModel,
     demoState: DemoUiState,
     onLogout: () -> Unit,
+    onSwitchProject: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -405,11 +432,7 @@ private fun CompactMainLayout(
                     onNavigateToDeviceinfo = {
                         navController.navigate("device_info")
                     },
-                    onSwitchProject = {
-                        navController.navigate("project_selection") {
-                            launchSingleTop = true
-                        }
-                    }
+                    onSwitchProject = onSwitchProject
                 )
             }
             composable("device_info") {

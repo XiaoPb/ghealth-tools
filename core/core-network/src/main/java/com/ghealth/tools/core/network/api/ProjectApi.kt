@@ -2,7 +2,7 @@ package com.ghealth.tools.core.network.api
 
 import com.ghealth.tools.core.network.model.ApiResponse
 import com.ghealth.tools.core.network.model.CreateProjectRequest
-import com.ghealth.tools.core.network.model.PaginatedListResponse
+
 import com.ghealth.tools.core.network.model.ProductionTestConfigResponse
 import com.ghealth.tools.core.network.model.ProjectResponse
 import com.ghealth.tools.core.network.model.RegularConfigResponse
@@ -15,7 +15,7 @@ import retrofit2.http.Path
 
 interface ProjectApi {
     @GET("projects/")
-    suspend fun getProjects(): Response<PaginatedListResponse<ProjectResponse>>
+    suspend fun getProjects(): Response<List<ProjectResponse>>
 
     @GET("projects/{id}/")
     suspend fun getProject(

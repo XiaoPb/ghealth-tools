@@ -21,7 +21,9 @@ data class ProjectCreateUiState(
     val description: String = "",
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val isSuccess: Boolean = false
+    val isSuccess: Boolean = false,
+    val createdProjectId: Int? = null,
+    val createdProjectName: String = ""
 )
 
 @HiltViewModel
@@ -49,7 +51,7 @@ class ProjectCreateViewModel @Inject constructor(
         _uiState.update { it.copy(description = description) }
     }
 
-    fun createProject(onSuccess: () -> Unit) {
+    fun createProject() {
         val state = _uiState.value
 
         if (state.name.isBlank()) {
@@ -74,8 +76,15 @@ class ProjectCreateViewModel @Inject constructor(
                 val response = projectApi.createProject(request)
 
                 if (response.isSuccessful && response.body()?.data != null) {
-                    _uiState.update { it.copy(isLoading = false, isSuccess = true) }
-                    onSuccess()
+                    val project = response.body()!!.data!!
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isSuccess = true,
+                            createdProjectId = project.id,
+                            createdProjectName = project.name
+                        )
+                    }
                 } else {
                     val errorMsg = apiErrorParser.parseErrors(response)
                     _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }

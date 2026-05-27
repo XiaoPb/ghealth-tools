@@ -48,14 +48,14 @@ private val chipModelOptions = listOf(
 @Composable
 fun ProjectCreateScreen(
     onNavigateBack: () -> Unit,
-    onProjectCreated: () -> Unit,
+    onProjectCreated: (projectId: Int, projectName: String) -> Unit,
     viewModel: ProjectCreateViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(uiState.isSuccess) {
-        if (uiState.isSuccess) {
-            onProjectCreated()
+        if (uiState.isSuccess && uiState.createdProjectId != null) {
+            onProjectCreated(uiState.createdProjectId!!, uiState.createdProjectName)
         }
     }
 
@@ -142,8 +142,8 @@ fun ProjectCreateScreen(
             }
 
             Button(
-                onClick = { viewModel.createProject(onProjectCreated) },
-                modifier = Modifier.fillMaxWidth(),
+                        onClick = { viewModel.createProject() },
+                        modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isLoading
             ) {
                 if (uiState.isLoading) {

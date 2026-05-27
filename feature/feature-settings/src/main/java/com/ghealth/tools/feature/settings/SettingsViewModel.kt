@@ -133,7 +133,12 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun deleteProject() {
-        val projectId = _uiState.value.selectedProjectId ?: return
+        val projectId = _uiState.value.selectedProjectId
+        if (projectId == null || projectId <= 0) {
+            _uiState.update { it.copy(operationMessage = "无法删除：未选择有效项目") }
+            return
+        }
+        val projectName = _uiState.value.selectedProjectName ?: ""
         viewModelScope.launch {
             _uiState.update { it.copy(isDeletingProject = true) }
             try {
@@ -143,14 +148,21 @@ class SettingsViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isDeletingProject = false,
-                            operationMessage = "项目已删除"
+                            selectedProjectId = null,
+                            selectedProjectName = null,
+                            operationMessage = "项目「${projectName}」已删除"
                         )
                     }
                 } else {
+                    val msg = when (response.code()) {
+                        403 -> "无权限删除此项目"
+                        404 -> "项目不存在或已被删除"
+                        else -> "删除失败(${response.code()})"
+                    }
                     _uiState.update {
                         it.copy(
                             isDeletingProject = false,
-                            operationMessage = "删除失败: ${response.code()}"
+                            operationMessage = msg
                         )
                     }
                 }
@@ -159,7 +171,7 @@ class SettingsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isDeletingProject = false,
-                        operationMessage = "删除失败: ${e.message}"
+                        operationMessage = "删除失败: ${e.message ?: "网络错误"}"
                     )
                 }
             }
