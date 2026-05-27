@@ -108,6 +108,8 @@ fun GHealthNavHost() {
             )
         }
         composable("project_selection") {
+            val loginViewModel: com.ghealth.tools.feature.login.LoginViewModel = hiltViewModel()
+            val scope = rememberCoroutineScope()
             ProjectSelectionScreen(
                 onProjectSelected = {
                     navController.navigate("main") {
@@ -116,6 +118,14 @@ fun GHealthNavHost() {
                 },
                 onCreateProject = {
                     navController.navigate("project_create")
+                },
+                onLogout = {
+                    scope.launch {
+                        loginViewModel.logout()
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
                 }
             )
         }
