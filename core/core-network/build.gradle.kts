@@ -14,11 +14,11 @@ android {
 dependencies {
     implementation(project(":core:core-model"))
 
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.moshi)
-    implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
-    implementation(libs.moshi)
+    api(libs.retrofit)
+    api(libs.retrofit.moshi)
+    api(libs.okhttp)
+    api(libs.okhttp.logging)
+    api(libs.moshi)
 
     implementation(libs.datastore.preferences)
 

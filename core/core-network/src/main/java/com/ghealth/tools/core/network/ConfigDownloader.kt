@@ -57,19 +57,17 @@ class ConfigDownloader @Inject constructor(
         val token = tokenManager.getAccessTokenSync()
         val client = OkHttpClient.Builder().build()
 
-        val filesToDownload = listOfNotNull(
-            config.jsonConfig to "factory_config.json",
-            config.baseNoiseConfig to config.baseNoiseConfig?.substringAfterLast("/") ?: "base_noise.config",
-            config.lpctrConfig to config.lpctrConfig?.substringAfterLast("/") ?: "lpctr.config",
-            config.lplctrConfig to config.lplctrConfig?.substringAfterLast("/") ?: "lplctr.config",
-            config.ppgNoiseConfig to config.ppgNoiseConfig?.substringAfterLast("/") ?: "ppg_noise.config"
-        ).filter { it.first != null }
+        val filesToDownload = buildList {
+            config.jsonConfig?.let { add(it to "factory_config.json") }
+            config.baseNoiseConfig?.let { add(it to "base_noise.config") }
+            config.lpctrConfig?.let { add(it to "lpctr.config") }
+            config.lplctrConfig?.let { add(it to "lplctr.config") }
+            config.ppgNoiseConfig?.let { add(it to "ppg_noise.config") }
+        }
 
         var downloadedJsonFile: File? = null
 
         for ((url, filename) in filesToDownload) {
-            if (url == null) continue
-
             try {
                 val file = File(targetDir, filename)
                 downloadFile(client, url, file, token)

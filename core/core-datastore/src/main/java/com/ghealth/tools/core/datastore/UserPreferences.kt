@@ -1,5 +1,6 @@
 package com.ghealth.tools.core.datastore
 
+import android.app.Application
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -25,8 +26,9 @@ data class UserInfo(
 
 @Singleton
 class UserPreferences @Inject constructor(
-    private val context: Context
+    private val application: Application
 ) {
+    private val context: Context = application.applicationContext
     private object Keys {
         val USER_ID = intPreferencesKey("user_id")
         val USERNAME = stringPreferencesKey("username")

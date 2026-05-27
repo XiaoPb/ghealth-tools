@@ -142,18 +142,8 @@ class RegisterViewModel @Inject constructor(
                     }
                 } else {
                     val errorMsg = response.body()?.message ?: "注册失败: ${response.code()}"
-                    val errorData = response.body()?.data
-                    val detailedError = if (errorData != null) {
-                        val errors = mutableListOf<String>()
-                        errorData.forEach { (key, value) ->
-                            errors.add("$key: $value")
-                        }
-                        errors.joinToString("\n")
-                    } else {
-                        errorMsg
-                    }
-                    _uiState.update { it.copy(isLoading = false, errorMessage = detailedError) }
-                    onError(detailedError)
+                    _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
+                    onError(errorMsg)
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Register failed")
