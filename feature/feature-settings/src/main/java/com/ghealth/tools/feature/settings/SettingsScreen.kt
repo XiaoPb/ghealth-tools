@@ -21,10 +21,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,6 +66,7 @@ import com.ghealth.tools.core.ui.theme.ThemeMode
 @Composable
 fun SettingsScreen(
     onNavigateToDeviceinfo: () -> Unit = {},
+    onSwitchProject: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -75,6 +80,15 @@ fun SettingsScreen(
             viewModel.clearExportMessage()
         }
     }
+
+    LaunchedEffect(state.operationMessage) {
+        state.operationMessage?.let { msg ->
+            Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+            viewModel.clearOperationMessage()
+        }
+    }
+
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize(),
@@ -233,6 +247,91 @@ fun SettingsScreen(
                 leadingContent = { Icon(Icons.Default.FileDownload, contentDescription = null) },
                 trailingContent = {
                     TextButton(onClick = viewModel::exportLogs) { Text("导出") }
+                }
+            )
+        }
+
+        if (state.isOnlineMode) {
+            Spacer(modifier = Modifier.height(24.dp))
+            SectionHeader("项目管理")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    ListItem(
+                        headlineContent = {
+                            Text(state.selectedProjectName ?: "未选择项目")
+                        },
+                        supportingContent = { Text("当前在线项目") },
+                        leadingContent = { Icon(Icons.Default.Info, contentDescription = null) }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = {
+                            Text(if (state.isSyncingConfig) "刷新中..." else "刷新配置")
+                        },
+                        supportingContent = { Text("从云端重新下载配置文件") },
+                        leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                        trailingContent = {
+                            TextButton(
+                                onClick = viewModel::refreshConfig,
+                                enabled = !state.isSyncingConfig
+                            ) { Text("刷新") }
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("切换项目") },
+                        supportingContent = { Text("选择其他项目") },
+                        leadingContent = { Icon(Icons.Default.SwapHoriz, contentDescription = null) },
+                        trailingContent = {
+                            TextButton(onClick = onSwitchProject) { Text("切换") }
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = {
+                            Text(
+                                if (state.isDeletingProject) "删除中..." else "删除项目",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        supportingContent = { Text("删除当前项目（不可恢复）") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        trailingContent = {
+                            TextButton(
+                                onClick = { showDeleteDialog = true },
+                                enabled = !state.isDeletingProject
+                            ) {
+                                Text("删除", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                title = { Text("确认删除项目") },
+                text = { Text("确定要删除项目\"${state.selectedProjectName}\"吗？此操作不可恢复。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showDeleteDialog = false
+                        viewModel.deleteProject()
+                    }) {
+                        Text("确认删除", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteDialog = false }) {
+                        Text("取消")
+                    }
                 }
             )
         }

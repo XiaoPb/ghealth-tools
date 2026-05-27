@@ -13,6 +13,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-model"))
+    implementation(project(":core:core-datastore"))
 
     api(libs.retrofit)
     api(libs.retrofit.moshi)

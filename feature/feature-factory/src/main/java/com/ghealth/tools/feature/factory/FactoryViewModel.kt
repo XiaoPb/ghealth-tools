@@ -8,6 +8,7 @@ import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.core.datastore.BlePreferences
+import com.ghealth.tools.core.network.ConfigPathProvider
 import com.ghealth.tools.feature.factory.engine.FactoryTestEngine
 import com.ghealth.tools.feature.factory.engine.LogLevel
 import com.ghealth.tools.feature.factory.engine.TestEngineEvent
@@ -23,6 +24,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -40,7 +42,8 @@ class FactoryViewModel @Inject constructor(
     private val configJsonParser: ConfigJsonParser,
     private val registerConfigParser: RegisterConfigParser,
     private val csvExporter: CsvResultExporter,
-    @Named("storageBaseDir") private val baseDir: File
+    @Named("storageBaseDir") private val baseDir: File,
+    private val configPathProvider: ConfigPathProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FactoryUiState())
@@ -59,7 +62,10 @@ class FactoryViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingConfigs = true, configError = null) }
 
             val projects = withContext(Dispatchers.IO) {
-                copyFactoryConfigsToStorage()
+                val isOnline = configPathProvider.isOnlineMode.first()
+                if (!isOnline) {
+                    copyFactoryConfigsToStorage()
+                }
                 loadAllProjects()
             }
 

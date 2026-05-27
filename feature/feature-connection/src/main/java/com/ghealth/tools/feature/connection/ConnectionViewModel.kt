@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,7 +86,8 @@ class ConnectionViewModel @Inject constructor(
     private val recordingManager: com.ghealth.tools.core.storage.RecordingManager,
     private val blePreferences: com.ghealth.tools.core.datastore.BlePreferences,
     private val registerConfigParser: RegisterConfigParser,
-    @Named("storageBaseDir") private val baseDir: File
+    @Named("storageBaseDir") private val baseDir: File,
+    private val configPathProvider: com.ghealth.tools.core.network.ConfigPathProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ConnectionUiState())
@@ -545,7 +547,12 @@ class ConnectionViewModel @Inject constructor(
             )
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val configDir = File(baseDir, "application/config/$chip")
+            val isOnline = configPathProvider.isOnlineMode.first()
+            val configDir = if (isOnline) {
+                configPathProvider.getApplicationScanDir()
+            } else {
+                File(baseDir, "application/config/$chip")
+            }
             val configs = mutableListOf<ConfigFileInfo>()
             try {
                 if (configDir.exists()) {

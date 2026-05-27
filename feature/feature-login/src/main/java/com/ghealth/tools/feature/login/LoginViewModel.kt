@@ -2,9 +2,8 @@ package com.ghealth.tools.feature.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.UserPreferences
-import com.ghealth.tools.core.model.DeviceType
+import com.ghealth.tools.core.datastore.UserSessionManager
 import com.ghealth.tools.core.network.ApiErrorParser
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
@@ -13,6 +12,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -21,38 +21,45 @@ import javax.inject.Inject
 data class LoginUiState(
     val username: String = "",
     val password: String = "",
+    val rememberMe: Boolean = false,
     val isLoading: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isLoginSuccess: Boolean = false
 )
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-    private val blePreferences: BlePreferences,
-    private val userPreferences: UserPreferences,
-    private val tokenManager: TokenManager,
     private val authApi: AuthApi,
-    private val apiErrorParser: ApiErrorParser
+    private val tokenManager: TokenManager,
+    private val sessionManager: UserSessionManager,
+    private val apiErrorParser: ApiErrorParser,
+    private val userPreferences: UserPreferences
 ) : ViewModel() {
-
-    private val _selectedChip = MutableStateFlow(DeviceType.GH3036)
-    val selectedChip: StateFlow<DeviceType> = _selectedChip.asStateFlow()
 
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
     init {
-        viewModelScope.launch {
-            blePreferences.selectedChip.collect { chipName ->
-                _selectedChip.value = DeviceType.entries.find { it.chipName == chipName }
-                    ?: DeviceType.GH3036
-            }
-        }
+        loadSavedCredentials()
     }
 
-    fun selectChip(chip: DeviceType) {
-        _selectedChip.value = chip
+    private fun loadSavedCredentials() {
         viewModelScope.launch {
-            blePreferences.setSelectedChip(chip.chipName)
+            val remember = userPreferences.rememberCredentials.firstOrNull() ?: false
+            if (remember) {
+                val username = userPreferences.savedUsername.firstOrNull() ?: ""
+                val encodedPassword = userPreferences.savedPassword.firstOrNull() ?: ""
+                val password = if (encodedPassword.isNotEmpty()) {
+                    userPreferences.decodePassword(encodedPassword)
+                } else ""
+                _uiState.update {
+                    it.copy(
+                        username = username,
+                        password = password,
+                        rememberMe = true
+                    )
+                }
+            }
         }
     }
 
@@ -64,10 +71,14 @@ class LoginViewModel @Inject constructor(
         _uiState.update { it.copy(password = password, errorMessage = null) }
     }
 
-    fun login(onSuccess: () -> Unit, onError: (String) -> Unit) {
+    fun updateRememberMe(rememberMe: Boolean) {
+        _uiState.update { it.copy(rememberMe = rememberMe) }
+    }
+
+    fun login(onSuccess: () -> Unit) {
         val state = _uiState.value
         if (state.username.isBlank() || state.password.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请输入用户名和密码") }
+            _uiState.update { it.copy(errorMessage = "请输入账号和密码") }
             return
         }
 
@@ -75,30 +86,42 @@ class LoginViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
             try {
-                val response = authApi.login(LoginRequest(state.username, state.password))
-                
+                val request = LoginRequest(
+                    username = state.username.trim(),
+                    password = state.password
+                )
+                val response = authApi.login(request)
+
                 if (response.isSuccessful && response.body()?.data != null) {
                     val loginData = response.body()!!.data!!
-                    
                     tokenManager.saveTokens(loginData.access, loginData.refresh)
-                    userPreferences.saveUserInfo(
-                        id = loginData.user.id,
-                        username = loginData.user.username,
-                        email = loginData.user.email
+                    loginData.user.let { user ->
+                        userPreferences.saveUserInfo(
+                            id = user.id,
+                            username = user.username,
+                            email = user.email,
+                            isStaff = user.isStaff
+                        )
+                    }
+                    userPreferences.saveCredentials(
+                        username = state.username.trim(),
+                        password = state.password,
+                        remember = state.rememberMe
                     )
-                    
-                    _uiState.update { it.copy(isLoading = false) }
+                    _uiState.update { it.copy(isLoading = false, isLoginSuccess = true) }
                     onSuccess()
                 } else {
                     val errorMsg = apiErrorParser.parseErrors(response)
                     _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
-                    onError(errorMsg)
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Login failed")
-                val errorMsg = "网络错误: ${e.message ?: "未知错误"}"
-                _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
-                onError(errorMsg)
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "网络错误: ${e.localizedMessage ?: "连接失败"}"
+                    )
+                }
             }
         }
     }

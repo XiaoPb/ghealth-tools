@@ -8,6 +8,7 @@ import com.ghealth.tools.core.network.model.ProjectResponse
 import com.ghealth.tools.core.network.model.RegularConfigResponse
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -25,6 +26,11 @@ interface ProjectApi {
     suspend fun createProject(
         @Body request: CreateProjectRequest
     ): Response<ApiResponse<ProjectResponse>>
+
+    @DELETE("projects/{id}/")
+    suspend fun deleteProject(
+        @Path("id") projectId: Int
+    ): Response<ApiResponse<Unit>>
 
     @GET("projects/{project_id}/prod-test-config/")
     suspend fun getProductionTestConfig(

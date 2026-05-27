@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import timber.log.Timber
 import java.io.File
 import java.util.Collections
@@ -95,8 +96,9 @@ class CsvUploadManager @Inject constructor(
             val mediaType = "text/csv".toMediaTypeOrNull()
             val requestBody = file.asRequestBody(mediaType)
             val part = MultipartBody.Part.createFormData("csv_file", file.name, requestBody)
+            val filenameBody = file.name.toRequestBody("text/plain".toMediaTypeOrNull())
 
-            val response = uploadApi.uploadCsvFile(projectId, part)
+            val response = uploadApi.uploadCsvFile(projectId, part, filenameBody)
 
             if (response.isSuccessful && response.body()?.code == 200) {
                 Timber.i("CSV uploaded successfully: ${file.name}")

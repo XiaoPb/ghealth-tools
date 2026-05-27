@@ -47,7 +47,6 @@ import com.ghealth.tools.core.network.model.ProjectResponse
 @Composable
 fun ProjectSelectionScreen(
     onProjectSelected: () -> Unit,
-    onSkip: () -> Unit,
     onCreateProject: () -> Unit,
     viewModel: ProjectSelectionViewModel = hiltViewModel()
 ) {
@@ -68,7 +67,7 @@ fun ProjectSelectionScreen(
                 .padding(16.dp)
         ) {
             Text(
-                text = "欢迎, ${uiState.username}!",
+                text = "在线模式",
                 style = MaterialTheme.typography.headlineMedium
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -144,25 +143,14 @@ fun ProjectSelectionScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Row(
+                    Button(
+                        onClick = {
+                            viewModel.confirmSelection(onProjectSelected)
+                        },
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        enabled = uiState.selectedProject != null && !uiState.isConfirming
                     ) {
-                        OutlinedButton(
-                            onClick = onSkip,
-                            modifier = Modifier.weight(1f),
-                            enabled = !uiState.isConfirming
-                        ) {
-                            Text("跳过")
-                        }
-                        Button(
-                            onClick = {
-                                viewModel.confirmSelection(onProjectSelected)
-                            },
-                            modifier = Modifier.weight(1f),
-                            enabled = uiState.selectedProject != null && !uiState.isConfirming
-                        ) {
-                            if (uiState.isConfirming) {
+                        if (uiState.isConfirming) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
                                     strokeWidth = 2.dp
@@ -171,11 +159,10 @@ fun ProjectSelectionScreen(
                                 Text("确认")
                             }
                         }
-                    }
-                }
             }
         }
     }
+}
 }
 
 @Composable

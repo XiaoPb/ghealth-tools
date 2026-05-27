@@ -76,17 +76,17 @@ fun GHealthNavHost() {
         composable("login") {
             LoginScreen(
                 onLoginSuccess = {
+                    navController.navigate("project_selection") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                },
+                onOfflineMode = {
                     navController.navigate("main") {
                         popUpTo("login") { inclusive = true }
                     }
                 },
                 onNavigateToRegister = {
                     navController.navigate("register")
-                },
-                onOnlineLoginSuccess = {
-                    navController.navigate("project_selection") {
-                        popUpTo("login") { inclusive = true }
-                    }
                 }
             )
         }
@@ -105,11 +105,6 @@ fun GHealthNavHost() {
         composable("project_selection") {
             ProjectSelectionScreen(
                 onProjectSelected = {
-                    navController.navigate("main") {
-                        popUpTo("project_selection") { inclusive = true }
-                    }
-                },
-                onSkip = {
                     navController.navigate("main") {
                         popUpTo("project_selection") { inclusive = true }
                     }
@@ -276,6 +271,11 @@ private fun WideMainLayout(
                     SettingsScreen(
                         onNavigateToDeviceinfo = {
                             navController.navigate("device_info")
+                        },
+                        onSwitchProject = {
+                            navController.navigate("project_selection") {
+                                launchSingleTop = true
+                            }
                         }
                     )
                 }
@@ -397,6 +397,11 @@ private fun CompactMainLayout(
                 SettingsScreen(
                     onNavigateToDeviceinfo = {
                         navController.navigate("device_info")
+                    },
+                    onSwitchProject = {
+                        navController.navigate("project_selection") {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }

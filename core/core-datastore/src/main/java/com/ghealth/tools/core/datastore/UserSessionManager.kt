@@ -10,7 +10,7 @@ data class UserSession(
     val isLoggedIn: Boolean,
     val userInfo: UserInfo,
     val selectedProjectId: Int?,
-    val selectedProjectName: String
+    val selectedProjectName: String?
 )
 
 @Singleton

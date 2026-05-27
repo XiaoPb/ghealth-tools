@@ -3,6 +3,7 @@ package com.ghealth.tools.core.network
 import android.content.Context
 import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.network.model.ProductionTestConfigResponse
+import com.ghealth.tools.core.network.model.RegularConfigResponse
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,6 +43,48 @@ class ConfigDownloader @Inject constructor(
             Result.success(downloadedFile)
         } catch (e: Exception) {
             Timber.e(e, "Download config failed")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun downloadRegularConfigs(
+        projectId: Int,
+        targetDir: File
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val response = projectApi.getRegularConfigs(projectId)
+
+            if (!response.isSuccessful || response.body()?.data == null) {
+                return@withContext Result.failure(
+                    Exception("获取应用配置列表失败: ${response.code()}")
+                )
+            }
+
+            val configs = response.body()!!.data!!
+            if (!targetDir.exists()) {
+                targetDir.mkdirs()
+            }
+
+            val token = tokenManager.getAccessTokenSync()
+            val client = OkHttpClient.Builder().build()
+
+            for (config in configs) {
+                val configUrl = config.configFileUrl ?: config.configFile ?: continue
+                val filename = config.filename
+                if (filename.isBlank()) continue
+
+                try {
+                    val file = File(targetDir, filename)
+                    downloadFile(client, configUrl, file, token)
+                    Timber.d("Downloaded regular config: $filename")
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to download regular config: $filename")
+                }
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Timber.e(e, "Download regular configs failed")
             Result.failure(e)
         }
     }
@@ -104,17 +147,7 @@ class ConfigDownloader @Inject constructor(
                 throw Exception("Download HTTP ${response.code}")
             }
 
-            val contentType = response.header("Content-Type")
             val contentLength = response.body?.contentLength() ?: 0L
-            val validContentType = contentType?.let {
-                it.startsWith("application/json") ||
-                    it.startsWith("application/octet-stream") ||
-                    it.startsWith("text/plain")
-            } ?: false
-
-            if (!validContentType && contentLength > 0) {
-                Timber.w("Unexpected Content-Type: $contentType for $fullUrl")
-            }
 
             if (contentLength > maxConfigFileSize) {
                 throw Exception("Config file too large: $contentLength bytes")
