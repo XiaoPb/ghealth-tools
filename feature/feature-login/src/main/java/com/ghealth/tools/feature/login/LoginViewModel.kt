@@ -48,10 +48,7 @@ class LoginViewModel @Inject constructor(
             val remember = userPreferences.rememberCredentials.firstOrNull() ?: false
             if (remember) {
                 val username = userPreferences.savedUsername.firstOrNull() ?: ""
-                val encodedPassword = userPreferences.savedPassword.firstOrNull() ?: ""
-                val password = if (encodedPassword.isNotEmpty()) {
-                    userPreferences.decodePassword(encodedPassword)
-                } else ""
+                val password = userPreferences.getPasswordSync() ?: ""
                 _uiState.update {
                     it.copy(
                         username = username,
@@ -79,6 +76,12 @@ class LoginViewModel @Inject constructor(
         val state = _uiState.value
         if (state.username.isBlank() || state.password.isBlank()) {
             _uiState.update { it.copy(errorMessage = "请输入账号和密码") }
+            return
+        }
+
+        val usernamePattern = Regex("^[a-zA-Z0-9]+$")
+        if (!usernamePattern.matches(state.username.trim())) {
+            _uiState.update { it.copy(errorMessage = "账号只能包含字母和数字") }
             return
         }
 
@@ -124,5 +127,16 @@ class LoginViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    suspend fun logout() {
+        try {
+            authApi.logout()
+        } catch (e: Exception) {
+            Timber.e(e, "Logout API call failed")
+        }
+        tokenManager.clearTokens()
+        userPreferences.clearUserInfo()
+        userPreferences.clearCredentials()
     }
 }

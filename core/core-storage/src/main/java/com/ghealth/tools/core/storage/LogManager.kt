@@ -13,7 +13,18 @@ class LogManager(private val baseDir: File) {
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
-    private val writers = mutableMapOf<String, BufferedWriter>()
+    private val writers = object : LinkedHashMap<String, BufferedWriter>(20, 0.75f, false) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BufferedWriter>?): Boolean {
+            return if (size > 15) {
+                eldest?.value?.close()
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    private var currentDate = dateFormat.format(Date())
 
     fun init() {
         cleanOldLogs(7)
@@ -41,6 +52,12 @@ class LogManager(private val baseDir: File) {
 
     private fun writeLine(relativePath: String, line: String) {
         try {
+            val today = dateFormat.format(Date())
+            if (currentDate != today) {
+                closeAll()
+                currentDate = today
+                writers.clear()
+            }
             val writer = writers.getOrPut(relativePath) {
                 val file = File(baseDir, relativePath)
                 file.parentFile?.mkdirs()

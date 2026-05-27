@@ -1,7 +1,5 @@
 package com.ghealth.tools.core.network
 
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
 import javax.inject.Inject
@@ -13,7 +11,7 @@ class AuthInterceptor @Inject constructor(
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
-        val token = runBlocking { tokenManager.accessToken.firstOrNull() }
+        val token = tokenManager.getAccessTokenSync()
 
         val request = if (!token.isNullOrEmpty()) {
             chain.request().newBuilder()

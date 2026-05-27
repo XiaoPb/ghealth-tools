@@ -32,6 +32,7 @@ import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import android.app.Activity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavDestination
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -127,10 +129,15 @@ fun GHealthNavHost() {
             )
         }
         composable("main") {
+            val loginViewModel: com.ghealth.tools.feature.login.LoginViewModel = hiltViewModel()
+            val scope = rememberCoroutineScope()
             MainScreen(
                 onLogout = {
-                    navController.navigate("login") {
-                        popUpTo(0) { inclusive = true }
+                    scope.launch {
+                        loginViewModel.logout()
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
                     }
                 }
             )

@@ -11,6 +11,7 @@ android {
 dependencies {
     implementation(project(":core:core-model"))
     implementation(libs.datastore.preferences)
+    implementation(libs.security.crypto)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.coroutines.core)

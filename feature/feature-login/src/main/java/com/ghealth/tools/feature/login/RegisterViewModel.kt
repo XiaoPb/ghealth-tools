@@ -52,10 +52,12 @@ class RegisterViewModel @Inject constructor(
     val uiState: StateFlow<RegisterUiState> = _uiState.asStateFlow()
 
     fun updateUsername(username: String) {
+        val usernamePattern = Regex("^[a-zA-Z0-9]+$")
         val error = when {
             username.isBlank() -> "用户名不能为空"
             username.length < 3 -> "用户名至少3个字符"
             username.length > 150 -> "用户名最多150个字符"
+            !usernamePattern.matches(username) -> "用户名只能包含字母和数字"
             else -> null
         }
         _uiState.update { it.copy(username = username, usernameError = error, errorMessage = null) }
@@ -71,9 +73,15 @@ class RegisterViewModel @Inject constructor(
     }
 
     fun updatePassword(password: String) {
+        val hasLetter = password.any { it.isLetter() }
+        val hasDigit = password.any { it.isDigit() }
+        val hasSpecial = password.any { !it.isLetterOrDigit() }
         val error = when {
             password.isBlank() -> "密码不能为空"
-            password.length < 6 -> "密码至少6个字符"
+            password.length < 8 -> "密码至少8个字符"
+            !hasLetter -> "密码需包含字母"
+            !hasDigit -> "密码需包含数字"
+            !hasSpecial -> "密码需包含特殊字符"
             else -> null
         }
         val confirmError = if (_uiState.value.passwordConfirm.isNotBlank() && 

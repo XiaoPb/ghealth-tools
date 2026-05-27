@@ -8,12 +8,12 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKeys
 import com.ghealth.tools.core.datastore.UserInfo
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import java.nio.charset.StandardCharsets
-import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,6 +31,17 @@ private val Context.userDataStore: DataStore<Preferences> by preferencesDataStor
 class UserPreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val encryptedPrefs by lazy {
+        val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+        EncryptedSharedPreferences.create(
+            "user_secure_prefs",
+            masterKey,
+            context,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
+
     private object Keys {
         val USER_ID = intPreferencesKey("user_id")
         val USERNAME = stringPreferencesKey("username")
@@ -42,6 +53,10 @@ class UserPreferences @Inject constructor(
         val REMEMBER_CREDENTIALS = booleanPreferencesKey("remember_credentials")
         val SAVED_USERNAME = stringPreferencesKey("saved_username")
         val SAVED_PASSWORD = stringPreferencesKey("saved_password")
+    }
+
+    private object SecureKeys {
+        const val SAVED_PASSWORD = "secure_saved_password"
     }
 
     val userInfo: Flow<UserInfo> = context.userDataStore.data.map { prefs ->
@@ -73,8 +88,8 @@ class UserPreferences @Inject constructor(
         prefs[Keys.SAVED_USERNAME] ?: ""
     }
 
-    val savedPassword: Flow<String> = context.userDataStore.data.map { prefs ->
-        prefs[Keys.SAVED_PASSWORD] ?: ""
+    val savedPassword: Flow<String> = context.userDataStore.data.map {
+        ""
     }
 
     suspend fun saveUserInfo(
@@ -121,10 +136,10 @@ class UserPreferences @Inject constructor(
             prefs[Keys.REMEMBER_CREDENTIALS] = remember
             if (remember) {
                 prefs[Keys.SAVED_USERNAME] = username
-                prefs[Keys.SAVED_PASSWORD] = encodePassword(password)
+                encryptedPrefs.edit().putString(SecureKeys.SAVED_PASSWORD, password).apply()
             } else {
                 prefs.remove(Keys.SAVED_USERNAME)
-                prefs.remove(Keys.SAVED_PASSWORD)
+                encryptedPrefs.edit().remove(SecureKeys.SAVED_PASSWORD).apply()
             }
         }
     }
@@ -133,19 +148,11 @@ class UserPreferences @Inject constructor(
         context.userDataStore.edit { prefs ->
             prefs.remove(Keys.REMEMBER_CREDENTIALS)
             prefs.remove(Keys.SAVED_USERNAME)
-            prefs.remove(Keys.SAVED_PASSWORD)
         }
+        encryptedPrefs.edit().remove(SecureKeys.SAVED_PASSWORD).apply()
     }
 
-    fun decodePassword(encoded: String): String {
-        return try {
-            String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8)
-        } catch (e: Exception) {
-            ""
-        }
-    }
-
-    private fun encodePassword(password: String): String {
-        return Base64.getEncoder().encodeToString(password.toByteArray(StandardCharsets.UTF_8))
+    fun getPasswordSync(): String? {
+        return encryptedPrefs.getString(SecureKeys.SAVED_PASSWORD, null)
     }
 }

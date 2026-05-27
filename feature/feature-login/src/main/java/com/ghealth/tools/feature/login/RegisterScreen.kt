@@ -105,7 +105,13 @@ fun RegisterScreen(
                         imeAction = ImeAction.Next
                     ),
                     isError = uiState.usernameError != null,
-                    supportingText = uiState.usernameError?.let { { Text(it) } }
+                    supportingText = {
+                        if (uiState.usernameError != null) {
+                            Text(uiState.usernameError!!)
+                        } else {
+                            Text("仅支持字母和数字，3-150个字符")
+                        }
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -140,7 +146,13 @@ fun RegisterScreen(
                         imeAction = ImeAction.Next
                     ),
                     isError = uiState.passwordError != null,
-                    supportingText = uiState.passwordError?.let { { Text(it) } }
+                    supportingText = {
+                        if (uiState.passwordError != null) {
+                            Text(uiState.passwordError!!)
+                        } else {
+                            Text("需包含字母、数字和特殊字符，至少8位")
+                        }
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))

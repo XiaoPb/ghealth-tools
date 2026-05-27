@@ -22,6 +22,7 @@ dependencies {
     api(libs.moshi)
 
     implementation(libs.datastore.preferences)
+    implementation(libs.security.crypto)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

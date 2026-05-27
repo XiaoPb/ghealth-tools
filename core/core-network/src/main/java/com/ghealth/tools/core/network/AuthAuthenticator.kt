@@ -25,6 +25,10 @@ class AuthAuthenticator @Inject constructor(
     @Volatile
     private var retryCount = 0
 
+    private val refreshApi: AuthApi by lazy {
+        createRefreshClient()
+    }
+
     override fun authenticate(route: Route?, response: Response): Request? {
         if (retryCount >= 1) {
             retryCount = 0
@@ -54,7 +58,7 @@ class AuthAuthenticator @Inject constructor(
 
             return try {
                 val newTokenResponse = runBlocking {
-                    createRefreshClient().refreshToken(TokenRefreshRequest(refreshToken))
+                    refreshApi.refreshToken(TokenRefreshRequest(refreshToken))
                 }
 
                 if (newTokenResponse.isSuccessful && newTokenResponse.body()?.data != null) {

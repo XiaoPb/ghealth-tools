@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.login
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,113 +56,127 @@ fun LoginScreen(
     }
 
     Scaffold { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "健康工具",
-                style = MaterialTheme.typography.headlineLarge
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "在线/离线模式",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(32.dp))
-
-            OutlinedTextField(
-                value = uiState.username,
-                onValueChange = viewModel::updateUsername,
-                label = { Text("账号") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                enabled = !uiState.isLoading
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = uiState.password,
-                onValueChange = viewModel::updatePassword,
-                label = { Text("密码") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                enabled = !uiState.isLoading,
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                            contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
-                        )
-                    }
-                }
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Checkbox(
-                    checked = uiState.rememberMe,
-                    onCheckedChange = viewModel::updateRememberMe,
+                Text(
+                    text = "健康工具",
+                    style = MaterialTheme.typography.headlineLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "在线/离线模式",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+
+                OutlinedTextField(
+                    value = uiState.username,
+                    onValueChange = viewModel::updateUsername,
+                    label = { Text("账号") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
                     enabled = !uiState.isLoading
                 )
-                Text(
-                    text = "记住密码",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (uiState.errorMessage != null) {
-                Text(
-                    text = uiState.errorMessage!!,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
                 Spacer(modifier = Modifier.height(16.dp))
-            }
 
-            Button(
-                onClick = { viewModel.login(onLoginSuccess) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !uiState.isLoading
-            ) {
-                if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp
+                OutlinedTextField(
+                    value = uiState.password,
+                    onValueChange = viewModel::updatePassword,
+                    label = { Text("密码") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    enabled = !uiState.isLoading,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                                contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
+                            )
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = uiState.rememberMe,
+                        onCheckedChange = viewModel::updateRememberMe,
+                        enabled = !uiState.isLoading
                     )
-                } else {
-                    Text("在线登录")
+                    Text(
+                        text = "记住密码",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (uiState.errorMessage != null) {
+                    Text(
+                        text = uiState.errorMessage!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                Button(
+                    onClick = { viewModel.login(onLoginSuccess) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isLoading
+                ) {
+                    if (uiState.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("在线登录")
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedButton(
+                    onClick = onOfflineMode,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isLoading
+                ) {
+                    Text("离线模式进入")
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedButton(
+                    onClick = onNavigateToRegister,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isLoading
+                ) {
+                    Text("没有账号？点击注册")
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
 
-            OutlinedButton(
-                onClick = onOfflineMode,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !uiState.isLoading
-            ) {
-                Text("离线模式进入")
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-
-            OutlinedButton(
-                onClick = onNavigateToRegister,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !uiState.isLoading
-            ) {
-                Text("没有账号？点击注册")
-            }
+            Text(
+                text = "※ 本应用仅支持 IPv6 网络环境",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp)
+            )
         }
     }
 }
