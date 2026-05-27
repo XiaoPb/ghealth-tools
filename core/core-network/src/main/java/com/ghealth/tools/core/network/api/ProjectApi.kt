@@ -15,12 +15,12 @@ import retrofit2.http.Path
 
 interface ProjectApi {
     @GET("projects/")
-    suspend fun getProjects(): Response<List<ProjectResponse>>
+    suspend fun getProjects(): Response<ApiResponse<List<ProjectResponse>>>
 
     @GET("projects/{id}/")
     suspend fun getProject(
         @Path("id") projectId: Int
-    ): Response<ProjectResponse>
+    ): Response<ApiResponse<ProjectResponse>>
 
     @POST("projects/")
     suspend fun createProject(

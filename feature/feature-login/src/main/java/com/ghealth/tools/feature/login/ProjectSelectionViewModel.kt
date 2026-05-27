@@ -46,8 +46,8 @@ class ProjectSelectionViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val response = projectApi.getProjects()
-                if (response.isSuccessful && response.body() != null) {
-                    val projects = response.body()!!
+                if (response.isSuccessful) {
+                    val projects = response.body()?.data ?: emptyList()
                     _uiState.update {
                         it.copy(
                             isLoading = false,
