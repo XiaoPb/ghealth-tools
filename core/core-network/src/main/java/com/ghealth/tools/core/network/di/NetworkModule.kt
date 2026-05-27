@@ -18,6 +18,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import timber.log.Timber
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -77,12 +78,14 @@ object NetworkModule {
         authInterceptor: AuthInterceptor,
         authAuthenticator: AuthAuthenticator
     ): OkHttpClient {
-        val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = if (com.ghealth.tools.core.network.BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BODY
-            } else {
-                HttpLoggingInterceptor.Level.NONE
+        val loggingInterceptor = HttpLoggingInterceptor(
+            object : HttpLoggingInterceptor.Logger {
+                override fun log(message: String) {
+                    Timber.tag("API").d(message)
+                }
             }
+        ).apply {
+            level = HttpLoggingInterceptor.Level.BODY
         }
 
         return OkHttpClient.Builder()
