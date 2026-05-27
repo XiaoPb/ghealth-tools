@@ -48,6 +48,7 @@ import com.ghealth.tools.core.network.model.ProjectResponse
 fun ProjectSelectionScreen(
     onProjectSelected: () -> Unit,
     onSkip: () -> Unit,
+    onCreateProject: () -> Unit,
     viewModel: ProjectSelectionViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -116,10 +117,14 @@ fun ProjectSelectionScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "请在网页端创建项目",
+                                text = "创建一个新项目开始使用",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(onClick = onCreateProject) {
+                                Text("创建项目")
+                            }
                         }
                     }
                 }

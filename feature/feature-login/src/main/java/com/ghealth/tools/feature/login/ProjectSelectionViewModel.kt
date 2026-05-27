@@ -52,8 +52,8 @@ class ProjectSelectionViewModel @Inject constructor(
             try {
                 val response = projectApi.getProjects()
                 
-                if (response.isSuccessful && response.body()?.data != null) {
-                    val projects = response.body()!!.data!!
+                if (response.isSuccessful && response.body() != null) {
+                    val projects = response.body()!!.results
                     _uiState.update { 
                         it.copy(
                             projects = projects,
@@ -61,7 +61,7 @@ class ProjectSelectionViewModel @Inject constructor(
                         )
                     }
                 } else {
-                    val errorMsg = response.body()?.message ?: "加载项目失败: ${response.code()}"
+                    val errorMsg = "加载项目失败: ${response.code()}"
                     _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
                 }
             } catch (e: Exception) {

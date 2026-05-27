@@ -11,6 +11,14 @@ data class ApiResponse<T>(
 )
 
 @JsonClass(generateAdapter = true)
+data class PaginatedListResponse<T>(
+    val count: Int,
+    val next: String?,
+    val previous: String?,
+    val results: List<T>
+)
+
+@JsonClass(generateAdapter = true)
 data class LoginRequest(
     val username: String,
     val password: String
@@ -117,4 +125,13 @@ data class CsvFileResponse(
     @Json(name = "uploaded_by") val uploadedBy: Int,
     @Json(name = "uploaded_by_name") val uploadedByName: String,
     @Json(name = "uploaded_at") val uploadedAt: String
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateProjectRequest(
+    val name: String,
+    @Json(name = "chip_model") val chipModel: String,
+    @Json(name = "hardware_version") val hardwareVersion: String,
+    val description: String = "",
+    @Json(name = "test_frequency") val testFrequency: String = ""
 )
