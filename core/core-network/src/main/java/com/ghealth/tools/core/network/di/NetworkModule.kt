@@ -9,6 +9,9 @@ import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.network.api.UploadApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import com.squareup.moshi.JsonAdapter
+import com.squareup.moshi.JsonReader
+import com.squareup.moshi.JsonWriter
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -43,6 +46,16 @@ object NetworkModule {
     @Singleton
     fun provideMoshi(): Moshi {
         return Moshi.Builder()
+            .add(Unit::class.java, object : JsonAdapter<Unit>() {
+                override fun fromJson(reader: JsonReader): Unit {
+                    reader.skipValue()
+                    return Unit
+                }
+
+                override fun toJson(writer: JsonWriter, value: Unit?) {
+                    writer.nullValue()
+                }
+            })
             .addLast(KotlinJsonAdapterFactory())
             .build()
     }
