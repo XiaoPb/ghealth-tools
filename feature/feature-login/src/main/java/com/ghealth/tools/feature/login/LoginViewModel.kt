@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.model.DeviceType
+import com.ghealth.tools.core.network.ApiErrorParser
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
 import com.ghealth.tools.core.network.model.LoginRequest
@@ -29,7 +30,8 @@ class LoginViewModel @Inject constructor(
     private val blePreferences: BlePreferences,
     private val userPreferences: UserPreferences,
     private val tokenManager: TokenManager,
-    private val authApi: AuthApi
+    private val authApi: AuthApi,
+    private val apiErrorParser: ApiErrorParser
 ) : ViewModel() {
 
     private val _selectedChip = MutableStateFlow(DeviceType.GH3036)
@@ -88,7 +90,7 @@ class LoginViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false) }
                     onSuccess()
                 } else {
-                    val errorMsg = response.body()?.message ?: "登录失败: ${response.code()}"
+                    val errorMsg = apiErrorParser.parseErrors(response)
                     _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
                     onError(errorMsg)
                 }

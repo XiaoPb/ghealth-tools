@@ -3,6 +3,7 @@ package com.ghealth.tools.feature.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.core.datastore.UserPreferences
+import com.ghealth.tools.core.network.ApiErrorParser
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
 import com.ghealth.tools.core.network.model.LoginRequest
@@ -43,7 +44,8 @@ data class RegisterUiState(
 class RegisterViewModel @Inject constructor(
     private val userPreferences: UserPreferences,
     private val tokenManager: TokenManager,
-    private val authApi: AuthApi
+    private val authApi: AuthApi,
+    private val apiErrorParser: ApiErrorParser
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RegisterUiState())
@@ -141,7 +143,7 @@ class RegisterViewModel @Inject constructor(
                         }
                     }
                 } else {
-                    val errorMsg = response.body()?.message ?: "注册失败: ${response.code()}"
+                    val errorMsg = apiErrorParser.parseErrors(response)
                     _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
                     onError(errorMsg)
                 }
