@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ghealth.tools.core.network.model.ProjectResponse
+import com.ghealth.tools.core.ui.component.ErrorEffect
 
 @OptIn(ExperimentalMaterial3WindowSizeClassApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +57,12 @@ fun ProjectSelectionScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+
+    ErrorEffect(
+        errorMessage = uiState.errorMessage,
+        onDismiss = viewModel::clearError,
+        useToast = true
+    )
 
     Scaffold(
         topBar = {
@@ -97,23 +104,6 @@ fun ProjectSelectionScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator()
-                    }
-                }
-                uiState.errorMessage != null -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = uiState.errorMessage!!,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { viewModel.loadProjects() }) {
-                                Text("重试")
-                            }
-                        }
                     }
                 }
                 uiState.projects.isEmpty() -> {

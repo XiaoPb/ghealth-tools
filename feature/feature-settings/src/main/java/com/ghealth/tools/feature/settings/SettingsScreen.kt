@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ghealth.tools.core.ui.component.ErrorEffect
 import com.ghealth.tools.core.ui.adaptive.CONTENT_MAX_WIDTH
 import com.ghealth.tools.core.ui.adaptive.isWide
 import com.ghealth.tools.core.ui.theme.ThemeMode
@@ -81,12 +82,11 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(state.operationMessage) {
-        state.operationMessage?.let { msg ->
-            Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
-            viewModel.clearOperationMessage()
-        }
-    }
+    ErrorEffect(
+        errorMessage = state.operationMessage,
+        onDismiss = viewModel::clearOperationMessage,
+        useToast = true
+    )
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 

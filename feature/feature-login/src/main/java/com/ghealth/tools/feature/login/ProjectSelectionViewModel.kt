@@ -60,6 +60,10 @@ class ProjectSelectionViewModel @Inject constructor(
         }
     }
 
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
     fun selectProject(project: ProjectResponse) {
         _uiState.update { it.copy(selectedProject = project) }
     }
