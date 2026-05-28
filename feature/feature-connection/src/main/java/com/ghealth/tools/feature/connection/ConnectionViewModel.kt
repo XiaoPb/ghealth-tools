@@ -117,8 +117,10 @@ class ConnectionViewModel @Inject constructor(
                 }
 
                 if (devices.isEmpty() && _uiState.value.dataMonitorState.isMonitoring) {
-                    stopMonitoring()
-                    viewModelScope.launch { recordingManager.endSession() }
+                    viewModelScope.launch {
+                        recordingManager.endSession()
+                        stopMonitoring()
+                    }
                 }
 
                 _uiState.update { it.copy(connectedDevices = devices) }
