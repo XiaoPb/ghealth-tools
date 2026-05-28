@@ -19,3 +19,5 @@ AGENTS.md
 debug/
 keystore.properties
 *.keystore.kotlin/errors/
+docs/superpowers/
+.kotlin/errors/

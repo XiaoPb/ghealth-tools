@@ -266,7 +266,8 @@ class DemoViewModel @Inject constructor(
 
         detectChipType()
 
-        val role = connectionManager.devices.value[deviceAddress]?.role ?: DeviceRole.MASTER
+        val devicesSnapshot = connectionManager.devices.value
+        val role = devicesSnapshot[deviceAddress]?.role ?: DeviceRole.MASTER
         val roleResults = lastAlgoResultsByRole.getOrPut(funcMode) { mutableMapOf() }
         val newResult = parseAlgorithmResult(funcMode, frame.algoData)
         if (newResult.hasData) {
@@ -330,7 +331,7 @@ class DemoViewModel @Inject constructor(
         }
 
         if (recordingManager.isSessionActive.value) {
-            val role = when (connectionManager.devices.value[deviceAddress]?.role) {
+            val role = when (devicesSnapshot[deviceAddress]?.role) {
                 DeviceRole.MASTER -> StorageDeviceRole.MASTER
                 DeviceRole.SLAVE -> StorageDeviceRole.SLAVE
                 DeviceRole.COMPARE -> StorageDeviceRole.COMPARE
