@@ -25,6 +25,7 @@ class BlePreferences @Inject constructor(
         val LAST_DEVICE_ADDRESS = stringPreferencesKey("last_device_address")
         val AUTO_RECONNECT = booleanPreferencesKey("auto_reconnect")
         val SELECTED_CHIP = stringPreferencesKey("selected_chip")
+        val SELECTED_PROJECT_CHIP = stringPreferencesKey("selected_project_chip")
         val THEME_MODE = stringPreferencesKey("theme_mode")
     }
 
@@ -50,6 +51,10 @@ class BlePreferences @Inject constructor(
 
     val selectedChip: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[Keys.SELECTED_CHIP] ?: "gh3036"
+    }
+
+    val selectedProjectChip: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.SELECTED_PROJECT_CHIP] ?: ""
     }
 
     val themeMode: Flow<String> = context.dataStore.data.map { prefs ->
@@ -78,6 +83,14 @@ class BlePreferences @Inject constructor(
 
     suspend fun setSelectedChip(chipName: String) {
         context.dataStore.edit { it[Keys.SELECTED_CHIP] = chipName }
+    }
+
+    suspend fun setSelectedProjectChip(chipModel: String) {
+        context.dataStore.edit { it[Keys.SELECTED_PROJECT_CHIP] = chipModel }
+    }
+
+    suspend fun clearSelectedProjectChip() {
+        context.dataStore.edit { it.remove(Keys.SELECTED_PROJECT_CHIP) }
     }
 
     suspend fun setThemeMode(mode: String) {

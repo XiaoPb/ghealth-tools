@@ -2,6 +2,7 @@ package com.ghealth.tools.feature.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.network.ConfigSyncManager
 import com.ghealth.tools.core.network.api.ProjectApi
@@ -27,6 +28,7 @@ data class ProjectSelectionUiState(
 class ProjectSelectionViewModel @Inject constructor(
     private val projectApi: ProjectApi,
     private val userPreferences: UserPreferences,
+    private val blePreferences: BlePreferences,
     private val configSyncManager: ConfigSyncManager
 ) : ViewModel() {
 
@@ -80,6 +82,7 @@ class ProjectSelectionViewModel @Inject constructor(
             _uiState.update { it.copy(isConfirming = true) }
             try {
                 userPreferences.setSelectedProject(project.id, project.name)
+                blePreferences.setSelectedProjectChip(project.chipModel)
                 configSyncManager.fullSync(project.id, project.name)
                 _uiState.update { it.copy(isConfirming = false) }
                 onSuccess()

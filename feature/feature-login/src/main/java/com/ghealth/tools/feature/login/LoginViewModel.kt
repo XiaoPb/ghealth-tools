@@ -2,6 +2,7 @@ package com.ghealth.tools.feature.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.SavedAccount
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.datastore.UserSessionManager
@@ -36,7 +37,8 @@ class LoginViewModel @Inject constructor(
     private val tokenManager: TokenManager,
     private val sessionManager: UserSessionManager,
     private val apiErrorParser: ApiErrorParser,
-    private val userPreferences: UserPreferences
+    private val userPreferences: UserPreferences,
+    private val blePreferences: BlePreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -162,5 +164,6 @@ class LoginViewModel @Inject constructor(
         }
         tokenManager.clearTokens()
         userPreferences.clearUserInfo()
+        blePreferences.clearSelectedProjectChip()
     }
 }

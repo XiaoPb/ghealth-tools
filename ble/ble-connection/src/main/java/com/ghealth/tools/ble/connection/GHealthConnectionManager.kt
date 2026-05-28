@@ -483,7 +483,8 @@ class BleConnectionManager @Inject constructor(
     }
 
     private suspend fun createExecutor(address: String): Pair<GHealthExecutor, DeviceType> {
-        val chipName = blePreferences.selectedChip.first()
+        val projectChip = blePreferences.selectedProjectChip.first()
+        val chipName = if (projectChip.isNotEmpty()) projectChip else blePreferences.selectedChip.first()
         val deviceType = DeviceType.entries.find { it.chipName == chipName } ?: DeviceType.GH3036
         val executor: GHealthExecutor = when (deviceType) {
             DeviceType.GH3300 -> Gh3300Executor()
