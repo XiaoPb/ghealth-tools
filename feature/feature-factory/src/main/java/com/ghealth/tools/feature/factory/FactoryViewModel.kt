@@ -242,9 +242,7 @@ class FactoryViewModel @Inject constructor(
 
     private fun monitorChipChanges() {
         viewModelScope.launch {
-            blePreferences.selectedProjectChip.combine(blePreferences.selectedChip) { projectChip, offlineChip ->
-                if (projectChip.isNotEmpty()) projectChip else offlineChip
-            }.collect { chipName ->
+            blePreferences.effectiveChip.collect { chipName ->
                 _uiState.update { it.copy(chipType = chipName) }
             }
         }

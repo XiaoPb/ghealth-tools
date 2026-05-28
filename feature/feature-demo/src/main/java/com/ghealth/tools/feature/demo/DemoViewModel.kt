@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
@@ -81,8 +82,7 @@ class DemoViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            blePreferences.selectedProjectChip.combine(blePreferences.selectedChip) { projectChip, offlineChip ->
-                val chipName = if (projectChip.isNotEmpty()) projectChip else offlineChip
+            blePreferences.effectiveChip.map { chipName ->
                 DeviceType.entries.find { it.chipName == chipName } ?: DeviceType.GH3036
             }.collect { deviceType ->
                 _uiState.update { it.copy(chipType = deviceType) }

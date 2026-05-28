@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -55,6 +56,10 @@ class BlePreferences @Inject constructor(
 
     val selectedProjectChip: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[Keys.SELECTED_PROJECT_CHIP] ?: ""
+    }
+
+    val effectiveChip: Flow<String> = selectedProjectChip.combine(selectedChip) { projectChip, offlineChip ->
+        if (projectChip.isNotEmpty()) projectChip else offlineChip
     }
 
     val themeMode: Flow<String> = context.dataStore.data.map { prefs ->
