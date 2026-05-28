@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,10 +64,12 @@ class FactoryViewModel @Inject constructor(
 
             val projects = withContext(Dispatchers.IO) {
                 val isOnline = configPathProvider.isOnlineMode.first()
-                if (!isOnline) {
+                if (isOnline) {
+                    loadOnlineProjects()
+                } else {
                     copyFactoryConfigsToStorage()
+                    loadAllProjects()
                 }
-                loadAllProjects()
             }
 
             _uiState.update {
@@ -77,6 +80,50 @@ class FactoryViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private suspend fun loadOnlineProjects(): List<ProjectConfig> {
+        val projects = mutableListOf<ProjectConfig>()
+        try {
+            val scanDir = configPathProvider.getFactoryScanDir()
+            if (!scanDir.exists()) return emptyList()
+
+            val projectDirs = scanDir.listFiles()?.filter { it.isDirectory } ?: return emptyList()
+            for (projectDir in projectDirs) {
+                val configFile = projectDir.listFiles()?.firstOrNull { it.extension == "json" }
+                if (configFile == null) continue
+
+                val jsonContent = configFile.readText()
+                val config = configJsonParser.parseOrNull(jsonContent) ?: continue
+
+                val registerConfigs = mutableMapOf<String, RegisterConfig>()
+                val allFiles = projectDir.listFiles() ?: emptyArray()
+                for ((testKey, testDef) in config.tests) {
+                    if (!testDef.enabled) continue
+                    val registerFile = allFiles.firstOrNull { f ->
+                        f.name.startsWith(testKey, ignoreCase = true) &&
+                                (f.extension == "config" || f.extension == "ini")
+                    }
+                    if (registerFile != null) {
+                        val content = registerFile.readText()
+                        registerConfigs[testKey] = registerConfigParser.parseByChip(
+                            content, config.chip, registerFile.name
+                        )
+                    }
+                }
+
+                projects.add(
+                    ProjectConfig(
+                        projectName = config.project,
+                        chip = config.chip,
+                        factoryConfig = config,
+                        registerConfigs = registerConfigs
+                    )
+                )
+            }
+        } catch (_: Exception) {
+        }
+        return projects
     }
 
     private fun loadAllProjects(): List<ProjectConfig> {
@@ -195,7 +242,9 @@ class FactoryViewModel @Inject constructor(
 
     private fun monitorChipChanges() {
         viewModelScope.launch {
-            blePreferences.selectedChip.collect { chipName ->
+            blePreferences.selectedProjectChip.combine(blePreferences.selectedChip) { projectChip, offlineChip ->
+                if (projectChip.isNotEmpty()) projectChip else offlineChip
+            }.collect { chipName ->
                 _uiState.update { it.copy(chipType = chipName) }
             }
         }
