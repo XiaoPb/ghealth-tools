@@ -77,6 +77,7 @@ enum class TopLevelRoute(val route: String, val label: String, val icon: ImageVe
 @Composable
 fun GHealthNavHost() {
     val navController = rememberNavController()
+    val loginViewModel: com.ghealth.tools.feature.login.LoginViewModel = hiltViewModel()
 
     NavHost(navController = navController, startDestination = Routes.LOGIN) {
         composable(Routes.LOGIN) {
@@ -116,7 +117,6 @@ fun GHealthNavHost() {
             )
         }
         composable(Routes.PROJECT_SELECTION) {
-            val loginViewModel: com.ghealth.tools.feature.login.LoginViewModel = hiltViewModel()
             val scope = rememberCoroutineScope()
             ProjectSelectionScreen(
                 onProjectSelected = {
@@ -171,7 +171,6 @@ fun GHealthNavHost() {
         }
         composable(Routes.MAIN) {
             val outerNavController = navController
-            val loginViewModel: com.ghealth.tools.feature.login.LoginViewModel = hiltViewModel()
             val scope = rememberCoroutineScope()
             MainScreen(
                 onLogout = {
