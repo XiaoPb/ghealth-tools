@@ -62,6 +62,9 @@ import com.ghealth.tools.feature.demo.DemoViewModel
 import com.ghealth.tools.feature.login.ProjectConfigUploadScreen
 import com.ghealth.tools.feature.login.ChipSelectionScreen
 import com.ghealth.tools.feature.login.LoginScreen
+import com.ghealth.tools.feature.login.ProjectManageScreen
+import com.ghealth.tools.feature.login.ProjectEditScreen
+import com.ghealth.tools.feature.login.CsvFileListScreen
 import com.ghealth.tools.feature.login.ProjectSelectionScreen
 import com.ghealth.tools.feature.login.ProjectCreateScreen
 import com.ghealth.tools.feature.login.RegisterScreen
@@ -169,6 +172,45 @@ fun GHealthNavHost() {
                 }
             )
         }
+        composable(Routes.PROJECT_MANAGE) {
+            ProjectManageScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onEditProject = { id, _ ->
+                    navController.navigate(Routes.projectEdit(id))
+                },
+                onViewCsvFiles = { id, name ->
+                    navController.navigate(Routes.csvFileList(id, name))
+                }
+            )
+        }
+        composable(
+            Routes.PROJECT_EDIT,
+            arguments = listOf(
+                navArgument("projectId") { type = NavType.IntType }
+            )
+        ) { backStackEntry ->
+            val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
+            ProjectEditScreen(
+                projectId = projectId,
+                onNavigateBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
+            )
+        }
+        composable(
+            Routes.CSV_FILE_LIST,
+            arguments = listOf(
+                navArgument("projectId") { type = NavType.IntType },
+                navArgument("projectName") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
+            val projectName = backStackEntry.arguments?.getString("projectName") ?: ""
+            CsvFileListScreen(
+                projectId = projectId,
+                projectName = projectName,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
         composable(Routes.MAIN) {
             val outerNavController = navController
             val scope = rememberCoroutineScope()
@@ -186,6 +228,9 @@ fun GHealthNavHost() {
                         popUpTo(Routes.MAIN) { inclusive = true }
                         launchSingleTop = true
                     }
+                },
+                onNavigateToProjectManage = {
+                    outerNavController.navigate(Routes.PROJECT_MANAGE)
                 }
             )
         }
@@ -194,7 +239,11 @@ fun GHealthNavHost() {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
-fun MainScreen(onLogout: () -> Unit, onSwitchProject: () -> Unit = {}) {
+fun MainScreen(
+    onLogout: () -> Unit,
+    onSwitchProject: () -> Unit = {},
+    onNavigateToProjectManage: () -> Unit = {}
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -207,9 +256,9 @@ fun MainScreen(onLogout: () -> Unit, onSwitchProject: () -> Unit = {}) {
     val demoState by demoViewModel.uiState.collectAsState()
 
     if (isWide) {
-        WideMainLayout(navController, currentDestination, demoViewModel, demoState, onLogout, onSwitchProject)
+        WideMainLayout(navController, currentDestination, demoViewModel, demoState, onLogout, onSwitchProject, onNavigateToProjectManage)
     } else {
-        CompactMainLayout(navController, currentDestination, isTopLevelRoute, demoViewModel, demoState, onLogout, onSwitchProject)
+        CompactMainLayout(navController, currentDestination, isTopLevelRoute, demoViewModel, demoState, onLogout, onSwitchProject, onNavigateToProjectManage)
     }
 
     if (demoState.showRestartConfigDialog) {
@@ -232,7 +281,8 @@ private fun WideMainLayout(
     demoViewModel: DemoViewModel,
     demoState: DemoUiState,
     onLogout: () -> Unit,
-    onSwitchProject: () -> Unit
+    onSwitchProject: () -> Unit,
+    onNavigateToProjectManage: () -> Unit
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail(
@@ -327,7 +377,8 @@ private fun WideMainLayout(
                         onNavigateToDeviceinfo = {
                             navController.navigate(Routes.Main.DEVICE_INFO)
                         },
-                        onSwitchProject = onSwitchProject
+                        onSwitchProject = onSwitchProject,
+                        onNavigateToProjectManage = onNavigateToProjectManage
                     )
                 }
                 composable(Routes.Main.DEVICE_INFO) {
@@ -356,7 +407,8 @@ private fun CompactMainLayout(
     demoViewModel: DemoViewModel,
     demoState: DemoUiState,
     onLogout: () -> Unit,
-    onSwitchProject: () -> Unit
+    onSwitchProject: () -> Unit,
+    onNavigateToProjectManage: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -450,7 +502,8 @@ private fun CompactMainLayout(
                     onNavigateToDeviceinfo = {
                         navController.navigate(Routes.Main.DEVICE_INFO)
                     },
-                    onSwitchProject = onSwitchProject
+                    onSwitchProject = onSwitchProject,
+                    onNavigateToProjectManage = onNavigateToProjectManage
                 )
             }
             composable(Routes.Main.DEVICE_INFO) {

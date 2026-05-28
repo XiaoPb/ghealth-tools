@@ -68,6 +68,7 @@ import com.ghealth.tools.core.ui.theme.ThemeMode
 fun SettingsScreen(
     onNavigateToDeviceinfo: () -> Unit = {},
     onSwitchProject: () -> Unit = {},
+    onNavigateToProjectManage: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
