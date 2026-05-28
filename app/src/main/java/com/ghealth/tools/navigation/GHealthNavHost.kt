@@ -184,6 +184,7 @@ fun GHealthNavHost() {
                 },
                 onSwitchProject = {
                     outerNavController.navigate("project_selection") {
+                        popUpTo("main") { inclusive = true }
                         launchSingleTop = true
                     }
                 }
