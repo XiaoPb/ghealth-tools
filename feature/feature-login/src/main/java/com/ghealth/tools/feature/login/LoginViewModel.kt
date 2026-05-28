@@ -2,6 +2,7 @@ package com.ghealth.tools.feature.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ghealth.tools.core.datastore.SavedAccount
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.datastore.UserSessionManager
 import com.ghealth.tools.core.network.ApiErrorParser
@@ -24,7 +25,9 @@ data class LoginUiState(
     val rememberMe: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val isLoginSuccess: Boolean = false
+    val isLoginSuccess: Boolean = false,
+    val savedAccounts: List<SavedAccount> = emptyList(),
+    val showAccountDropdown: Boolean = false
 )
 
 @HiltViewModel
@@ -44,20 +47,36 @@ class LoginViewModel @Inject constructor(
     }
 
     private fun loadSavedCredentials() {
-        viewModelScope.launch {
-            val remember = userPreferences.rememberCredentials.firstOrNull() ?: false
-            if (remember) {
-                val username = userPreferences.savedUsername.firstOrNull() ?: ""
-                val password = userPreferences.getPasswordSync() ?: ""
-                _uiState.update {
-                    it.copy(
-                        username = username,
-                        password = password,
-                        rememberMe = true
-                    )
-                }
+        val accounts = userPreferences.getSavedAccounts()
+        if (accounts.isNotEmpty()) {
+            val latest = accounts.first()
+            _uiState.update {
+                it.copy(
+                    username = latest.username,
+                    password = latest.password,
+                    rememberMe = true,
+                    savedAccounts = accounts
+                )
             }
         }
+    }
+
+    fun selectAccount(account: SavedAccount) {
+        _uiState.update {
+            it.copy(
+                username = account.username,
+                password = account.password,
+                showAccountDropdown = false
+            )
+        }
+    }
+
+    fun toggleAccountDropdown() {
+        _uiState.update { it.copy(showAccountDropdown = !it.showAccountDropdown) }
+    }
+
+    fun dismissAccountDropdown() {
+        _uiState.update { it.copy(showAccountDropdown = false) }
     }
 
     fun updateUsername(username: String) {
@@ -111,7 +130,13 @@ class LoginViewModel @Inject constructor(
                         password = state.password,
                         remember = state.rememberMe
                     )
-                    _uiState.update { it.copy(isLoading = false, isLoginSuccess = true) }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isLoginSuccess = true,
+                            savedAccounts = userPreferences.getSavedAccounts()
+                        )
+                    }
                     onSuccess()
                 } else {
                     val errorMsg = apiErrorParser.parseErrors(response)

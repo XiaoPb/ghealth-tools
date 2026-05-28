@@ -14,8 +14,16 @@ import com.ghealth.tools.core.datastore.UserInfo
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
+
+data class SavedAccount(
+    val username: String,
+    val password: String,
+    val lastUsed: Long
+)
 
 data class UserInfo(
     val id: Int = 0,
@@ -56,7 +64,7 @@ class UserPreferences @Inject constructor(
     }
 
     private object SecureKeys {
-        const val SAVED_PASSWORD = "secure_saved_password"
+        const val SAVED_ACCOUNTS = "secure_saved_accounts"
     }
 
     val userInfo: Flow<UserInfo> = context.userDataStore.data.map { prefs ->
@@ -90,6 +98,27 @@ class UserPreferences @Inject constructor(
 
     val savedPassword: Flow<String> = context.userDataStore.data.map {
         ""
+    }
+
+    fun getSavedAccounts(): List<SavedAccount> {
+        val json = encryptedPrefs.getString(SecureKeys.SAVED_ACCOUNTS, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { i ->
+                val obj = array.getJSONObject(i)
+                SavedAccount(
+                    username = obj.getString("u"),
+                    password = obj.getString("p"),
+                    lastUsed = obj.getLong("t")
+                )
+            }.sortedByDescending { it.lastUsed }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun getPasswordForAccount(username: String): String? {
+        return getSavedAccounts().find { it.username == username }?.password
     }
 
     suspend fun saveUserInfo(
@@ -136,10 +165,27 @@ class UserPreferences @Inject constructor(
             prefs[Keys.REMEMBER_CREDENTIALS] = remember
             if (remember) {
                 prefs[Keys.SAVED_USERNAME] = username
-                encryptedPrefs.edit().putString(SecureKeys.SAVED_PASSWORD, password).apply()
+                val accounts = getSavedAccounts().toMutableList()
+                val existing = accounts.indexOfFirst { it.username == username }
+                val now = System.currentTimeMillis()
+                if (existing >= 0) {
+                    accounts[existing] = accounts[existing].copy(password = password, lastUsed = now)
+                } else {
+                    accounts.add(SavedAccount(username = username, password = password, lastUsed = now))
+                }
+                val json = JSONArray().apply {
+                    accounts.forEach { account ->
+                        put(JSONObject().apply {
+                            put("u", account.username)
+                            put("p", account.password)
+                            put("t", account.lastUsed)
+                        })
+                    }
+                }
+                encryptedPrefs.edit().putString(SecureKeys.SAVED_ACCOUNTS, json.toString()).apply()
             } else {
                 prefs.remove(Keys.SAVED_USERNAME)
-                encryptedPrefs.edit().remove(SecureKeys.SAVED_PASSWORD).apply()
+                encryptedPrefs.edit().remove(SecureKeys.SAVED_ACCOUNTS).apply()
             }
         }
     }
@@ -149,10 +195,11 @@ class UserPreferences @Inject constructor(
             prefs.remove(Keys.REMEMBER_CREDENTIALS)
             prefs.remove(Keys.SAVED_USERNAME)
         }
-        encryptedPrefs.edit().remove(SecureKeys.SAVED_PASSWORD).apply()
+        encryptedPrefs.edit().remove(SecureKeys.SAVED_ACCOUNTS).apply()
     }
 
     fun getPasswordSync(): String? {
-        return encryptedPrefs.getString(SecureKeys.SAVED_PASSWORD, null)
+        val accounts = getSavedAccounts()
+        return accounts.firstOrNull()?.password
     }
 }

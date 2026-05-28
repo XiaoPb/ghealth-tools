@@ -17,8 +17,14 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -39,6 +45,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
@@ -80,14 +87,40 @@ fun LoginScreen(
                 )
                 Spacer(modifier = Modifier.height(32.dp))
 
-                OutlinedTextField(
-                    value = uiState.username,
-                    onValueChange = viewModel::updateUsername,
-                    label = { Text("账号") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    enabled = !uiState.isLoading
-                )
+                ExposedDropdownMenuBox(
+                    expanded = uiState.showAccountDropdown && uiState.savedAccounts.isNotEmpty(),
+                    onExpandedChange = { viewModel.toggleAccountDropdown() }
+                ) {
+                    OutlinedTextField(
+                        value = uiState.username,
+                        onValueChange = viewModel::updateUsername,
+                        label = { Text("账号") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(MenuAnchorType.PrimaryEditable),
+                        singleLine = true,
+                        enabled = !uiState.isLoading,
+                        trailingIcon = {
+                            if (uiState.savedAccounts.isNotEmpty()) {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = uiState.showAccountDropdown
+                                )
+                            }
+                        }
+                    )
+                    DropdownMenu(
+                        expanded = uiState.showAccountDropdown && uiState.savedAccounts.isNotEmpty(),
+                        onDismissRequest = { viewModel.dismissAccountDropdown() }
+                    ) {
+                        uiState.savedAccounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.username) },
+                                onClick = { viewModel.selectAccount(account) },
+                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedTextField(
