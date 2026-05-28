@@ -28,6 +28,8 @@ data class StoragePath(
     val spo2Version: String = "1.0.0",
     val nadtVersion: String = "1.0.0",
     val hrvVersion: String = "1.0.0",
+    val projectName: String = "",
+    val projectId: Int = 0,
     val date: Date = Date()
 ) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US)
@@ -76,7 +78,12 @@ data class StoragePath(
             append("\"HR-Version\":\"$hrVersion\",")
             append("\"SPO2-Version\":\"$spo2Version\",")
             append("\"NADT-Version\":\"$nadtVersion\",")
-            append("\"HRV-Version\":\"$hrvVersion\"}")
+            append("\"HRV-Version\":\"$hrvVersion\",")
+            append("\"project_name\":\"$projectName\",")
+            append("\"project_id\":$projectId,")
+            append("\"tester\":\"$tester\",")
+            append("\"device_role\":\"${deviceRole.name}\",")
+            append("\"mode\":\"$mode\"}")
         }
     }
 }
