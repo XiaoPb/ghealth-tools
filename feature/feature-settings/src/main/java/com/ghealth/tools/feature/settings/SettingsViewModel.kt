@@ -80,7 +80,7 @@ class SettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            blePreferences.selectedChip.collect { chip ->
+            blePreferences.effectiveChip.collect { chip ->
                 _uiState.update { it.copy(selectedChip = chip) }
             }
         }
