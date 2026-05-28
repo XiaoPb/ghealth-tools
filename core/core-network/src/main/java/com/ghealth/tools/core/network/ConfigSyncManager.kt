@@ -44,20 +44,21 @@ class ConfigSyncManager @Inject constructor(
     suspend fun fullSync(
         projectId: Int,
         projectName: String
-    ): Result<Unit> {
+    ) {
         val prodResult = syncProductionTestConfig(projectId, projectName)
         val regularResult = syncRegularConfigs(projectId, projectName)
 
-        return if (prodResult.isSuccess && regularResult.isSuccess) {
+        if (prodResult.isSuccess && regularResult.isSuccess) {
             Timber.i("Full sync completed for project: $projectName")
-            Result.success(Unit)
-        } else {
-            val errors = listOfNotNull(
-                prodResult.exceptionOrNull()?.message,
-                regularResult.exceptionOrNull()?.message
-            )
-            Timber.w("Full sync partially failed for project: $projectName, errors: $errors")
-            Result.success(Unit)
+            return
         }
+
+        val errors = listOfNotNull(
+            prodResult.exceptionOrNull()?.message,
+            regularResult.exceptionOrNull()?.message
+        )
+        val message = "Full sync partially failed for project: $projectName, errors: $errors"
+        Timber.w(message)
+        throw IllegalStateException(message)
     }
 }
