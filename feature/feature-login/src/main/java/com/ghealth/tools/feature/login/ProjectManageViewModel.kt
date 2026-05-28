@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.core.network.ApiErrorParser
 import com.ghealth.tools.core.network.api.ProjectApi
+import com.ghealth.tools.core.network.model.ArchiveActionRequest
 import com.ghealth.tools.core.network.model.ProjectResponse
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,10 @@ data class ProjectManageUiState(
     val isLoading: Boolean = false,
     val isDeleting: Boolean = false,
     val deletingProjectId: Int? = null,
+    val isArchiving: Boolean = false,
+    val archivingProjectId: Int? = null,
+    val isExporting: Boolean = false,
+    val exportingProjectId: Int? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null
 )
@@ -90,6 +95,91 @@ class ProjectManageViewModel @Inject constructor(
                         deletingProjectId = null,
                         errorMessage = "删除失败: ${e.message}"
                     )
+                }
+            }
+        }
+    }
+
+    fun archiveProject(project: ProjectResponse) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isArchiving = true, archivingProjectId = project.id) }
+            try {
+                val response = projectApi.projectAction(project.id, ArchiveActionRequest("archive"))
+                if (response.isSuccessful) {
+                    _uiState.update {
+                        it.copy(
+                            isArchiving = false,
+                            archivingProjectId = null,
+                            projects = it.projects.filter { p -> p.id != project.id },
+                            successMessage = "项目「${project.name}」已归档"
+                        )
+                    }
+                } else {
+                    val msg = when (response.code()) {
+                        403 -> "无权限操作此项目"
+                        404 -> "项目不存在"
+                        else -> "归档失败(${response.code()})"
+                    }
+                    _uiState.update {
+                        it.copy(isArchiving = false, archivingProjectId = null, errorMessage = msg)
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Archive project failed")
+                _uiState.update {
+                    it.copy(isArchiving = false, archivingProjectId = null, errorMessage = "归档失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun restoreProject(project: ProjectResponse) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isArchiving = true, archivingProjectId = project.id) }
+            try {
+                val response = projectApi.projectAction(project.id, ArchiveActionRequest("restore"))
+                if (response.isSuccessful) {
+                    loadProjects()
+                    _uiState.update {
+                        it.copy(isArchiving = false, archivingProjectId = null, successMessage = "项目「${project.name}」已恢复")
+                    }
+                } else {
+                    val msg = when (response.code()) {
+                        403 -> "无权限操作此项目"
+                        404 -> "项目不存在"
+                        else -> "恢复失败(${response.code()})"
+                    }
+                    _uiState.update {
+                        it.copy(isArchiving = false, archivingProjectId = null, errorMessage = msg)
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Restore project failed")
+                _uiState.update {
+                    it.copy(isArchiving = false, archivingProjectId = null, errorMessage = "恢复失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun exportProject(project: ProjectResponse) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExporting = true, exportingProjectId = project.id) }
+            try {
+                val response = projectApi.exportProject(project.id)
+                if (response.isSuccessful) {
+                    _uiState.update {
+                        it.copy(isExporting = false, exportingProjectId = null, successMessage = "导出成功")
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(isExporting = false, exportingProjectId = null, errorMessage = "导出失败(${response.code()})")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Export project failed")
+                _uiState.update {
+                    it.copy(isExporting = false, exportingProjectId = null, errorMessage = "导出失败: ${e.message}")
                 }
             }
         }

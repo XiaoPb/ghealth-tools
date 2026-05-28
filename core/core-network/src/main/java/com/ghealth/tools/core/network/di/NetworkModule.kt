@@ -5,6 +5,7 @@ import com.ghealth.tools.core.network.AuthAuthenticator
 import com.ghealth.tools.core.network.AuthInterceptor
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
+import com.ghealth.tools.core.network.api.DownloadApi
 import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.network.api.UploadApi
 import com.squareup.moshi.Moshi
@@ -141,5 +142,11 @@ object NetworkModule {
     @Singleton
     fun provideUploadApi(retrofit: Retrofit): UploadApi {
         return retrofit.create(UploadApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideDownloadApi(retrofit: Retrofit): DownloadApi {
+        return retrofit.create(DownloadApi::class.java)
     }
 }

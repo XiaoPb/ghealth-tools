@@ -144,3 +144,46 @@ data class UpdateProjectRequest(
     val description: String? = null,
     @Json(name = "test_frequency") val testFrequency: String? = null
 )
+
+@JsonClass(generateAdapter = true)
+data class ArchiveActionRequest(
+    val action: String
+)
+
+@JsonClass(generateAdapter = true)
+data class ProjectExportResponse(
+    val project: ProjectExportInfo,
+    @Json(name = "prod_test_config") val prodTestConfig: ExportProdTestConfig?,
+    @Json(name = "regular_configs") val regularConfigs: List<ExportRegularConfig>,
+    @Json(name = "csv_files") val csvFiles: List<ExportCsvFile>
+)
+
+@JsonClass(generateAdapter = true)
+data class ProjectExportInfo(
+    val id: Int,
+    val name: String,
+    @Json(name = "owner_name") val ownerName: String,
+    @Json(name = "chip_model_display") val chipModelDisplay: String,
+    @Json(name = "hardware_version") val hardwareVersion: String
+)
+
+@JsonClass(generateAdapter = true)
+data class ExportProdTestConfig(
+    val id: Int,
+    @Json(name = "is_complete") val isComplete: Boolean,
+    @Json(name = "file_count") val fileCount: Int
+)
+
+@JsonClass(generateAdapter = true)
+data class ExportRegularConfig(
+    val id: Int,
+    val filename: String,
+    val version: String
+)
+
+@JsonClass(generateAdapter = true)
+data class ExportCsvFile(
+    val id: Int,
+    val filename: String,
+    @Json(name = "row_count") val rowCount: Int
+)
