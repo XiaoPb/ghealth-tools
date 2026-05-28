@@ -39,35 +39,23 @@ class ProjectSelectionViewModel @Inject constructor(
         loadProjects()
     }
 
-    private var hasLoaded = false
-
-    fun loadProjects() {
-        if (hasLoaded) return
-        hasLoaded = true
+    fun loadProjects(forceReload: Boolean = false) {
+        val state = _uiState.value
+        if (!forceReload && (state.projects.isNotEmpty() || state.isLoading)) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val response = projectApi.getProjects()
                 if (response.isSuccessful) {
                     val projects = response.body()?.data ?: emptyList()
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            projects = projects
-                        )
-                    }
+                    _uiState.update { it.copy(isLoading = false, projects = projects) }
                 } else {
                     val errorMsg = "加载项目失败: ${response.code()}"
                     _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Load projects failed")
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "网络错误: ${e.message ?: "未知错误"}"
-                    )
-                }
+                _uiState.update { it.copy(isLoading = false, errorMessage = "网络错误: ${e.message ?: "未知错误"}") }
             }
         }
     }
@@ -88,7 +76,12 @@ class ProjectSelectionViewModel @Inject constructor(
                 onSuccess()
             } catch (e: Exception) {
                 Timber.e(e, "Sync failed")
-                _uiState.update { it.copy(isConfirming = false) }
+                _uiState.update {
+                    it.copy(
+                        isConfirming = false,
+                        errorMessage = "配置同步失败: ${e.message}，可稍后在设置中刷新"
+                    )
+                }
                 onSuccess()
             }
         }
