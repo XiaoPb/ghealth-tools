@@ -135,3 +135,12 @@ data class CreateProjectRequest(
     val description: String = "",
     @Json(name = "test_frequency") val testFrequency: String = ""
 )
+
+@JsonClass(generateAdapter = true)
+data class UpdateProjectRequest(
+    val name: String? = null,
+    @Json(name = "chip_model") val chipModel: String? = null,
+    @Json(name = "hardware_version") val hardwareVersion: String? = null,
+    val description: String? = null,
+    @Json(name = "test_frequency") val testFrequency: String? = null
+)
