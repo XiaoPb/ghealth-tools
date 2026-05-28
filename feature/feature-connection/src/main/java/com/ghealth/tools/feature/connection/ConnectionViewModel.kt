@@ -100,8 +100,7 @@ class ConnectionViewModel @Inject constructor(
         viewModelScope.launch {
             connectionManager.devices.collect { devices ->
                 val previousDevices = _uiState.value.connectedDevices
-                _uiState.update { it.copy(connectedDevices = devices) }
-                
+
                 val newMaster = devices.entries.find { 
                     it.value.role == DeviceRole.MASTER && 
                     it.value.state == ConnectionState.CONNECTED &&
@@ -116,6 +115,13 @@ class ConnectionViewModel @Inject constructor(
                         )
                     }
                 }
+
+                if (devices.isEmpty() && _uiState.value.dataMonitorState.isMonitoring) {
+                    stopMonitoring()
+                    viewModelScope.launch { recordingManager.endSession() }
+                }
+
+                _uiState.update { it.copy(connectedDevices = devices) }
             }
         }
 
@@ -134,15 +140,6 @@ class ConnectionViewModel @Inject constructor(
         viewModelScope.launch {
             connectionManager.dataFlow.collect { (address, parseResult) ->
                 handleParsedData(address, parseResult)
-            }
-        }
-
-        viewModelScope.launch {
-            connectionManager.devices.collect { devices ->
-                if (devices.isEmpty() && _uiState.value.dataMonitorState.isMonitoring) {
-                    stopMonitoring()
-                    viewModelScope.launch { recordingManager.endSession() }
-                }
             }
         }
 
