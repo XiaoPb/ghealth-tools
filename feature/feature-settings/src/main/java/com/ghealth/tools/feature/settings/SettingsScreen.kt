@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -276,6 +277,15 @@ fun SettingsScreen(
                                 onClick = viewModel::refreshConfig,
                                 enabled = !state.isSyncingConfig
                             ) { Text("刷新") }
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("管理项目") },
+                        supportingContent = { Text("编辑、删除项目，查看 CSV 文件") },
+                        leadingContent = { Icon(Icons.Default.Settings, contentDescription = null) },
+                        trailingContent = {
+                            TextButton(onClick = onNavigateToProjectManage) { Text("管理") }
                         }
                     )
                     HorizontalDivider()

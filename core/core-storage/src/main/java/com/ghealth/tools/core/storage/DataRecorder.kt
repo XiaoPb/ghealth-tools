@@ -51,6 +51,8 @@ class DeviceRecorder(
             spo2Version = config.spo2Version,
             nadtVersion = config.nadtVersion,
             hrvVersion = config.hrvVersion,
+            projectName = config.projectName,
+            projectId = config.projectId,
             date = java.util.Date()
         )
         val newFile = File(baseDir, path.serverPath())
@@ -76,7 +78,9 @@ data class RecordingConfig(
     val nadtVersion: String = "1.0.0",
     val hrvVersion: String = "1.0.0",
     val compareDeviceNames: List<String> = emptyList(),
-    val compareDeviceAddresses: List<String> = emptyList()
+    val compareDeviceAddresses: List<String> = emptyList(),
+    val projectName: String = "",
+    val projectId: Int = 0
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -126,7 +130,9 @@ class DataRecorder @Inject constructor(
             hrVersion = config.hrVersion,
             spo2Version = config.spo2Version,
             nadtVersion = config.nadtVersion,
-            hrvVersion = config.hrvVersion
+            hrvVersion = config.hrvVersion,
+            projectName = config.projectName,
+            projectId = config.projectId
         )
 
         val serverFile = File(baseDir, path.serverPath())

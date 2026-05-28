@@ -53,6 +53,7 @@ fun ProjectSelectionScreen(
     onProjectSelected: () -> Unit,
     onCreateProject: () -> Unit,
     onLogout: () -> Unit,
+    onManageProjects: () -> Unit = {},
     viewModel: ProjectSelectionViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -159,6 +160,15 @@ fun ProjectSelectionScreen(
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = onManageProjects,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("管理项目")
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Button(
                         onClick = {

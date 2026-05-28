@@ -137,6 +137,9 @@ fun GHealthNavHost() {
                             popUpTo(0) { inclusive = true }
                         }
                     }
+                },
+                onManageProjects = {
+                    navController.navigate(Routes.PROJECT_MANAGE)
                 }
             )
         }

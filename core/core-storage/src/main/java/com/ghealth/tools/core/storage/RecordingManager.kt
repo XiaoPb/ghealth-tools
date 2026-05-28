@@ -42,6 +42,8 @@ class RecordingManager @Inject constructor(
 
     private var sessionDate: Date = Date()
     private var currentConfig: SessionConfig? = null
+    private var currentProjectName: String = ""
+    private var currentProjectId: Int = 0
 
     private data class SessionConfig(
         val scenario: String,
@@ -86,7 +88,9 @@ class RecordingManager @Inject constructor(
         masterDeviceAddress: String,
         slaveDevices: Map<String, String> = emptyMap(),
         compareDeviceNames: List<String> = emptyList(),
-        compareDeviceAddresses: List<String> = emptyList()
+        compareDeviceAddresses: List<String> = emptyList(),
+        projectName: String = "",
+        projectId: Int = 0
     ) {
         runBlocking { endSession() }
 
@@ -101,6 +105,8 @@ class RecordingManager @Inject constructor(
             compareNames = compareDeviceNames,
             compareAddresses = compareDeviceAddresses
         )
+        currentProjectName = projectName
+        currentProjectId = projectId
         _isSessionActive.value = true
 
         val numCompare = compareDeviceAddresses.size
@@ -335,6 +341,8 @@ class RecordingManager @Inject constructor(
             deviceName = deviceName,
             deviceAddress = task.deviceAddress,
             appVersion = appVersion,
+            projectName = currentProjectName,
+            projectId = currentProjectId,
             date = now
         )
 
