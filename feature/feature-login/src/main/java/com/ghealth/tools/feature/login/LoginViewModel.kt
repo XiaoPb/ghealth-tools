@@ -137,6 +137,5 @@ class LoginViewModel @Inject constructor(
         }
         tokenManager.clearTokens()
         userPreferences.clearUserInfo()
-        userPreferences.clearCredentials()
     }
 }
