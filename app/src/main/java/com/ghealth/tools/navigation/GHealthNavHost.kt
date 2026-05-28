@@ -78,79 +78,79 @@ enum class TopLevelRoute(val route: String, val label: String, val icon: ImageVe
 fun GHealthNavHost() {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "login") {
-        composable("login") {
+    NavHost(navController = navController, startDestination = Routes.LOGIN) {
+        composable(Routes.LOGIN) {
             LoginScreen(
                 onLoginSuccess = {
-                    navController.navigate("project_selection") {
-                        popUpTo("login") { inclusive = true }
+                    navController.navigate(Routes.PROJECT_SELECTION) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 },
                 onOfflineMode = {
-                    navController.navigate("chip_selection")
+                    navController.navigate(Routes.CHIP_SELECTION)
                 },
                 onNavigateToRegister = {
-                    navController.navigate("register")
+                    navController.navigate(Routes.REGISTER)
                 }
             )
         }
-        composable("chip_selection") {
+        composable(Routes.CHIP_SELECTION) {
             ChipSelectionScreen(
                 onChipSelected = {
-                    navController.navigate("main") {
-                        popUpTo("login") { inclusive = true }
+                    navController.navigate(Routes.MAIN) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 }
             )
         }
-        composable("register") {
+        composable(Routes.REGISTER) {
             RegisterScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 },
                 onRegisterSuccess = {
-                    navController.navigate("project_selection") {
-                        popUpTo("login") { inclusive = true }
+                    navController.navigate(Routes.PROJECT_SELECTION) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 }
             )
         }
-        composable("project_selection") {
+        composable(Routes.PROJECT_SELECTION) {
             val loginViewModel: com.ghealth.tools.feature.login.LoginViewModel = hiltViewModel()
             val scope = rememberCoroutineScope()
             ProjectSelectionScreen(
                 onProjectSelected = {
-                    navController.navigate("main") {
-                        popUpTo("project_selection") { inclusive = true }
+                    navController.navigate(Routes.MAIN) {
+                        popUpTo(Routes.PROJECT_SELECTION) { inclusive = true }
                     }
                 },
                 onCreateProject = {
-                    navController.navigate("project_create")
+                    navController.navigate(Routes.PROJECT_CREATE)
                 },
                 onLogout = {
                     scope.launch {
                         loginViewModel.logout()
-                        navController.navigate("login") {
+                        navController.navigate(Routes.LOGIN) {
                             popUpTo(0) { inclusive = true }
                         }
                     }
                 }
             )
         }
-        composable("project_create") {
+        composable(Routes.PROJECT_CREATE) {
             ProjectCreateScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 },
                 onProjectCreated = { projectId, projectName ->
-                    navController.navigate("config_upload/$projectId/$projectName") {
-                        popUpTo("project_create") { inclusive = true }
+                    navController.navigate(Routes.configUpload(projectId, projectName)) {
+                        popUpTo(Routes.PROJECT_CREATE) { inclusive = true }
                     }
                 }
             )
         }
         composable(
-            "config_upload/{projectId}/{projectName}",
+            Routes.CONFIG_UPLOAD,
             arguments = listOf(
                 navArgument("projectId") { type = NavType.IntType },
                 navArgument("projectName") { type = NavType.StringType }
@@ -163,13 +163,13 @@ fun GHealthNavHost() {
                 projectName = projectName,
                 onNavigateBack = { navController.popBackStack() },
                 onUploadComplete = {
-                    navController.navigate("project_selection") {
-                        popUpTo("config_upload/{projectId}/{projectName}") { inclusive = true }
+                    navController.navigate(Routes.PROJECT_SELECTION) {
+                        popUpTo(Routes.CONFIG_UPLOAD) { inclusive = true }
                     }
                 }
             )
         }
-        composable("main") {
+        composable(Routes.MAIN) {
             val outerNavController = navController
             val loginViewModel: com.ghealth.tools.feature.login.LoginViewModel = hiltViewModel()
             val scope = rememberCoroutineScope()
@@ -177,14 +177,14 @@ fun GHealthNavHost() {
                 onLogout = {
                     scope.launch {
                         loginViewModel.logout()
-                        navController.navigate("login") {
+                        navController.navigate(Routes.LOGIN) {
                             popUpTo(0) { inclusive = true }
                         }
                     }
                 },
                 onSwitchProject = {
-                    outerNavController.navigate("project_selection") {
-                        popUpTo("main") { inclusive = true }
+                    outerNavController.navigate(Routes.PROJECT_SELECTION) {
+                        popUpTo(Routes.MAIN) { inclusive = true }
                         launchSingleTop = true
                     }
                 }
@@ -273,7 +273,7 @@ private fun WideMainLayout(
                         Column {
                             Text(currentDestination?.let { dest ->
                                 TopLevelRoute.entries.find { it.route == dest.route }?.label
-                                    ?: if (dest.route == "device_info") "设备信息" else "GHealth Tools"
+                                    ?: if (dest.route == Routes.Main.DEVICE_INFO) "设备信息" else "GHealth Tools"
                             } ?: "GHealth Tools")
                             Text(
                                 text = "芯片: ${demoState.chipType.name}",
@@ -319,26 +319,26 @@ private fun WideMainLayout(
             ) {
                 composable(TopLevelRoute.Connection.route) {
                     ConnectionScreen(
-                        onFactoryTest = { navController.navigate("factory") }
+                        onFactoryTest = { navController.navigate(Routes.Main.FACTORY) }
                     )
                 }
                 composable(TopLevelRoute.Demo.route) { DemoScreen(viewModel = demoViewModel) }
                 composable(TopLevelRoute.Settings.route) {
                     SettingsScreen(
                         onNavigateToDeviceinfo = {
-                            navController.navigate("device_info")
+                            navController.navigate(Routes.Main.DEVICE_INFO)
                         },
                         onSwitchProject = onSwitchProject
                     )
                 }
-                composable("device_info") {
+                composable(Routes.Main.DEVICE_INFO) {
                     DeviceInfoScreen(
                         onNavigateBack = {
                             navController.popBackStack()
                         }
                     )
                 }
-                composable("factory") {
+                composable(Routes.Main.FACTORY) {
                     FactoryScreen(
                         onNavigateBack = { navController.popBackStack() }
                     )
@@ -366,7 +366,7 @@ private fun CompactMainLayout(
                     Column {
                         Text(currentDestination?.let { dest ->
                             TopLevelRoute.entries.find { it.route == dest.route }?.label
-                                ?: if (dest.route == "device_info") "设备信息" else "GHealth Tools"
+                                ?: if (dest.route == Routes.Main.DEVICE_INFO) "设备信息" else "GHealth Tools"
                         } ?: "GHealth Tools")
                         Text(
                             text = "芯片: ${demoState.chipType.name}",
@@ -442,26 +442,26 @@ private fun CompactMainLayout(
         ) {
             composable(TopLevelRoute.Connection.route) {
                 ConnectionScreen(
-                    onFactoryTest = { navController.navigate("factory") }
+                    onFactoryTest = { navController.navigate(Routes.Main.FACTORY) }
                 )
             }
             composable(TopLevelRoute.Demo.route) { DemoScreen(viewModel = demoViewModel) }
             composable(TopLevelRoute.Settings.route) {
                 SettingsScreen(
                     onNavigateToDeviceinfo = {
-                        navController.navigate("device_info")
+                        navController.navigate(Routes.Main.DEVICE_INFO)
                     },
                     onSwitchProject = onSwitchProject
                 )
             }
-            composable("device_info") {
+            composable(Routes.Main.DEVICE_INFO) {
                 DeviceInfoScreen(
                     onNavigateBack = {
                         navController.popBackStack()
                     }
                 )
             }
-            composable("factory") {
+            composable(Routes.Main.FACTORY) {
                 FactoryScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
