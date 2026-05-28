@@ -60,6 +60,7 @@ import com.ghealth.tools.feature.factory.FactoryScreen
 import com.ghealth.tools.feature.demo.DemoUiState
 import com.ghealth.tools.feature.demo.DemoViewModel
 import com.ghealth.tools.feature.login.ProjectConfigUploadScreen
+import com.ghealth.tools.feature.login.ChipSelectionScreen
 import com.ghealth.tools.feature.login.LoginScreen
 import com.ghealth.tools.feature.login.ProjectSelectionScreen
 import com.ghealth.tools.feature.login.ProjectCreateScreen
@@ -86,12 +87,19 @@ fun GHealthNavHost() {
                     }
                 },
                 onOfflineMode = {
-                    navController.navigate("main") {
-                        popUpTo("login") { inclusive = true }
-                    }
+                    navController.navigate("chip_selection")
                 },
                 onNavigateToRegister = {
                     navController.navigate("register")
+                }
+            )
+        }
+        composable("chip_selection") {
+            ChipSelectionScreen(
+                onChipSelected = {
+                    navController.navigate("main") {
+                        popUpTo("login") { inclusive = true }
+                    }
                 }
             )
         }
