@@ -1,13 +1,13 @@
 package com.ghealth.tools.feature.ota.engine
 
-import android.bluetooth.BluetoothDevice
 import android.content.Context
 import com.ghealth.tools.feature.ota.model.OtaConfig
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 import com.goodix.ble.gr.lib.com.LogcatLogger
 import com.goodix.ble.gr.lib.com.StringLogger
 import com.goodix.ble.gr.lib.dfu.v2.DfuProgressListener
-import com.goodix.ble.gr.lib.dfu.v2.EasyDfu2
+import com.juul.kable.ExperimentalApi
+import com.juul.kable.Peripheral
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -41,76 +41,72 @@ class OtaEngine @Inject constructor() {
 
     private val stringLogger = StringLogger()
 
-    private var currentDfu: EasyDfu2? = null
+    private var currentDfu: BleDfuAdapter? = null
     @Volatile
     private var isCancelled = false
 
-    private var onDisconnectRequested: (() -> Unit)? = null
-
-    fun setDisconnectCallback(callback: () -> Unit) {
-        onDisconnectRequested = callback
-    }
-
-    private fun requestAppDisconnect() {
-        onDisconnectRequested?.invoke()
-        _logEvents.tryEmit("请求断开App层GATT连接，准备进入DFU模式...")
-    }
-
+    @OptIn(ExperimentalApi::class)
     suspend fun startFirmwareUpgrade(
         context: Context,
-        device: BluetoothDevice,
+        peripheral: Peripheral,
         firmwareStream: InputStream,
         config: OtaConfig,
     ) = withContext(Dispatchers.IO) {
         isCancelled = false
         _progress.value = OtaProgress(state = OtaState.PREPARING)
 
-        requestAppDisconnect()
-        Thread.sleep(300)
-
         stringLogger.clearBuffer()
         stringLogger.setNextLogger(LogcatLogger.INSTANCE)
 
         val listener = createListener()
-        val dfu = EasyDfu2().apply {
+        val adapter = BleDfuAdapter(
+            context = context.applicationContext,
+            peripheral = peripheral,
+        ).apply {
             setLogger(stringLogger)
             setListener(listener)
-            setFastMode(config.fastMode)
         }
-        currentDfu = dfu
+        currentDfu = adapter
 
-        when (config.upgradeRegion) {
-            UpgradeRegion.SINGLE -> dfu.startDfu(context, device, firmwareStream)
-            UpgradeRegion.DUAL -> dfu.startDfuInCopyMode(context, device, firmwareStream, config.copyAddress.toInt())
-        }
+        val fastMode = config.fastMode
+        val copyMode = config.upgradeRegion == UpgradeRegion.DUAL
+        val copyAddress = config.copyAddress.toInt()
+
+        adapter.startFirmwareUpdate(firmwareStream, fastMode, copyMode, copyAddress)
     }
 
+    @OptIn(ExperimentalApi::class)
     suspend fun startResourceUpgrade(
         context: Context,
-        device: BluetoothDevice,
+        peripheral: Peripheral,
         resourceStream: InputStream,
         config: OtaConfig,
     ) = withContext(Dispatchers.IO) {
         isCancelled = false
         _progress.value = OtaProgress(state = OtaState.PREPARING)
 
-        requestAppDisconnect()
-        Thread.sleep(300)
-
         stringLogger.clearBuffer()
         stringLogger.setNextLogger(LogcatLogger.INSTANCE)
 
         val listener = createListener()
-        val dfu = EasyDfu2().apply {
+        val adapter = BleDfuAdapter(
+            context = context.applicationContext,
+            peripheral = peripheral,
+        ).apply {
             setLogger(stringLogger)
             setListener(listener)
-            setFastMode(config.fastMode)
         }
-        currentDfu = dfu
+        currentDfu = adapter
 
         val extFlash = config.resourceStorageType ==
                 com.ghealth.tools.feature.ota.model.StorageType.EXTERNAL
-        dfu.startUpdateResource(context, device, resourceStream, extFlash, config.resourceStartAddress.toInt())
+
+        adapter.startResourceUpdate(
+            fileStream = resourceStream,
+            isExtFlash = extFlash,
+            startAddress = config.resourceStartAddress.toInt(),
+            fastMode = config.fastMode,
+        )
     }
 
     fun cancel() {
