@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":ble:ble-connection"))
     implementation(project(":external:libcom"))
     implementation(project(":external:libdfu2"))
+    implementation(libs.kable.core.android)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.navigation.compose)
