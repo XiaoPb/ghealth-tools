@@ -1,0 +1,897 @@
+package com.ghealth.tools.feature.ota
+
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.ghealth.tools.feature.ota.engine.DebugResult
+import com.ghealth.tools.feature.ota.engine.DebugOperations
+import com.ghealth.tools.feature.ota.engine.FirmwareInfo
+import com.ghealth.tools.feature.ota.engine.OtaState
+import com.ghealth.tools.feature.ota.model.DebugMenuAction
+import com.ghealth.tools.feature.ota.model.StorageType
+import com.ghealth.tools.feature.ota.model.UpgradeRegion
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OtaScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: OtaViewModel = hiltViewModel(),
+) {
+    val state by viewModel.uiState.collectAsState()
+
+    val firmwareFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> uri?.let { viewModel.selectFirmwareFile(it) } }
+
+    val resourceFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> uri?.let { viewModel.selectResourceFile(it) } }
+
+    val logListState = rememberLazyListState()
+    LaunchedEffect(state.logLines.size) {
+        if (state.logLines.isNotEmpty()) {
+            logListState.animateScrollToItem(state.logLines.size - 1)
+        }
+    }
+
+    if (state.showResultDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissResultDialog() },
+            title = { Text(if (state.successMessage != null) "升级完成" else "升级失败") },
+            text = { Text(state.successMessage ?: state.errorMessage ?: "") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.dismissResultDialog()
+                    onNavigateBack()
+                }) { Text("返回") }
+            },
+            dismissButton = {
+                if (state.successMessage == null) {
+                    TextButton(onClick = {
+                        viewModel.dismissResultDialog()
+                        viewModel.resetState()
+                    }) { Text("重试") }
+                }
+            }
+        )
+    }
+
+    if (state.showFastModeDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissFastModeDialog() },
+            title = { Text("快速模式") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("启用高速传输模式")
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Switch(
+                        checked = state.otaConfig.fastMode,
+                        onCheckedChange = { viewModel.updateFastMode(it) },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissFastModeDialog() }) { Text("确定") }
+            }
+        )
+    }
+
+    if (state.showCopyAddressDialog) {
+        var addrText by remember(state.otaConfig.copyAddress) {
+            mutableStateOf(
+                if (state.otaConfig.copyAddress == 0L) ""
+                else "0x${state.otaConfig.copyAddress.toString(16).uppercase()}"
+            )
+        }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissCopyAddressDialog() },
+            title = { Text("自定义拷贝地址") },
+            text = {
+                OutlinedTextField(
+                    value = addrText,
+                    onValueChange = { addrText = it },
+                    label = { Text("拷贝地址 (Hex)") },
+                    placeholder = { Text("0x00000000") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val parsed = addrText.removePrefix("0x").removePrefix("0X")
+                        .toLongOrNull(16) ?: 0L
+                    viewModel.updateCopyAddress(parsed)
+                    viewModel.dismissCopyAddressDialog()
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissCopyAddressDialog() }) { Text("取消") }
+            }
+        )
+    }
+
+    if (state.showControlPointDialog) {
+        var hexText by remember { mutableStateOf(state.controlPointHex) }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissControlPointDialog() },
+            title = { Text("写控制点") },
+            text = {
+                OutlinedTextField(
+                    value = hexText,
+                    onValueChange = { hexText = it; viewModel.updateControlPointHex(it) },
+                    label = { Text("Hex数据") },
+                    placeholder = { Text("AA BB CC DD") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.writeControlPoint()
+                }) { Text("发送") }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissControlPointDialog() }) { Text("取消") }
+            }
+        )
+    }
+
+    if (state.isUpgrading) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("正在升级") },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(96.dp)) {
+                        CircularProgressIndicator(
+                            progress = { state.progressPercent.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxSize(),
+                            strokeWidth = 6.dp,
+                        )
+                        Text(
+                            text = "${(state.progressPercent * 100).toInt()}%",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = when (state.otaState) {
+                            OtaState.IDLE -> "等待开始"
+                            OtaState.PREPARING -> "准备中..."
+                            OtaState.CONNECTING -> "连接设备中..."
+                            OtaState.TRANSFERRING -> "正在传输..."
+                            OtaState.VERIFYING -> "校验中..."
+                            OtaState.COMPLETED -> "升级完成 \u2713"
+                            OtaState.CANCELLED -> "已取消"
+                            OtaState.ERROR -> "升级失败 \u2717"
+                            else -> ""
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.cancelUpgrade() },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                ) {
+                    Text("取消升级")
+                }
+            }
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("OTA固件升级") },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        if (state.isUpgrading) viewModel.cancelUpgrade()
+                        onNavigateBack()
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "菜单")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("快速模式") },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.showFastModeDialog()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("自定义拷贝地址") },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.showCopyAddressDialog()
+                                },
+                            )
+                            DebugMenuAction.entries.forEach { action ->
+                                DropdownMenuItem(
+                                    text = { Text(action.label) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.toggleDebugAction(action)
+                                    },
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("写控制点") },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.showControlPointDialog()
+                                },
+                            )
+                        }
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            DeviceSelectionCard(
+                devices = state.availableDevices,
+                selectedDevice = state.selectedDevice,
+                onSelectDevice = viewModel::selectDevice,
+                enabled = !state.isUpgrading,
+            )
+
+            FirmwareInfoCard(
+                firmwareInfo = state.firmwareInfo,
+                isLoading = state.isReadingFirmwareInfo,
+                onReadInfo = viewModel::readFirmwareInfo,
+                enabled = !state.isUpgrading && state.selectedDevice != null,
+            )
+
+            FirmwareUpgradeCard(
+                fileInfo = state.firmwareFile,
+                upgradeRegion = state.upgradeRegion,
+                copyAddress = state.otaConfig.copyAddress,
+                onSelectFile = { firmwareFilePicker.launch(arrayOf("*/*")) },
+                onSelectRegion = viewModel::selectUpgradeRegion,
+                onCopyAddressChange = viewModel::updateCopyAddress,
+                onStartUpgrade = viewModel::startFirmwareUpgrade,
+                enabled = !state.isUpgrading,
+            )
+
+            ResourceUpgradeCard(
+                fileInfo = state.resourceFile,
+                startAddress = state.resourceStartAddress,
+                storageType = state.resourceStorageType,
+                onSelectFile = { resourceFilePicker.launch(arrayOf("*/*")) },
+                onStartAddressChange = viewModel::updateResourceStartAddress,
+                onStorageTypeChange = viewModel::updateResourceStorageType,
+                onStartUpgrade = viewModel::startResourceUpgrade,
+                enabled = !state.isUpgrading,
+            )
+
+            state.activeDebugActions.forEach { action ->
+                DebugActionCard(
+                    action = action,
+                    debugResult = state.debugResult,
+                    onDebugRead = viewModel::executeDebugRead,
+                )
+            }
+
+            LogCard(
+                logLines = state.logLines,
+                listState = logListState,
+            )
+
+            state.errorMessage?.let { error ->
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Text(text = error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = viewModel::dismissError) { Text("关闭") }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun DeviceSelectionCard(
+    devices: List<ConnectedDeviceInfo>,
+    selectedDevice: ConnectedDeviceInfo?,
+    onSelectDevice: (ConnectedDeviceInfo) -> Unit,
+    enabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("目标设备", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            if (devices.isEmpty()) {
+                Text("暂无已连接设备，请先在主界面连接设备", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                DeviceDropdown(devices = devices, selected = selectedDevice, onSelect = onSelectDevice, enabled = enabled)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DeviceDropdown(
+    devices: List<ConnectedDeviceInfo>,
+    selected: ConnectedDeviceInfo?,
+    onSelect: (ConnectedDeviceInfo) -> Unit,
+    enabled: Boolean,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { if (enabled) expanded = it }) {
+        OutlinedTextField(
+            value = selected?.let { "${it.name} (${it.address})" } ?: "选择设备",
+            onValueChange = {},
+            readOnly = true,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            devices.forEach { device ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(device.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(device.address, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
+                    onClick = { onSelect(device); expanded = false },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FirmwareInfoCard(
+    firmwareInfo: FirmwareInfo?,
+    isLoading: Boolean,
+    onReadInfo: () -> Unit,
+    enabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("获取固件信息", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            if (firmwareInfo != null && firmwareInfo.pattern != 0) {
+                if (firmwareInfo.comments.isNotEmpty()) {
+                    InfoRow("comments", firmwareInfo.comments)
+                }
+                InfoRow("version", "v${firmwareInfo.version}")
+                InfoRow("pattern", "0x${firmwareInfo.pattern.toString(16).uppercase()}")
+                InfoRow("binSize", "${firmwareInfo.binSize} (${formatFileSize(firmwareInfo.binSize.toLong())})")
+                InfoRow("checksum", "0x${firmwareInfo.checksum.toString(16).uppercase()}")
+                InfoRow("loadAddr", "0x${firmwareInfo.loadAddr.toString(16).uppercase()}")
+                InfoRow("runAddr", "0x${firmwareInfo.runAddr.toString(16).uppercase()}")
+                InfoRow("xqspiXipCmd", "0x${firmwareInfo.xqspiXipCmd.toString(16).uppercase()} (${xipCmdLabel(firmwareInfo.xqspiXipCmd)})")
+                InfoRow("xqspiSpeed", xqspiSpeedLabel(firmwareInfo.xqspiSpeed))
+                InfoRow("codeCopyMode", copyModeLabel(firmwareInfo.codeCopyMode))
+                InfoRow("systemClk", systemClkLabel(firmwareInfo.systemClk))
+                InfoRow("checkImage", "${firmwareInfo.checkImage}")
+                InfoRow("bootDelay", "${firmwareInfo.bootDelay}")
+                InfoRow("isDapBoot", "${firmwareInfo.isDapBoot}")
+            } else {
+                Text("点击按钮获取设备上已下载的固件信息", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onReadInfo, enabled = enabled && !isLoading) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("获取信息")
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 1.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+        )
+    }
+}
+
+private fun xipCmdLabel(cmd: Int): String = when (cmd) {
+    0x03 -> "Normal Read"
+    0x0B -> "Fast Read"
+    0x3B -> "Dual Out Fast Read"
+    0xBB -> "Dual I/O Fast Read"
+    0x6B -> "Quad Out Fast Read"
+    0xEB -> "Quad I/O Fast Read"
+    else -> "Unknown"
+}
+
+private fun xqspiSpeedLabel(speed: Int): String = when (speed) {
+    0 -> "64MHz"
+    1 -> "48MHz"
+    2 -> "32MHz"
+    3 -> "24MHz"
+    4 -> "16MHz"
+    else -> "Unknown($speed)"
+}
+
+private fun copyModeLabel(mode: Int): String = when (mode) {
+    0 -> "XIP"
+    1 -> "QSPI"
+    else -> "Unknown($mode)"
+}
+
+private fun systemClkLabel(clk: Int): String = when (clk) {
+    0 -> "64MHz"
+    1 -> "48MHz"
+    2 -> "32MHz"
+    3 -> "24MHz"
+    4 -> "16MHz"
+    5 -> "32MHz(alt)"
+    else -> "Unknown($clk)"
+}
+
+@Composable
+private fun FirmwareUpgradeCard(
+    fileInfo: FirmwareFileInfo,
+    upgradeRegion: UpgradeRegion,
+    copyAddress: Long,
+    onSelectFile: () -> Unit,
+    onSelectRegion: (UpgradeRegion) -> Unit,
+    onCopyAddressChange: (Long) -> Unit,
+    onStartUpgrade: () -> Unit,
+    enabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("升级固件", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (fileInfo.fileName.isNotEmpty()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(fileInfo.fileName, style = MaterialTheme.typography.bodyMedium)
+                        Text("大小: ${formatFileSize(fileInfo.fileSize)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                OutlinedButton(onClick = { if (enabled) onSelectFile() }, enabled = enabled) {
+                    Text(if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件")
+                }
+                if (fileInfo.fileName.isNotEmpty() && fileInfo.isValid) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = onStartUpgrade, enabled = enabled) {
+                        Text(if (upgradeRegion == UpgradeRegion.SINGLE) "开始升级" else "开始双区升级")
+                    }
+                }
+            }
+
+            if (fileInfo.parseError != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = fileInfo.parseError,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+
+            if (fileInfo.imgInfo != null && fileInfo.isValid) {
+                Spacer(modifier = Modifier.height(8.dp))
+                if (fileInfo.imgInfo.comments.isNotEmpty()) {
+                    InfoRow("comments", fileInfo.imgInfo.comments)
+                }
+                InfoRow("version", "v${fileInfo.imgInfo.version}")
+                InfoRow("pattern", "0x${fileInfo.imgInfo.pattern.toString(16).uppercase()}")
+                InfoRow("binSize", "${fileInfo.imgInfo.binSize} (${formatFileSize(fileInfo.imgInfo.binSize.toLong())})")
+                InfoRow("checksum", "0x${fileInfo.imgInfo.checksum.toString(16).uppercase()}")
+                InfoRow("loadAddr", "0x${fileInfo.imgInfo.loadAddr.toString(16).uppercase()}")
+                InfoRow("runAddr", "0x${fileInfo.imgInfo.runAddr.toString(16).uppercase()}")
+                InfoRow("xqspiXipCmd", "0x${fileInfo.imgInfo.xqspiXipCmd.toString(16).uppercase()} (${xipCmdLabel(fileInfo.imgInfo.xqspiXipCmd)})")
+                InfoRow("xqspiSpeed", xqspiSpeedLabel(fileInfo.imgInfo.xqspiSpeed))
+                InfoRow("codeCopyMode", copyModeLabel(fileInfo.imgInfo.codeCopyMode))
+                InfoRow("systemClk", systemClkLabel(fileInfo.imgInfo.systemClk))
+                InfoRow("checkImage", "${fileInfo.imgInfo.checkImage}")
+                InfoRow("bootDelay", "${fileInfo.imgInfo.bootDelay}")
+                InfoRow("isDapBoot", "${fileInfo.imgInfo.isDapBoot}")
+            }
+
+            if (upgradeRegion == UpgradeRegion.DUAL) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = if (copyAddress == 0L) "" else "0x${copyAddress.toString(16).uppercase()}",
+                    onValueChange = { text ->
+                        val parsed = text.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0L
+                        onCopyAddressChange(parsed)
+                    },
+                    label = { Text("拷贝地址 (Hex)") },
+                    placeholder = { Text("0x00000000") },
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    singleLine = true,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = upgradeRegion == UpgradeRegion.SINGLE,
+                        onClick = { if (enabled) onSelectRegion(UpgradeRegion.SINGLE) },
+                        enabled = enabled,
+                    )
+                    Text("单区升级", style = MaterialTheme.typography.bodyMedium)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = upgradeRegion == UpgradeRegion.DUAL,
+                        onClick = { if (enabled) onSelectRegion(UpgradeRegion.DUAL) },
+                        enabled = enabled,
+                    )
+                    Text("双区升级", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResourceUpgradeCard(
+    fileInfo: FirmwareFileInfo,
+    startAddress: Long,
+    storageType: StorageType,
+    onSelectFile: () -> Unit,
+    onStartAddressChange: (Long) -> Unit,
+    onStorageTypeChange: (StorageType) -> Unit,
+    onStartUpgrade: () -> Unit,
+    enabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("升级资源数据", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (fileInfo.fileName.isNotEmpty()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(fileInfo.fileName, style = MaterialTheme.typography.bodyMedium)
+                        Text("大小: ${formatFileSize(fileInfo.fileSize)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                OutlinedButton(onClick = { if (enabled) onSelectFile() }, enabled = enabled) {
+                    Text(if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件")
+                }
+                if (fileInfo.fileName.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = onStartUpgrade, enabled = enabled) {
+                        Text("开始升级资源")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = if (startAddress == 0L) "" else "0x${startAddress.toString(16).uppercase()}",
+                onValueChange = { text ->
+                    val parsed = text.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0L
+                    onStartAddressChange(parsed)
+                },
+                label = { Text("起始地址 (Hex)") },
+                placeholder = { Text("0x00000000") },
+                enabled = enabled,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                singleLine = true,
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("存储器:", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.width(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = storageType == StorageType.INTERNAL,
+                        onClick = { if (enabled) onStorageTypeChange(StorageType.INTERNAL) },
+                        enabled = enabled,
+                    )
+                    Text("内部", style = MaterialTheme.typography.bodyMedium)
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = storageType == StorageType.EXTERNAL,
+                        onClick = { if (enabled) onStorageTypeChange(StorageType.EXTERNAL) },
+                        enabled = enabled,
+                    )
+                    Text("外部", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebugActionCard(
+    action: DebugMenuAction,
+    debugResult: String?,
+    onDebugRead: (suspend (DebugOperations) -> Result<DebugResult>) -> Unit,
+) {
+    var addressText by remember { mutableStateOf("") }
+    var lengthText by remember { mutableStateOf("") }
+    var dataText by remember { mutableStateOf("") }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(action.label, style = MaterialTheme.typography.titleMedium)
+            Text(action.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            when (action) {
+                DebugMenuAction.RAM_READ_WRITE, DebugMenuAction.FLASH_READ_WRITE -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = addressText,
+                            onValueChange = { addressText = it },
+                            label = { Text("地址 (Hex)") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = lengthText,
+                            onValueChange = { lengthText = it },
+                            label = { Text("长度") },
+                            modifier = Modifier.weight(0.5f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            val addr = addressText.removePrefix("0x").toLongOrNull(16)?.toInt() ?: 0
+                            val len = lengthText.toIntOrNull() ?: 64
+                            val readOp: suspend (DebugOperations) -> Result<DebugResult> =
+                                if (action == DebugMenuAction.RAM_READ_WRITE)
+                                    { ops -> ops.readRam(addr, len) }
+                                else
+                                    { ops -> ops.readFlash(addr, len) }
+                            onDebugRead(readOp)
+                        }) { Text("读取") }
+                        OutlinedButton(onClick = { }) { Text("写入") }
+                    }
+                }
+                DebugMenuAction.REGISTER_READ_WRITE -> {
+                    OutlinedTextField(
+                        value = addressText,
+                        onValueChange = { addressText = it },
+                        label = { Text("寄存器地址 (Hex)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                        singleLine = true,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            val addr = addressText.removePrefix("0x").toLongOrNull(16)?.toInt() ?: 0
+                            onDebugRead { ops -> ops.readRegister(addr) }
+                        }) { Text("读取") }
+                        OutlinedButton(onClick = { }) { Text("写入") }
+                    }
+                }
+                DebugMenuAction.READ_EFUSE -> {
+                    Button(onClick = { onDebugRead { ops -> ops.readEfuse() } }) { Text("读取eFuse") }
+                }
+                DebugMenuAction.NVDS_READ_WRITE -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { onDebugRead { ops -> ops.readNvds() } }) { Text("读取NVDS") }
+                        OutlinedButton(onClick = { }) { Text("写入NVDS") }
+                    }
+                }
+                DebugMenuAction.READ_BOOT_INFO -> {
+                    Button(onClick = { onDebugRead { ops -> ops.readBootInfo() } }) { Text("读取BootInfo") }
+                }
+            }
+
+            debugResult?.let { result ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = "结果: $result", style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogCard(
+    logLines: List<String>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().height(200.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("升级日志", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            if (logLines.isEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    Text("暂无日志", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxWidth()) {
+                    items(logLines) { line ->
+                        Text(text = line, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), modifier = Modifier.padding(vertical = 2.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+        else -> String.format("%.2f MB", bytes / (1024.0 * 1024.0))
+    }
+}
