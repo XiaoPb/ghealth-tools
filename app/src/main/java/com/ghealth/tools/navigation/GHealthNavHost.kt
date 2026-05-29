@@ -296,6 +296,11 @@ private fun WideMainLayout(
     onSwitchProject: () -> Unit,
     onNavigateToProjectManage: () -> Unit
 ) {
+    val subRouteWithoutTopBar = currentDestination?.route in setOf(
+        Routes.Main.DEVICE_INFO,
+        Routes.Main.FACTORY,
+        Routes.Main.OTA,
+    )
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail(
             modifier = Modifier.fillMaxHeight(),
@@ -329,52 +334,50 @@ private fun WideMainLayout(
         Scaffold(
             modifier = Modifier.weight(1f),
             topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(currentDestination?.let { dest ->
-                                TopLevelRoute.entries.find { it.route == dest.route }?.label
-                                    ?: when (dest.route) {
-                                        Routes.Main.DEVICE_INFO -> "设备信息"
-                                        Routes.Main.OTA -> "OTA固件升级"
-                                        else -> "GHealth Tools"
-                                    }
-                            } ?: "GHealth Tools")
-                            Text(
-                                text = "芯片: ${demoState.chipType.name}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    },
-                    actions = {
-                        val isRecording = demoState.isRecording
-                        Icon(
-                            imageVector = Icons.Default.FiberManualRecord,
-                            contentDescription = null,
-                            tint = if (isRecording) Color(0xFFFF1744) else Color(0xFF666666),
-                            modifier = Modifier.size(10.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isRecording) "录制中" else "未录制",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
-                            onClick = { demoViewModel.toggleRecording() },
-                            modifier = Modifier.size(36.dp)
-                        ) {
+                if (!subRouteWithoutTopBar) {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(currentDestination?.let { dest ->
+                                    TopLevelRoute.entries.find { it.route == dest.route }?.label
+                                        ?: "GHealth Tools"
+                                } ?: "GHealth Tools")
+                                Text(
+                                    text = "芯片: ${demoState.chipType.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        },
+                        actions = {
+                            val isRecording = demoState.isRecording
                             Icon(
-                                imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
-                                contentDescription = if (isRecording) "停止录制" else "开始录制",
-                                tint = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                imageVector = Icons.Default.FiberManualRecord,
+                                contentDescription = null,
+                                tint = if (isRecording) Color(0xFFFF1744) else Color(0xFF666666),
+                                modifier = Modifier.size(10.dp)
                             )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isRecording) "录制中" else "未录制",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { demoViewModel.toggleRecording() },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                                    contentDescription = if (isRecording) "停止录制" else "开始录制",
+                                    tint = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         ) { innerPadding ->
             NavHost(
@@ -445,28 +448,30 @@ private fun CompactMainLayout(
     onSwitchProject: () -> Unit,
     onNavigateToProjectManage: () -> Unit
 ) {
+    val subRouteWithoutTopBar = currentDestination?.route in setOf(
+        Routes.Main.DEVICE_INFO,
+        Routes.Main.FACTORY,
+        Routes.Main.OTA,
+    )
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(currentDestination?.let { dest ->
-                            TopLevelRoute.entries.find { it.route == dest.route }?.label
-                                ?: when (dest.route) {
-                                    Routes.Main.DEVICE_INFO -> "设备信息"
-                                    Routes.Main.OTA -> "OTA固件升级"
-                                    else -> "GHealth Tools"
-                                }
-                        } ?: "GHealth Tools")
-                        Text(
-                            text = "芯片: ${demoState.chipType.name}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                },
-                actions = {
-                    if (isTopLevelRoute) {
+            if (!subRouteWithoutTopBar) {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(currentDestination?.let { dest ->
+                                TopLevelRoute.entries.find { it.route == dest.route }?.label
+                                    ?: "GHealth Tools"
+                            } ?: "GHealth Tools")
+                            Text(
+                                text = "芯片: ${demoState.chipType.name}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    actions = {
+                        if (isTopLevelRoute) {
                         val isRecording = demoState.isRecording
                         Icon(
                             imageVector = Icons.Default.FiberManualRecord,
@@ -499,8 +504,9 @@ private fun CompactMainLayout(
                             )
                         }
                     }
-                }
-            )
+                    }
+                )
+            }
         },
         bottomBar = {
             if (isTopLevelRoute) {
