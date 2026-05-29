@@ -212,7 +212,7 @@ private fun ConnectionScreenLandscape(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainMenuContent(
+private fun ConnectionScreenCompact(
     viewModel: ConnectionViewModel,
     state: ConnectionUiState,
     onFactoryTest: () -> Unit = {},
