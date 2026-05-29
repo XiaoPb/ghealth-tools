@@ -311,8 +311,8 @@ class OtaViewModel @Inject constructor(
             _uiState.update { it.copy(showControlPointDialog = false) }
             val hex = _uiState.value.controlPointHex
             debugOps?.writeControlPoint(hex)?.fold(
-                onSuccess = { _uiState.update { it.copy(debugResult = it.message) } },
-                onFailure = { _uiState.update { it.copy(errorMessage = it.message ?: "写控制点失败") } },
+                onSuccess = { result -> _uiState.update { it.copy(debugResult = result.message) } },
+                onFailure = { error -> _uiState.update { it.copy(errorMessage = error.message ?: "写控制点失败") } },
             )
         }
     }
@@ -324,8 +324,8 @@ class OtaViewModel @Inject constructor(
                 return@launch
             }
             operation(ops).fold(
-                onSuccess = { _uiState.update { it.copy(debugResult = it.message) } },
-                onFailure = { _uiState.update { it.copy(errorMessage = it.message ?: "调试操作失败") } },
+                onSuccess = { result -> _uiState.update { it.copy(debugResult = result.message) } },
+                onFailure = { error -> _uiState.update { it.copy(errorMessage = error.message ?: "调试操作失败") } },
             )
         }
     }
