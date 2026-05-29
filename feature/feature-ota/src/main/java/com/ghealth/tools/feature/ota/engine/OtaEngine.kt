@@ -9,7 +9,6 @@ import com.goodix.ble.gr.lib.com.StringLogger
 import com.goodix.ble.gr.lib.dfu.v2.DfuProgressListener
 import com.goodix.ble.gr.lib.dfu.v2.EasyDfu2
 import javax.inject.Inject
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -46,50 +45,43 @@ class OtaEngine @Inject constructor() {
     @Volatile
     private var isCancelled = false
 
+    private var onDisconnectRequested: (() -> Unit)? = null
+
+    fun setDisconnectCallback(callback: () -> Unit) {
+        onDisconnectRequested = callback
+    }
+
+    private fun requestAppDisconnect() {
+        onDisconnectRequested?.invoke()
+        _logEvents.tryEmit("请求断开App层GATT连接，准备进入DFU模式...")
+    }
+
     suspend fun startFirmwareUpgrade(
         context: Context,
         device: BluetoothDevice,
         firmwareStream: InputStream,
         config: OtaConfig,
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+    ) = withContext(Dispatchers.IO) {
         isCancelled = false
         _progress.value = OtaProgress(state = OtaState.PREPARING)
 
-        try {
-            stringLogger.clearBuffer()
-            stringLogger.setNextLogger(LogcatLogger.INSTANCE)
+        requestAppDisconnect()
+        Thread.sleep(300)
 
-            val listener = createListener()
-            val dfu = EasyDfu2().apply {
-                setLogger(stringLogger)
-                setListener(listener)
-                setFastMode(config.fastMode)
-            }
-            currentDfu = dfu
+        stringLogger.clearBuffer()
+        stringLogger.setNextLogger(LogcatLogger.INSTANCE)
 
-            when (config.upgradeRegion) {
-                UpgradeRegion.SINGLE -> {
-                    dfu.startDfu(context, device, firmwareStream)
-                }
-                UpgradeRegion.DUAL -> {
-                    dfu.startDfuInCopyMode(context, device, firmwareStream, config.copyAddress.toInt())
-                }
-            }
+        val listener = createListener()
+        val dfu = EasyDfu2().apply {
+            setLogger(stringLogger)
+            setListener(listener)
+            setFastMode(config.fastMode)
+        }
+        currentDfu = dfu
 
-            if (isCancelled) {
-                _progress.value = _progress.value.copy(state = OtaState.CANCELLED)
-                return@withContext Result.failure(CancellationException("DFU cancelled by user"))
-            }
-
-            _progress.value = _progress.value.copy(state = OtaState.COMPLETED, progressPercent = 1f)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Timber.e(e, "Firmware DFU failed")
-            _progress.value = _progress.value.copy(
-                state = OtaState.ERROR,
-                errorMessage = e.message ?: "未知错误"
-            )
-            Result.failure(e)
+        when (config.upgradeRegion) {
+            UpgradeRegion.SINGLE -> dfu.startDfu(context, device, firmwareStream)
+            UpgradeRegion.DUAL -> dfu.startDfuInCopyMode(context, device, firmwareStream, config.copyAddress.toInt())
         }
     }
 
@@ -98,44 +90,27 @@ class OtaEngine @Inject constructor() {
         device: BluetoothDevice,
         resourceStream: InputStream,
         config: OtaConfig,
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+    ) = withContext(Dispatchers.IO) {
         isCancelled = false
         _progress.value = OtaProgress(state = OtaState.PREPARING)
 
-        try {
-            stringLogger.clearBuffer()
-            stringLogger.setNextLogger(LogcatLogger.INSTANCE)
+        requestAppDisconnect()
+        Thread.sleep(300)
 
-            val listener = createListener()
-            val dfu = EasyDfu2().apply {
-                setLogger(stringLogger)
-                setListener(listener)
-                setFastMode(config.fastMode)
-            }
-            currentDfu = dfu
+        stringLogger.clearBuffer()
+        stringLogger.setNextLogger(LogcatLogger.INSTANCE)
 
-            val extFlash = config.resourceStorageType ==
-                    com.ghealth.tools.feature.ota.model.StorageType.EXTERNAL
-            dfu.startUpdateResource(
-                context, device, resourceStream,
-                extFlash, config.resourceStartAddress.toInt()
-            )
-
-            if (isCancelled) {
-                _progress.value = _progress.value.copy(state = OtaState.CANCELLED)
-                return@withContext Result.failure(CancellationException("Resource upgrade cancelled"))
-            }
-
-            _progress.value = _progress.value.copy(state = OtaState.COMPLETED, progressPercent = 1f)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Timber.e(e, "Resource upgrade failed")
-            _progress.value = _progress.value.copy(
-                state = OtaState.ERROR,
-                errorMessage = e.message ?: "未知错误"
-            )
-            Result.failure(e)
+        val listener = createListener()
+        val dfu = EasyDfu2().apply {
+            setLogger(stringLogger)
+            setListener(listener)
+            setFastMode(config.fastMode)
         }
+        currentDfu = dfu
+
+        val extFlash = config.resourceStorageType ==
+                com.ghealth.tools.feature.ota.model.StorageType.EXTERNAL
+        dfu.startUpdateResource(context, device, resourceStream, extFlash, config.resourceStartAddress.toInt())
     }
 
     fun cancel() {
@@ -171,6 +146,7 @@ class OtaEngine @Inject constructor() {
             override fun onDfuComplete() {
                 _progress.value = _progress.value.copy(state = OtaState.COMPLETED, progressPercent = 1f)
                 _logEvents.tryEmit("DFU升级完成")
+                flushSdkLogs()
             }
 
             override fun onDfuError(message: String?, error: Error?) {
@@ -181,8 +157,21 @@ class OtaEngine @Inject constructor() {
                     errorMessage = errMsg
                 )
                 _logEvents.tryEmit("DFU错误: $errMsg")
+                flushSdkLogs()
             }
         }
+    }
+
+    private fun flushSdkLogs() {
+        val sdkLog = stringLogger.logBuffer.toString()
+        if (sdkLog.isNotBlank()) {
+            _logEvents.tryEmit("--- SDK日志 ---")
+            sdkLog.lines().forEach { line ->
+                _logEvents.tryEmit("  $line")
+            }
+            _logEvents.tryEmit("--- SDK日志结束 ---")
+        }
+        stringLogger.clearBuffer()
     }
 
     private fun mapDfuProgressState(percent: Int): OtaState = when {

@@ -418,6 +418,9 @@ private fun WideMainLayout(
                         }
                         viewModel.loadAvailableDevices(deviceInfos)
                     }
+                    LaunchedEffect(Unit) {
+                        viewModel.setDisconnectAllCallback { connectionViewModel.disconnectAll() }
+                    }
                     OtaScreen(
                         onNavigateBack = { navController.popBackStack() },
                         viewModel = viewModel,
@@ -562,6 +565,9 @@ private fun CompactMainLayout(
                         ConnectedDeviceInfo(address = device.address, name = device.name ?: device.address)
                     }
                     viewModel.loadAvailableDevices(deviceInfos)
+                }
+                LaunchedEffect(Unit) {
+                    viewModel.setDisconnectAllCallback { connectionViewModel.disconnectAll() }
                 }
                 OtaScreen(
                     onNavigateBack = { navController.popBackStack() },

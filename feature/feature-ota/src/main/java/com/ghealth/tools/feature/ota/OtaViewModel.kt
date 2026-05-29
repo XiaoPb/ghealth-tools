@@ -46,6 +46,13 @@ class OtaViewModel @Inject constructor(
                         otaState = progress.state,
                         progressPercent = progress.progressPercent,
                         logLines = progress.logLines,
+                        isUpgrading = when (progress.state) {
+                            OtaState.COMPLETED, OtaState.CANCELLED, OtaState.ERROR, OtaState.IDLE -> false
+                            else -> it.isUpgrading
+                        },
+                        successMessage = if (progress.state == OtaState.COMPLETED) "升级成功！" else it.successMessage,
+                        showResultDialog = progress.state == OtaState.COMPLETED || progress.state == OtaState.ERROR,
+                        errorMessage = progress.errorMessage ?: it.errorMessage,
                     )
                 }
             }
@@ -59,6 +66,10 @@ class OtaViewModel @Inject constructor(
 
     fun loadAvailableDevices(devices: List<ConnectedDeviceInfo>) {
         _uiState.update { it.copy(availableDevices = devices) }
+    }
+
+    fun setDisconnectAllCallback(callback: () -> Unit) {
+        otaEngine.setDisconnectCallback(callback)
     }
 
     fun selectDevice(device: ConnectedDeviceInfo) {
@@ -190,7 +201,7 @@ class OtaViewModel @Inject constructor(
     private fun prepareAndExecuteUpgrade(
         uriStr: String,
         fileName: String,
-        operation: suspend (BluetoothDevice, java.io.InputStream) -> Result<Unit>,
+        operation: suspend (BluetoothDevice, java.io.InputStream) -> Unit,
     ) {
         val deviceInfo = _uiState.value.selectedDevice ?: run {
             _uiState.update { it.copy(errorMessage = "请先选择目标设备") }
@@ -208,6 +219,7 @@ class OtaViewModel @Inject constructor(
                 logLines = emptyList(),
                 errorMessage = null,
                 successMessage = null,
+                showResultDialog = false,
             )
         }
 
@@ -220,34 +232,10 @@ class OtaViewModel @Inject constructor(
                     tempFile.outputStream().use { output -> input.copyTo(output) }
                 }
 
-                val result = tempFile.inputStream().use { stream ->
+                tempFile.inputStream().use { stream ->
                     operation(device, stream)
                 }
                 tempFile.delete()
-
-                result.fold(
-                    onSuccess = {
-                        _uiState.update {
-                            it.copy(
-                                isUpgrading = false,
-                                otaState = OtaState.COMPLETED,
-                                progressPercent = 1f,
-                                successMessage = "升级成功！",
-                                showResultDialog = true,
-                            )
-                        }
-                    },
-                    onFailure = { e ->
-                        _uiState.update {
-                            it.copy(
-                                isUpgrading = false,
-                                otaState = OtaState.ERROR,
-                                errorMessage = e.message ?: "升级失败",
-                                showResultDialog = true,
-                            )
-                        }
-                    }
-                )
             } catch (e: Exception) {
                 Timber.e(e, "Upgrade failed")
                 _uiState.update {
@@ -255,7 +243,6 @@ class OtaViewModel @Inject constructor(
                         isUpgrading = false,
                         otaState = OtaState.ERROR,
                         errorMessage = e.message ?: "升级异常",
-                        showResultDialog = true,
                     )
                 }
             }
