@@ -15,22 +15,18 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
@@ -47,7 +43,7 @@ import com.ghealth.tools.core.ui.adaptive.CONTENT_MAX_WIDTH
 import com.ghealth.tools.core.ui.adaptive.isWide
 import androidx.hilt.navigation.compose.hiltViewModel
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
+@OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun DeviceInfoScreen(
     onNavigateBack: () -> Unit,
@@ -59,43 +55,34 @@ fun DeviceInfoScreen(
     val isWide = windowSizeClass.widthSizeClass.isWide
     val maxW = if (isWide) CONTENT_MAX_WIDTH else Dp.Infinity
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("设备信息") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    if (state.isReading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(12.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        IconButton(onClick = { viewModel.refreshDeviceInfo() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "刷新")
-                        }
+    Box(
+        modifier = Modifier
+            .fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = maxW)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                if (state.isReading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(4.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    IconButton(onClick = { viewModel.refreshDeviceInfo() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
                 }
-            )
-        }
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Column(
-                modifier = Modifier
-                    .widthIn(max = maxW)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
-            ) {
+            }
+
             ConnectionStatusCard(state)
             Spacer(modifier = Modifier.height(16.dp))
             if (isWide) {
@@ -136,7 +123,6 @@ fun DeviceInfoScreen(
                 }
             }
         }
-    }
     }
 }
 

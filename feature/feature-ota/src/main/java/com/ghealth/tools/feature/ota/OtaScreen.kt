@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.ota
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -47,10 +48,8 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -198,81 +197,17 @@ fun OtaScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("OTA固件升级") },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        if (state.isUpgrading) viewModel.cancelUpgrade()
-                        onNavigateBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    var menuExpanded by remember { mutableStateOf(false) }
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "菜单")
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("快速模式") },
-                                onClick = { viewModel.updateFastMode(!state.otaConfig.fastMode) },
-                                leadingIcon = {
-                                    Checkbox(
-                                        checked = state.otaConfig.fastMode,
-                                        onCheckedChange = null,
-                                    )
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("自定义拷贝地址") },
-                                onClick = { viewModel.toggleCopyAddressEnabled() },
-                                leadingIcon = {
-                                    Checkbox(
-                                        checked = state.otaConfig.copyAddressEnabled,
-                                        onCheckedChange = null,
-                                    )
-                                },
-                            )
-                            DebugMenuAction.entries.forEach { action ->
-                                DropdownMenuItem(
-                                    text = { Text(action.label) },
-                                    onClick = { viewModel.toggleDebugAction(action) },
-                                    leadingIcon = {
-                                        Checkbox(
-                                            checked = state.activeDebugActions.contains(action),
-                                            onCheckedChange = null,
-                                        )
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("写控制点") },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.showControlPointDialog()
-                                },
-                            )
-                        }
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    BackHandler(enabled = state.isUpgrading) {
+        viewModel.cancelUpgrade()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
             DeviceSelectionCard(
                 devices = state.availableDevices,
                 selectedDevice = state.selectedDevice,
@@ -342,6 +277,61 @@ fun OtaScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+}
+
+@Composable
+fun OtaTopBarMenu(viewModel: OtaViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Box {
+        IconButton(onClick = { menuExpanded = true }) {
+            Icon(Icons.Default.MoreVert, contentDescription = "菜单")
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("快速模式") },
+                onClick = { viewModel.updateFastMode(!state.otaConfig.fastMode) },
+                leadingIcon = {
+                    Checkbox(
+                        checked = state.otaConfig.fastMode,
+                        onCheckedChange = null,
+                    )
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("自定义拷贝地址") },
+                onClick = { viewModel.toggleCopyAddressEnabled() },
+                leadingIcon = {
+                    Checkbox(
+                        checked = state.otaConfig.copyAddressEnabled,
+                        onCheckedChange = null,
+                    )
+                },
+            )
+            DebugMenuAction.entries.forEach { action ->
+                DropdownMenuItem(
+                    text = { Text(action.label) },
+                    onClick = { viewModel.toggleDebugAction(action) },
+                    leadingIcon = {
+                        Checkbox(
+                            checked = state.activeDebugActions.contains(action),
+                            onCheckedChange = null,
+                        )
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("写控制点") },
+                onClick = {
+                    menuExpanded = false
+                    viewModel.showControlPointDialog()
+                },
+            )
         }
     }
 }
