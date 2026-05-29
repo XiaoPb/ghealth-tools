@@ -70,6 +70,8 @@ dependencies {
     implementation(project(":feature:feature-factory"))
     implementation(project(":feature:feature-settings"))
 
+    implementation(project(":feature:feature-ota"))
+
     implementation(project(":ble:ble-scanner"))
     implementation(project(":ble:ble-connection"))
     implementation(project(":ble:ble-protocol"))
