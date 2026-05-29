@@ -58,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -89,10 +90,13 @@ fun OtaScreen(
     ) { uri: Uri? -> uri?.let { viewModel.selectResourceFile(it) } }
 
     val logListState = rememberLazyListState()
-    LaunchedEffect(state.logLines.size) {
-        if (state.logLines.isNotEmpty()) {
-            logListState.animateScrollToItem(state.logLines.size - 1)
-        }
+    LaunchedEffect(Unit) {
+        snapshotFlow { state.logLines.size }
+            .collect { size ->
+                if (size > 0) {
+                    logListState.animateScrollToItem(size - 1)
+                }
+            }
     }
 
     if (state.showResultDialog) {
