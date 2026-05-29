@@ -414,7 +414,7 @@ private fun WideMainLayout(
                     val viewModel: OtaViewModel = hiltViewModel()
                     LaunchedEffect(connectionState.connectedDevices) {
                         val deviceInfos = connectionState.connectedDevices.values.map { device ->
-                            ConnectedDeviceInfo(address = device.address, name = device.name)
+                            ConnectedDeviceInfo(address = device.address, name = device.name ?: device.address)
                         }
                         viewModel.loadAvailableDevices(deviceInfos)
                     }
@@ -559,7 +559,7 @@ private fun CompactMainLayout(
                 val viewModel: OtaViewModel = hiltViewModel()
                 LaunchedEffect(connectionState.connectedDevices) {
                     val deviceInfos = connectionState.connectedDevices.values.map { device ->
-                        ConnectedDeviceInfo(address = device.address, name = device.name)
+                        ConnectedDeviceInfo(address = device.address, name = device.name ?: device.address)
                     }
                     viewModel.loadAvailableDevices(deviceInfos)
                 }
