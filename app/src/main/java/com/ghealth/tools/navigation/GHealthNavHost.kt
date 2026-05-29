@@ -54,6 +54,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ghealth.tools.core.ui.adaptive.shouldUseLandscapeLayout
 import com.ghealth.tools.feature.connection.ConnectionScreen
+import com.ghealth.tools.feature.connection.ConnectionViewModel
 import com.ghealth.tools.feature.connection.TestConfigDialog
 import com.ghealth.tools.feature.demo.DemoScreen
 import com.ghealth.tools.feature.factory.FactoryScreen
@@ -70,6 +71,10 @@ import com.ghealth.tools.feature.login.ProjectCreateScreen
 import com.ghealth.tools.feature.login.RegisterScreen
 import com.ghealth.tools.feature.settings.DeviceInfoScreen
 import com.ghealth.tools.feature.settings.SettingsScreen
+import com.ghealth.tools.feature.ota.ConnectedDeviceInfo
+import com.ghealth.tools.feature.ota.OtaScreen
+import com.ghealth.tools.feature.ota.OtaViewModel
+import androidx.compose.runtime.LaunchedEffect
 
 enum class TopLevelRoute(val route: String, val label: String, val icon: ImageVector) {
     Connection("connection", "主界面", Icons.Default.Bluetooth),
@@ -251,6 +256,8 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val demoViewModel: DemoViewModel = hiltViewModel()
+    val connectionViewModel: ConnectionViewModel = hiltViewModel()
+    val connectionState by connectionViewModel.uiState.collectAsState()
     val context = LocalContext.current
     val windowSizeClass = calculateWindowSizeClass(context as Activity)
 
@@ -259,9 +266,9 @@ fun MainScreen(
     val demoState by demoViewModel.uiState.collectAsState()
 
     if (isWide) {
-        WideMainLayout(navController, currentDestination, demoViewModel, demoState, onLogout, onSwitchProject, onNavigateToProjectManage)
+        WideMainLayout(navController, currentDestination, demoViewModel, demoState, connectionViewModel, connectionState, onLogout, onSwitchProject, onNavigateToProjectManage)
     } else {
-        CompactMainLayout(navController, currentDestination, isTopLevelRoute, demoViewModel, demoState, onLogout, onSwitchProject, onNavigateToProjectManage)
+        CompactMainLayout(navController, currentDestination, isTopLevelRoute, demoViewModel, demoState, connectionViewModel, connectionState, onLogout, onSwitchProject, onNavigateToProjectManage)
     }
 
     if (demoState.showRestartConfigDialog) {
@@ -283,6 +290,8 @@ private fun WideMainLayout(
     currentDestination: NavDestination?,
     demoViewModel: DemoViewModel,
     demoState: DemoUiState,
+    connectionViewModel: ConnectionViewModel,
+    connectionState: com.ghealth.tools.feature.connection.ConnectionUiState,
     onLogout: () -> Unit,
     onSwitchProject: () -> Unit,
     onNavigateToProjectManage: () -> Unit
@@ -325,7 +334,11 @@ private fun WideMainLayout(
                         Column {
                             Text(currentDestination?.let { dest ->
                                 TopLevelRoute.entries.find { it.route == dest.route }?.label
-                                    ?: if (dest.route == Routes.Main.DEVICE_INFO) "设备信息" else "GHealth Tools"
+                                    ?: when (dest.route) {
+                                        Routes.Main.DEVICE_INFO -> "设备信息"
+                                        Routes.Main.OTA -> "OTA固件升级"
+                                        else -> "GHealth Tools"
+                                    }
                             } ?: "GHealth Tools")
                             Text(
                                 text = "芯片: ${demoState.chipType.name}",
@@ -371,7 +384,8 @@ private fun WideMainLayout(
             ) {
                 composable(TopLevelRoute.Connection.route) {
                     ConnectionScreen(
-                        onFactoryTest = { navController.navigate(Routes.Main.FACTORY) }
+                        onFactoryTest = { navController.navigate(Routes.Main.FACTORY) },
+                        onOtaUpgrade = { navController.navigate(Routes.Main.OTA) },
                     )
                 }
                 composable(TopLevelRoute.Demo.route) { DemoScreen(viewModel = demoViewModel) }
@@ -396,6 +410,19 @@ private fun WideMainLayout(
                         onNavigateBack = { navController.popBackStack() }
                     )
                 }
+                composable(Routes.Main.OTA) {
+                    val viewModel: OtaViewModel = hiltViewModel()
+                    LaunchedEffect(connectionState.connectedDevices) {
+                        val deviceInfos = connectionState.connectedDevices.values.map { device ->
+                            ConnectedDeviceInfo(address = device.address, name = device.name)
+                        }
+                        viewModel.loadAvailableDevices(deviceInfos)
+                    }
+                    OtaScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        viewModel = viewModel,
+                    )
+                }
             }
         }
     }
@@ -409,6 +436,8 @@ private fun CompactMainLayout(
     isTopLevelRoute: Boolean,
     demoViewModel: DemoViewModel,
     demoState: DemoUiState,
+    connectionViewModel: ConnectionViewModel,
+    connectionState: com.ghealth.tools.feature.connection.ConnectionUiState,
     onLogout: () -> Unit,
     onSwitchProject: () -> Unit,
     onNavigateToProjectManage: () -> Unit
@@ -420,7 +449,11 @@ private fun CompactMainLayout(
                     Column {
                         Text(currentDestination?.let { dest ->
                             TopLevelRoute.entries.find { it.route == dest.route }?.label
-                                ?: if (dest.route == Routes.Main.DEVICE_INFO) "设备信息" else "GHealth Tools"
+                                ?: when (dest.route) {
+                                    Routes.Main.DEVICE_INFO -> "设备信息"
+                                    Routes.Main.OTA -> "OTA固件升级"
+                                    else -> "GHealth Tools"
+                                }
                         } ?: "GHealth Tools")
                         Text(
                             text = "芯片: ${demoState.chipType.name}",
@@ -496,7 +529,8 @@ private fun CompactMainLayout(
         ) {
             composable(TopLevelRoute.Connection.route) {
                 ConnectionScreen(
-                    onFactoryTest = { navController.navigate(Routes.Main.FACTORY) }
+                    onFactoryTest = { navController.navigate(Routes.Main.FACTORY) },
+                    onOtaUpgrade = { navController.navigate(Routes.Main.OTA) },
                 )
             }
             composable(TopLevelRoute.Demo.route) { DemoScreen(viewModel = demoViewModel) }
@@ -519,6 +553,19 @@ private fun CompactMainLayout(
             composable(Routes.Main.FACTORY) {
                 FactoryScreen(
                     onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(Routes.Main.OTA) {
+                val viewModel: OtaViewModel = hiltViewModel()
+                LaunchedEffect(connectionState.connectedDevices) {
+                    val deviceInfos = connectionState.connectedDevices.values.map { device ->
+                        ConnectedDeviceInfo(address = device.address, name = device.name)
+                    }
+                    viewModel.loadAvailableDevices(deviceInfos)
+                }
+                OtaScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = viewModel,
                 )
             }
         }

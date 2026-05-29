@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
@@ -80,7 +81,8 @@ private object CommandRoutes {
 @Composable
 fun ConnectionScreen(
     viewModel: ConnectionViewModel = hiltViewModel(),
-    onFactoryTest: () -> Unit = {}
+    onFactoryTest: () -> Unit = {},
+    onOtaUpgrade: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -88,9 +90,9 @@ fun ConnectionScreen(
     val isLandscape = windowSizeClass.shouldUseLandscapeLayout
 
     if (isLandscape) {
-        ConnectionScreenLandscape(viewModel, state, onFactoryTest)
+        ConnectionScreenLandscape(viewModel, state, onFactoryTest, onOtaUpgrade)
     } else {
-        ConnectionScreenCompact(viewModel, state, onFactoryTest)
+        ConnectionScreenCompact(viewModel, state, onFactoryTest, onOtaUpgrade)
     }
 }
 
@@ -99,7 +101,8 @@ fun ConnectionScreen(
 private fun ConnectionScreenLandscape(
     viewModel: ConnectionViewModel,
     state: ConnectionUiState,
-    onFactoryTest: () -> Unit = {}
+    onFactoryTest: () -> Unit = {},
+    onOtaUpgrade: () -> Unit = {},
 ) {
     var showCommandPanel by remember { mutableStateOf(false) }
 
@@ -114,7 +117,8 @@ private fun ConnectionScreenLandscape(
                 onDisconnectDevice = viewModel::disconnectDevice,
                 onWorkMode = viewModel::showWorkModeDialog,
                 onCommand = { showCommandPanel = true },
-                onFactoryTest = onFactoryTest
+                onFactoryTest = onFactoryTest,
+                onOtaUpgrade = onOtaUpgrade,
             )
         }
 
@@ -208,10 +212,11 @@ private fun ConnectionScreenLandscape(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConnectionScreenCompact(
+private fun MainMenuContent(
     viewModel: ConnectionViewModel,
     state: ConnectionUiState,
-    onFactoryTest: () -> Unit = {}
+    onFactoryTest: () -> Unit = {},
+    onOtaUpgrade: () -> Unit = {},
 ) {
     val navController = rememberNavController()
 
@@ -241,7 +246,8 @@ private fun ConnectionScreenCompact(
                         onDisconnectDevice = viewModel::disconnectDevice,
                         onWorkMode = viewModel::showWorkModeDialog,
                         onCommand = { navController.navigate(CommandRoutes.COMMAND_PANEL) },
-                        onFactoryTest = onFactoryTest
+                        onFactoryTest = onFactoryTest,
+                        onOtaUpgrade = onOtaUpgrade,
                     )
                 }
             }
@@ -319,7 +325,8 @@ private fun MainMenuContent(
     onDisconnectDevice: (String) -> Unit,
     onWorkMode: () -> Unit,
     onCommand: () -> Unit,
-    onFactoryTest: () -> Unit = {}
+    onFactoryTest: () -> Unit = {},
+    onOtaUpgrade: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -381,6 +388,15 @@ private fun MainMenuContent(
             title = "产测",
             subtitle = "自动化产测流程",
             onClick = onFactoryTest
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        MenuItemCard(
+            icon = Icons.Default.SystemUpdate,
+            title = "OTA固件升级",
+            subtitle = "选择固件进行OTA升级",
+            onClick = onOtaUpgrade
         )
     }
 }
