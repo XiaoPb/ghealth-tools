@@ -8,6 +8,7 @@ data class OtaConfig(
     val fastMode: Boolean = false,
     val upgradeRegion: UpgradeRegion = UpgradeRegion.SINGLE,
     val copyAddress: Long = 0,
+    val copyAddressEnabled: Boolean = false,
     val resourceStartAddress: Long = 0,
     val resourceStorageType: StorageType = StorageType.INTERNAL,
 )

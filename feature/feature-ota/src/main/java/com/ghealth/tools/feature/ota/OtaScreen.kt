@@ -33,6 +33,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,7 +48,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -117,60 +117,6 @@ fun OtaScreen(
                         viewModel.resetState()
                     }) { Text("重试") }
                 }
-            }
-        )
-    }
-
-    if (state.showFastModeDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissFastModeDialog() },
-            title = { Text("快速模式") },
-            text = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("启用高速传输模式")
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Switch(
-                        checked = state.otaConfig.fastMode,
-                        onCheckedChange = { viewModel.updateFastMode(it) },
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.dismissFastModeDialog() }) { Text("确定") }
-            }
-        )
-    }
-
-    if (state.showCopyAddressDialog) {
-        var addrText by remember(state.otaConfig.copyAddress) {
-            mutableStateOf(
-                if (state.otaConfig.copyAddress == 0L) ""
-                else "0x${state.otaConfig.copyAddress.toString(16).uppercase()}"
-            )
-        }
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissCopyAddressDialog() },
-            title = { Text("自定义拷贝地址") },
-            text = {
-                OutlinedTextField(
-                    value = addrText,
-                    onValueChange = { addrText = it },
-                    label = { Text("拷贝地址 (Hex)") },
-                    placeholder = { Text("0x00000000") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val parsed = addrText.removePrefix("0x").removePrefix("0X")
-                        .toLongOrNull(16) ?: 0L
-                    viewModel.updateCopyAddress(parsed)
-                    viewModel.dismissCopyAddressDialog()
-                }) { Text("确定") }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissCopyAddressDialog() }) { Text("取消") }
             }
         )
     }
@@ -276,24 +222,33 @@ fun OtaScreen(
                         ) {
                             DropdownMenuItem(
                                 text = { Text("快速模式") },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.showFastModeDialog()
+                                onClick = { viewModel.updateFastMode(!state.otaConfig.fastMode) },
+                                leadingIcon = {
+                                    Checkbox(
+                                        checked = state.otaConfig.fastMode,
+                                        onCheckedChange = null,
+                                    )
                                 },
                             )
                             DropdownMenuItem(
                                 text = { Text("自定义拷贝地址") },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.showCopyAddressDialog()
+                                onClick = { viewModel.toggleCopyAddressEnabled() },
+                                leadingIcon = {
+                                    Checkbox(
+                                        checked = state.otaConfig.copyAddressEnabled,
+                                        onCheckedChange = null,
+                                    )
                                 },
                             )
                             DebugMenuAction.entries.forEach { action ->
                                 DropdownMenuItem(
                                     text = { Text(action.label) },
-                                    onClick = {
-                                        menuExpanded = false
-                                        viewModel.toggleDebugAction(action)
+                                    onClick = { viewModel.toggleDebugAction(action) },
+                                    leadingIcon = {
+                                        Checkbox(
+                                            checked = state.activeDebugActions.contains(action),
+                                            onCheckedChange = null,
+                                        )
                                     },
                                 )
                             }

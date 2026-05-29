@@ -38,8 +38,6 @@ data class OtaUiState(
     val otaConfig: OtaConfig = OtaConfig(),
 
     val activeDebugActions: List<DebugMenuAction> = emptyList(),
-    val showFastModeDialog: Boolean = false,
-    val showCopyAddressDialog: Boolean = false,
     val showControlPointDialog: Boolean = false,
     val controlPointHex: String = "",
 

@@ -167,6 +167,10 @@ class OtaViewModel @Inject constructor(
         _uiState.update { it.copy(otaConfig = it.otaConfig.copy(fastMode = fastMode)) }
     }
 
+    fun toggleCopyAddressEnabled() {
+        _uiState.update { it.copy(otaConfig = it.otaConfig.copy(copyAddressEnabled = !it.otaConfig.copyAddressEnabled)) }
+    }
+
     fun startFirmwareUpgrade() {
         val fileInfo = _uiState.value.firmwareFile
         if (!fileInfo.isValid) {
@@ -271,12 +275,6 @@ class OtaViewModel @Inject constructor(
 
     fun dismissError() { _uiState.update { it.copy(errorMessage = null) } }
     fun dismissResultDialog() { _uiState.update { it.copy(showResultDialog = false) } }
-
-    fun showFastModeDialog() { _uiState.update { it.copy(showFastModeDialog = true) } }
-    fun dismissFastModeDialog() { _uiState.update { it.copy(showFastModeDialog = false) } }
-
-    fun showCopyAddressDialog() { _uiState.update { it.copy(showCopyAddressDialog = true) } }
-    fun dismissCopyAddressDialog() { _uiState.update { it.copy(showCopyAddressDialog = false) } }
 
     fun showControlPointDialog() { _uiState.update { it.copy(showControlPointDialog = true) } }
     fun dismissControlPointDialog() { _uiState.update { it.copy(showControlPointDialog = false) } }
