@@ -61,14 +61,21 @@ class AuthAuthenticator @Inject constructor(
                     refreshApi.refreshToken(TokenRefreshRequest(refreshToken))
                 }
 
-                if (newTokenResponse.isSuccessful && newTokenResponse.body()?.data != null) {
-                    val newAccessToken = newTokenResponse.body()!!.data!!.access
-                    runBlocking { tokenManager.updateAccessToken(newAccessToken) }
-                    retryCount++
+                if (newTokenResponse.isSuccessful) {
+                    val tokenData = newTokenResponse.body()?.data
+                    if (tokenData != null) {
+                        val newAccessToken = tokenData.access
+                        runBlocking { tokenManager.updateAccessToken(newAccessToken) }
+                        retryCount++
 
-                    request.newBuilder()
-                        .header("Authorization", "Bearer $newAccessToken")
-                        .build()
+                        request.newBuilder()
+                            .header("Authorization", "Bearer $newAccessToken")
+                            .build()
+                    } else {
+                        retryCount = 0
+                        tokenManager.clearTokensSync()
+                        null
+                    }
                 } else {
                     retryCount = 0
                     tokenManager.clearTokensSync()

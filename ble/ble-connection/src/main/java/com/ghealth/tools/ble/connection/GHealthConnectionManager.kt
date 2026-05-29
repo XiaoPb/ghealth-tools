@@ -226,7 +226,10 @@ class BleConnectionManager @Inject constructor(
                 deviceType = deviceType
             )
             peripherals[address] = gHealthPeripheral
-            _devices.value = _devices.value + (address to _devices.value[address]!!.copy(deviceType = deviceType))
+            val currentDevice = _devices.value[address]
+            if (currentDevice != null) {
+                _devices.value = _devices.value + (address to currentDevice.copy(deviceType = deviceType))
+            }
 
             peripheral.state.onEach { state ->
                 when (state) {

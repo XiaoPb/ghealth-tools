@@ -94,6 +94,10 @@ class TokenManager @Inject constructor(
         }
     }
 
+    /**
+     * 同步清除 Token，内部使用 runBlocking，禁止在主线程调用
+     * 仅应在 OkHttp Authenticator 等后台线程中使用
+     */
     fun clearTokensSync() {
         cachedAccessToken = null
         cachedRefreshToken = null

@@ -30,10 +30,18 @@ class FrameParser {
         for (byte in data) {
             val r = processByte(byte)
             when {
-                r.isSuccess && r.getOrNull() != null -> results.add(Result.success(r.getOrNull()!!))
+                r.isSuccess -> {
+                    val value = r.getOrNull()
+                    if (value != null) {
+                        results.add(Result.success(value))
+                    }
+                }
                 r.isFailure -> {
                     reset()
-                    results.add(Result.failure(r.exceptionOrNull()!!))
+                    val error = r.exceptionOrNull()
+                    if (error != null) {
+                        results.add(Result.failure(error))
+                    }
                 }
             }
         }

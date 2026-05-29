@@ -60,7 +60,6 @@ class UserPreferences @Inject constructor(
         val SELECTED_PROJECT_NAME = stringPreferencesKey("selected_project_name")
         val REMEMBER_CREDENTIALS = booleanPreferencesKey("remember_credentials")
         val SAVED_USERNAME = stringPreferencesKey("saved_username")
-        val SAVED_PASSWORD = stringPreferencesKey("saved_password")
     }
 
     private object SecureKeys {
@@ -97,6 +96,8 @@ class UserPreferences @Inject constructor(
     }
 
     val savedPassword: Flow<String> = context.userDataStore.data.map {
+        // 密码仅通过加密存储访问，Flow 始终返回空字符串
+        // 实际获取密码请使用 getPasswordForAccount() 或 getPasswordSync()
         ""
     }
 

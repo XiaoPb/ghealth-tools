@@ -26,9 +26,9 @@ android {
     signingConfigs {
         create("ghealth") {
             storeFile = rootProject.file("ghealth-release.keystore")
-            storePassword = "ghealth2026"
+            storePassword = project.findProperty("RELEASE_STORE_PASSWORD") as? String ?: ""
             keyAlias = "ghealth"
-            keyPassword = "ghealth2026"
+            keyPassword = project.findProperty("RELEASE_KEY_PASSWORD") as? String ?: ""
         }
     }
 
@@ -46,7 +46,7 @@ android {
     }
 
     lint {
-        checkReleaseBuilds = false
+        checkReleaseBuilds = true
     }
 
     buildFeatures {

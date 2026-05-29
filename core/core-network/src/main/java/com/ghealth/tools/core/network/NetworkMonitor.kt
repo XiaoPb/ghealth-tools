@@ -1,5 +1,6 @@
 package com.ghealth.tools.core.network
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -23,9 +24,11 @@ data class NetworkStatus(
 class NetworkMonitor @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    @SuppressLint("MissingPermission")
     private val connectivityManager = 
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
+    @SuppressLint("MissingPermission")
     val networkStatus: Flow<NetworkStatus> = callbackFlow {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
@@ -77,6 +80,7 @@ class NetworkMonitor @Inject constructor(
         }
     }.distinctUntilChanged()
 
+    @SuppressLint("MissingPermission")
     fun isNetworkAvailable(): Boolean {
         val network = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
