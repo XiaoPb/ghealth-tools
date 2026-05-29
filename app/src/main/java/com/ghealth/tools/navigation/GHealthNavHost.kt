@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -32,7 +33,10 @@ import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import android.app.Activity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,7 +77,10 @@ import com.ghealth.tools.feature.settings.DeviceInfoScreen
 import com.ghealth.tools.feature.settings.SettingsScreen
 import com.ghealth.tools.feature.ota.ConnectedDeviceInfo
 import com.ghealth.tools.feature.ota.OtaScreen
+import com.ghealth.tools.feature.ota.OtaTopBarMenu
 import com.ghealth.tools.feature.ota.OtaViewModel
+import com.ghealth.tools.core.ui.component.GHealthTopAppBar
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 
 enum class TopLevelRoute(val route: String, val label: String, val icon: ImageVector) {
@@ -264,11 +271,12 @@ fun MainScreen(
     val isTopLevelRoute = currentDestination?.route in TopLevelRoute.entries.map { it.route }
     val isWide = windowSizeClass.shouldUseLandscapeLayout && isTopLevelRoute
     val demoState by demoViewModel.uiState.collectAsState()
+    var otaViewModel by remember { mutableStateOf<OtaViewModel?>(null) }
 
     if (isWide) {
-        WideMainLayout(navController, currentDestination, demoViewModel, demoState, connectionViewModel, connectionState, onLogout, onSwitchProject, onNavigateToProjectManage)
+        WideMainLayout(navController, currentDestination, demoViewModel, demoState, connectionViewModel, connectionState, otaViewModel, { otaViewModel = it }, onLogout, onSwitchProject, onNavigateToProjectManage)
     } else {
-        CompactMainLayout(navController, currentDestination, isTopLevelRoute, demoViewModel, demoState, connectionViewModel, connectionState, onLogout, onSwitchProject, onNavigateToProjectManage)
+        CompactMainLayout(navController, currentDestination, isTopLevelRoute, demoViewModel, demoState, connectionViewModel, connectionState, otaViewModel, { otaViewModel = it }, onLogout, onSwitchProject, onNavigateToProjectManage)
     }
 
     if (demoState.showRestartConfigDialog) {
@@ -292,15 +300,12 @@ private fun WideMainLayout(
     demoState: DemoUiState,
     connectionViewModel: ConnectionViewModel,
     connectionState: com.ghealth.tools.feature.connection.ConnectionUiState,
+    otaViewModel: OtaViewModel?,
+    onOtaViewModelChange: (OtaViewModel?) -> Unit,
     onLogout: () -> Unit,
     onSwitchProject: () -> Unit,
     onNavigateToProjectManage: () -> Unit
 ) {
-    val subRouteWithoutTopBar = currentDestination?.route in setOf(
-        Routes.Main.DEVICE_INFO,
-        Routes.Main.FACTORY,
-        Routes.Main.OTA,
-    )
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail(
             modifier = Modifier.fillMaxHeight(),
@@ -334,49 +339,84 @@ private fun WideMainLayout(
         Scaffold(
             modifier = Modifier.weight(1f),
             topBar = {
-                if (!subRouteWithoutTopBar) {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(currentDestination?.let { dest ->
-                                    TopLevelRoute.entries.find { it.route == dest.route }?.label
-                                        ?: "GHealth Tools"
-                                } ?: "GHealth Tools")
-                                Text(
-                                    text = "芯片: ${demoState.chipType.name}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                when (currentDestination?.route) {
+                    Routes.Main.DEVICE_INFO -> {
+                        GHealthTopAppBar(
+                            title = "设备信息",
+                            navigationIcon = {
+                                IconButton(onClick = { navController.popBackStack() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                                }
                             }
-                        },
-                        actions = {
-                            val isRecording = demoState.isRecording
-                            Icon(
-                                imageVector = Icons.Default.FiberManualRecord,
-                                contentDescription = null,
-                                tint = if (isRecording) Color(0xFFFF1744) else Color(0xFF666666),
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (isRecording) "录制中" else "未录制",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(
-                                onClick = { demoViewModel.toggleRecording() },
-                                modifier = Modifier.size(36.dp)
-                            ) {
+                        )
+                    }
+                    Routes.Main.FACTORY -> {
+                        GHealthTopAppBar(
+                            title = "产测",
+                            navigationIcon = {
+                                IconButton(onClick = { navController.popBackStack() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                                }
+                            }
+                        )
+                    }
+                    Routes.Main.OTA -> {
+                        GHealthTopAppBar(
+                            title = "OTA固件升级",
+                            navigationIcon = {
+                                IconButton(onClick = { navController.popBackStack() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                                }
+                            },
+                            actions = {
+                                otaViewModel?.let { OtaTopBarMenu(it) }
+                            }
+                        )
+                    }
+                    else -> {
+                        TopAppBar(
+                            title = {
+                                Column {
+                                    Text(currentDestination?.let { dest ->
+                                        TopLevelRoute.entries.find { it.route == dest.route }?.label
+                                            ?: "GHealth Tools"
+                                    } ?: "GHealth Tools")
+                                    Text(
+                                        text = "芯片: ${demoState.chipType.name}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
+                            actions = {
+                                val isRecording = demoState.isRecording
                                 Icon(
-                                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
-                                    contentDescription = if (isRecording) "停止录制" else "开始录制",
-                                    tint = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
+                                    imageVector = Icons.Default.FiberManualRecord,
+                                    contentDescription = null,
+                                    tint = if (isRecording) Color(0xFFFF1744) else Color(0xFF666666),
+                                    modifier = Modifier.size(10.dp)
                                 )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isRecording) "录制中" else "未录制",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = { demoViewModel.toggleRecording() },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                                        contentDescription = if (isRecording) "停止录制" else "开始录制",
+                                        tint = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         ) { innerPadding ->
@@ -415,14 +455,15 @@ private fun WideMainLayout(
                 }
                 composable(Routes.Main.OTA) {
                     val viewModel: OtaViewModel = hiltViewModel()
+                    DisposableEffect(viewModel) {
+                        onOtaViewModelChange(viewModel)
+                        onDispose { onOtaViewModelChange(null) }
+                    }
                     LaunchedEffect(connectionState.connectedDevices) {
                         val deviceInfos = connectionState.connectedDevices.values.map { device ->
                             ConnectedDeviceInfo(address = device.address, name = device.name ?: device.address)
                         }
                         viewModel.loadAvailableDevices(deviceInfos)
-                    }
-                    LaunchedEffect(Unit) {
-                        viewModel.setDisconnectAllCallback { connectionViewModel.disconnectAll() }
                     }
                     OtaScreen(
                         onNavigateBack = { navController.popBackStack() },
@@ -444,68 +485,100 @@ private fun CompactMainLayout(
     demoState: DemoUiState,
     connectionViewModel: ConnectionViewModel,
     connectionState: com.ghealth.tools.feature.connection.ConnectionUiState,
+    otaViewModel: OtaViewModel?,
+    onOtaViewModelChange: (OtaViewModel?) -> Unit,
     onLogout: () -> Unit,
     onSwitchProject: () -> Unit,
     onNavigateToProjectManage: () -> Unit
 ) {
-    val subRouteWithoutTopBar = currentDestination?.route in setOf(
-        Routes.Main.DEVICE_INFO,
-        Routes.Main.FACTORY,
-        Routes.Main.OTA,
-    )
     Scaffold(
         topBar = {
-            if (!subRouteWithoutTopBar) {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(currentDestination?.let { dest ->
-                                TopLevelRoute.entries.find { it.route == dest.route }?.label
-                                    ?: "GHealth Tools"
-                            } ?: "GHealth Tools")
+            when (currentDestination?.route) {
+                Routes.Main.DEVICE_INFO -> {
+                    GHealthTopAppBar(
+                        title = "设备信息",
+                        navigationIcon = {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                            }
+                        }
+                    )
+                }
+                Routes.Main.FACTORY -> {
+                    GHealthTopAppBar(
+                        title = "产测",
+                        navigationIcon = {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                            }
+                        }
+                    )
+                }
+                Routes.Main.OTA -> {
+                    GHealthTopAppBar(
+                        title = "OTA固件升级",
+                        navigationIcon = {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                            }
+                        },
+                        actions = {
+                            otaViewModel?.let { OtaTopBarMenu(it) }
+                        }
+                    )
+                }
+                else -> {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(currentDestination?.let { dest ->
+                                    TopLevelRoute.entries.find { it.route == dest.route }?.label
+                                        ?: "GHealth Tools"
+                                } ?: "GHealth Tools")
+                                Text(
+                                    text = "芯片: ${demoState.chipType.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        },
+                        actions = {
+                            if (isTopLevelRoute) {
+                            val isRecording = demoState.isRecording
+                            Icon(
+                                imageVector = Icons.Default.FiberManualRecord,
+                                contentDescription = null,
+                                tint = if (isRecording) Color(0xFFFF1744) else Color(0xFF666666),
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "芯片: ${demoState.chipType.name}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                text = if (isRecording) "录制中" else "未录制",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { demoViewModel.toggleRecording() },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                                    contentDescription = if (isRecording) "停止录制" else "开始录制",
+                                    tint = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            IconButton(onClick = onLogout) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                    contentDescription = "退出"
+                                )
+                            }
                         }
-                    },
-                    actions = {
-                        if (isTopLevelRoute) {
-                        val isRecording = demoState.isRecording
-                        Icon(
-                            imageVector = Icons.Default.FiberManualRecord,
-                            contentDescription = null,
-                            tint = if (isRecording) Color(0xFFFF1744) else Color(0xFF666666),
-                            modifier = Modifier.size(10.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isRecording) "录制中" else "未录制",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
-                            onClick = { demoViewModel.toggleRecording() },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
-                                contentDescription = if (isRecording) "停止录制" else "开始录制",
-                                tint = if (isRecording) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
                         }
-                        IconButton(onClick = onLogout) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                                contentDescription = "退出"
-                            )
-                        }
-                    }
-                    }
-                )
+                    )
+                }
             }
         },
         bottomBar = {
@@ -566,14 +639,15 @@ private fun CompactMainLayout(
             }
             composable(Routes.Main.OTA) {
                 val viewModel: OtaViewModel = hiltViewModel()
+                DisposableEffect(viewModel) {
+                    onOtaViewModelChange(viewModel)
+                    onDispose { onOtaViewModelChange(null) }
+                }
                 LaunchedEffect(connectionState.connectedDevices) {
                     val deviceInfos = connectionState.connectedDevices.values.map { device ->
                         ConnectedDeviceInfo(address = device.address, name = device.name ?: device.address)
                     }
                     viewModel.loadAvailableDevices(deviceInfos)
-                }
-                LaunchedEffect(Unit) {
-                    viewModel.setDisconnectAllCallback { connectionViewModel.disconnectAll() }
                 }
                 OtaScreen(
                     onNavigateBack = { navController.popBackStack() },

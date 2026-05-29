@@ -1,11 +1,10 @@
 package com.ghealth.tools.feature.ota
 
 import android.app.Application
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.feature.ota.engine.DebugOperations
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
 import com.ghealth.tools.feature.ota.engine.OtaEngine
@@ -15,6 +14,8 @@ import com.ghealth.tools.feature.ota.model.OtaConfig
 import com.ghealth.tools.feature.ota.model.StorageType
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
+import com.juul.kable.ExperimentalApi
+import com.juul.kable.Peripheral
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,7 @@ import javax.inject.Inject
 class OtaViewModel @Inject constructor(
     application: Application,
     private val otaEngine: OtaEngine,
+    private val connectionManager: BleConnectionManager,
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(OtaUiState())
@@ -68,10 +70,6 @@ class OtaViewModel @Inject constructor(
         _uiState.update { it.copy(availableDevices = devices) }
     }
 
-    fun setDisconnectAllCallback(callback: () -> Unit) {
-        otaEngine.setDisconnectCallback(callback)
-    }
-
     fun selectDevice(device: ConnectedDeviceInfo) {
         _uiState.update { it.copy(selectedDevice = device) }
     }
@@ -84,9 +82,6 @@ class OtaViewModel @Inject constructor(
         _uiState.update { it.copy(isReadingFirmwareInfo = true) }
         viewModelScope.launch {
             try {
-                val adapter = BluetoothAdapter.getDefaultAdapter()
-                val device: BluetoothDevice = adapter.getRemoteDevice(deviceInfo.address)
-
                 _uiState.update {
                     it.copy(
                         isReadingFirmwareInfo = false,
@@ -177,8 +172,8 @@ class OtaViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = fileInfo.parseError ?: "无效的DFU固件文件，无法升级") }
             return
         }
-        prepareAndExecuteUpgrade(fileInfo.uri, fileInfo.fileName) { device, stream ->
-            otaEngine.startFirmwareUpgrade(context, device, stream, _uiState.value.otaConfig)
+        prepareAndExecuteUpgrade(fileInfo.uri, fileInfo.fileName) { peripheral, stream ->
+            otaEngine.startFirmwareUpgrade(context, peripheral, stream, _uiState.value.otaConfig)
         }
     }
 
@@ -197,20 +192,26 @@ class OtaViewModel @Inject constructor(
                 )
             )
         }
-        prepareAndExecuteUpgrade(uriStr, state.resourceFile.fileName) { device, stream ->
-            otaEngine.startResourceUpgrade(context, device, stream, _uiState.value.otaConfig)
+        prepareAndExecuteUpgrade(uriStr, state.resourceFile.fileName) { peripheral, stream ->
+            otaEngine.startResourceUpgrade(context, peripheral, stream, _uiState.value.otaConfig)
         }
     }
 
+    @OptIn(ExperimentalApi::class)
     private fun prepareAndExecuteUpgrade(
         uriStr: String,
         fileName: String,
-        operation: suspend (BluetoothDevice, java.io.InputStream) -> Unit,
+        operation: suspend (Peripheral, java.io.InputStream) -> Unit,
     ) {
         val deviceInfo = _uiState.value.selectedDevice ?: run {
             _uiState.update { it.copy(errorMessage = "请先选择目标设备") }
             return
         }
+        val peripheral = connectionManager.getPeripheral(deviceInfo.address)
+            ?: run {
+                _uiState.update { it.copy(errorMessage = "设备未连接，请先连接设备") }
+                return
+            }
         if (uriStr.isEmpty()) {
             _uiState.update { it.copy(errorMessage = "请先选择固件文件") }
             return
@@ -229,15 +230,13 @@ class OtaViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val adapter = BluetoothAdapter.getDefaultAdapter()
-                val device: BluetoothDevice = adapter.getRemoteDevice(deviceInfo.address)
                 val tempFile = File(context.cacheDir, fileName)
                 context.contentResolver.openInputStream(Uri.parse(uriStr))?.use { input ->
                     tempFile.outputStream().use { output -> input.copyTo(output) }
                 }
 
                 tempFile.inputStream().use { stream ->
-                    operation(device, stream)
+                    operation(peripheral, stream)
                 }
                 tempFile.delete()
             } catch (e: Exception) {

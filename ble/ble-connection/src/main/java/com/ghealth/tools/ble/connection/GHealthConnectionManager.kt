@@ -139,6 +139,8 @@ class BleConnectionManager @Inject constructor(
         return _devices.value[address]?.state ?: ConnectionState.DISCONNECTED
     }
 
+    fun getPeripheral(address: String): Peripheral? = peripherals[address]?.peripheral
+
     fun checkConnectionConstraint(role: DeviceRole): ConnectionConstraint {
         return when (role) {
             DeviceRole.MASTER -> {
