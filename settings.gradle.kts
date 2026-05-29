@@ -37,3 +37,7 @@ include(":feature:feature-settings")
 include(":ble:ble-scanner")
 include(":ble:ble-connection")
 include(":ble:ble-protocol")
+
+include(":external:libcom")
+include(":external:libdfu2")
+include(":feature:feature-ota")
