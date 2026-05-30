@@ -80,7 +80,7 @@ class OtaEngine @Inject constructor() {
     suspend fun readFirmwareInfo(): FirmwareInfo = withContext(Dispatchers.IO) {
         val profile = requireProfile()
         _logEvents.tryEmit("读取固件信息...")
-        val scaAddress = profile.addressOfSCA(null)
+        val scaAddress = profile.getAddressOfSCA(null)
         val startupBootInfo = profile.getStartupBootInfo(scaAddress)
         val info = FirmwareInfo.fromBootInfo(startupBootInfo.bootInfo)
         _logEvents.tryEmit("固件信息读取完成")
@@ -171,7 +171,7 @@ class OtaEngine @Inject constructor() {
         _logEvents.tryEmit("读取BootInfo")
         try {
             val profile = requireProfile()
-            val scaAddress = profile.addressOfSCA(null)
+            val scaAddress = profile.getAddressOfSCA(null)
             val startupBootInfo = profile.getStartupBootInfo(scaAddress)
             val bi = startupBootInfo.bootInfo
             val msg = buildString {
@@ -201,7 +201,7 @@ class OtaEngine @Inject constructor() {
             profile.sendCmd(CmdOpcode.READ_RAM, param.buffer)
             val rcv = profile.rcvCmd(CmdOpcode.READ_RAM)
             val data = ByteArray(rcv.rangeSize)
-            System.arraycopy(rcv.buffer, rcv.rangeOffset, data, 0, rcv.rangeSize)
+            System.arraycopy(rcv.buffer, rcv.offsetInBuffer, data, 0, rcv.rangeSize)
             _logEvents.tryEmit("RAM读取完成: ${data.size} bytes")
             DebugResult(success = true, data = data, message = "RAM读取成功: ${data.size} bytes")
         } catch (e: Exception) {
@@ -238,7 +238,7 @@ class OtaEngine @Inject constructor() {
             profile.sendCmd(CmdOpcode.DUMP_FLASH, param.buffer)
             val rcv = profile.rcvCmd(CmdOpcode.DUMP_FLASH)
             val data = ByteArray(rcv.rangeSize)
-            System.arraycopy(rcv.buffer, rcv.rangeOffset, data, 0, rcv.rangeSize)
+            System.arraycopy(rcv.buffer, rcv.offsetInBuffer, data, 0, rcv.rangeSize)
             _logEvents.tryEmit("Flash读取完成: ${data.size} bytes")
             DebugResult(success = true, data = data, message = "Flash读取成功: ${data.size} bytes")
         } catch (e: Exception) {
@@ -274,7 +274,7 @@ class OtaEngine @Inject constructor() {
             profile.sendCmd(CmdOpcode.RW_REG, param.buffer)
             val rcv = profile.rcvCmd(CmdOpcode.RW_REG)
             val data = ByteArray(rcv.rangeSize)
-            System.arraycopy(rcv.buffer, rcv.rangeOffset, data, 0, rcv.rangeSize)
+            System.arraycopy(rcv.buffer, rcv.offsetInBuffer, data, 0, rcv.rangeSize)
             val hexStr = data.joinToString(" ") { "%02X".format(it) }
             _logEvents.tryEmit("寄存器读取完成: $hexStr")
             DebugResult(success = true, data = data, message = "寄存器读取成功: $hexStr")
@@ -310,7 +310,7 @@ class OtaEngine @Inject constructor() {
             profile.sendCmd(CmdOpcode.RW_EFUSE, param.buffer)
             val rcv = profile.rcvCmd(CmdOpcode.RW_EFUSE)
             val data = ByteArray(rcv.rangeSize)
-            System.arraycopy(rcv.buffer, rcv.rangeOffset, data, 0, rcv.rangeSize)
+            System.arraycopy(rcv.buffer, rcv.offsetInBuffer, data, 0, rcv.rangeSize)
             val hexStr = data.joinToString(" ") { "%02X".format(it) }
             _logEvents.tryEmit("eFuse读取完成: $hexStr")
             DebugResult(success = true, data = data, message = "eFuse读取成功: $hexStr")
@@ -329,7 +329,7 @@ class OtaEngine @Inject constructor() {
             profile.sendCmd(CmdOpcode.OPERATION_NVDS, param.buffer)
             val rcv = profile.rcvCmd(CmdOpcode.OPERATION_NVDS)
             val data = ByteArray(rcv.rangeSize)
-            System.arraycopy(rcv.buffer, rcv.rangeOffset, data, 0, rcv.rangeSize)
+            System.arraycopy(rcv.buffer, rcv.offsetInBuffer, data, 0, rcv.rangeSize)
             val hexStr = data.joinToString(" ") { "%02X".format(it) }
             _logEvents.tryEmit("NVDS读取完成: $hexStr")
             DebugResult(success = true, data = data, message = "NVDS读取成功: $hexStr")
