@@ -4,7 +4,6 @@ import android.content.Context
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.feature.ota.model.OtaConfig
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
-import com.goodix.ble.gr.lib.com.LogcatLogger
 import com.goodix.ble.gr.lib.com.StringLogger
 import com.goodix.ble.gr.lib.com.transport.BleConnection
 import com.goodix.ble.gr.lib.com.transport.DfuReconnectHandler
@@ -51,6 +50,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
     val logEvents: Flow<String> = _logEvents.asSharedFlow()
 
     private val stringLogger = StringLogger()
+    private val timberLogger = TimberLogger()
 
     private val dfuReconnectHandler = object : DfuReconnectHandler {
         override fun getCurrentDeviceAddress(): String {
@@ -91,7 +91,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             }
         val bleConnection = KableBleConnection(channel)
         val profile = GR5xxxDfuKable(dfuReconnectHandler)
-        profile.setLogger(null)
+        profile.setLogger(timberLogger)
         profile.bind(bleConnection)
         dfuProfile = profile
         _logEvents.tryEmit("DFU Profile 已绑定")
@@ -132,7 +132,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         _progress.value = OtaProgress(state = OtaState.PREPARING)
 
         stringLogger.clearBuffer()
-        stringLogger.setNextLogger(LogcatLogger.INSTANCE)
+        stringLogger.setNextLogger(timberLogger)
 
         val profile = requireProfile()
         profile.setLogger(stringLogger)
@@ -168,7 +168,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         _progress.value = OtaProgress(state = OtaState.PREPARING)
 
         stringLogger.clearBuffer()
-        stringLogger.setNextLogger(LogcatLogger.INSTANCE)
+        stringLogger.setNextLogger(timberLogger)
 
         val profile = requireProfile()
         profile.setLogger(stringLogger)
