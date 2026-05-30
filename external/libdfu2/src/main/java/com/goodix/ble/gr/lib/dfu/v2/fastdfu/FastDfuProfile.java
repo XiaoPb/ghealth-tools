@@ -30,12 +30,12 @@
 
 package com.goodix.ble.gr.lib.dfu.v2.fastdfu;
 
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattService;
-
 import com.goodix.ble.gr.lib.com.DataProgressListener;
 import com.goodix.ble.gr.lib.com.HexSerializer;
-import com.goodix.ble.gr.lib.com.ble.BlockingBle;
+import com.goodix.ble.gr.lib.com.transport.BleCharacteristic;
+import com.goodix.ble.gr.lib.com.transport.BleConnection;
+import com.goodix.ble.gr.lib.com.transport.BleProperty;
+import com.goodix.ble.gr.lib.com.transport.BleService;
 
 import java.util.List;
 import java.util.UUID;
@@ -47,16 +47,16 @@ public class FastDfuProfile {
     public final static UUID FAST_DFU_DAT_CHARACTERISTIC_UUID = UUID.fromString("A6ED0703-D344-460A-8075-B9E8EC90D71B");
 
     protected long defaultTimeout = 3000;
-    protected BlockingBle ble = null;
+    protected BleConnection ble = null;
     protected boolean isAppBootloaderSolution = false;
     protected int dfuProtocolVersion = 0;
     protected final HexSerializer rcvCmdBuf = new HexSerializer(0);
 
-    BluetoothGattService fastDfuSvc;
-    BluetoothGattCharacteristic cmdChr;
-    BluetoothGattCharacteristic datChr;
+    BleService fastDfuSvc;
+    BleCharacteristic cmdChr;
+    BleCharacteristic datChr;
 
-    synchronized public void bindTo(BlockingBle ble) throws Throwable {
+    synchronized public void bindTo(BleConnection ble) throws Throwable {
         if (ble == null) {
             throw new Error("bindTo(null)");
         }
@@ -67,7 +67,7 @@ public class FastDfuProfile {
 
         this.ble = ble;
 
-        List<BluetoothGattService> list = ble.queryServices(FAST_DFU_SERVICE_UUID);
+        List<BleService> list = ble.queryServices(FAST_DFU_SERVICE_UUID);
         if (list.isEmpty()) {
             throw new Error("Not found required service: " + FAST_DFU_SERVICE_UUID.toString());
         }
@@ -99,15 +99,15 @@ public class FastDfuProfile {
             return;
         }
 
-        final BlockingBle ble = this.ble;
+        final BleConnection ble = this.ble;
         if (ble == null) {
             throw new Error("sendDat(): please call bindTo() firstly.");
         }
 
         final int properties = datChr.getProperties();
-        if (0 != (properties & BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) {
+        if (0 != (properties & BleProperty.WRITE_NO_RESPONSE)) {
             ble.writeChrWithoutResponse(datChr, defaultTimeout, dat, 0, dat.length, listener);
-        } else if (0 != (properties & BluetoothGattCharacteristic.PROPERTY_WRITE)) {
+        } else if (0 != (properties & BleProperty.WRITE)) {
             ble.writeChrWithResponse(datChr, defaultTimeout, dat, 0, dat.length, listener);
         } else {
             throw new Error("sendDat(): DAT<" + datChr.getUuid().toString() + "> is not writable. Properties = " + properties);
@@ -119,15 +119,15 @@ public class FastDfuProfile {
             return;
         }
 
-        final BlockingBle ble = this.ble;
+        final BleConnection ble = this.ble;
         if (ble == null) {
             throw new Error("sendCmd(): please call bindTo() firstly.");
         }
 
         final int properties = cmdChr.getProperties();
-        if (0 != (properties & BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) {
+        if (0 != (properties & BleProperty.WRITE_NO_RESPONSE)) {
             ble.writeChrWithoutResponse(cmdChr, defaultTimeout, cmd, 0, cmd.length, null);
-        } else if (0 != (properties & BluetoothGattCharacteristic.PROPERTY_WRITE)) {
+        } else if (0 != (properties & BleProperty.WRITE)) {
             ble.writeChrWithResponse(cmdChr, defaultTimeout, cmd, 0, cmd.length, null);
         } else {
             throw new Error("sendCmd(): CMD<" + cmdChr.getUuid().toString() + "> is not writable. Properties = " + properties);
@@ -135,7 +135,7 @@ public class FastDfuProfile {
     }
 
     public HexSerializer waitAck() throws Throwable {
-        final BlockingBle ble = this.ble;
+        final BleConnection ble = this.ble;
         if (ble == null) {
             throw new Error("waitAck(): please call bindTo() firstly.");
         }
