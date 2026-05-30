@@ -110,7 +110,8 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         val profile = requireProfile()
         _logEvents.tryEmit("读取固件信息...")
         try {
-            val scaAddress = profile.getAddressOfSCA(null)
+            val chipInfo = profile.getChipInfo()
+            val scaAddress = profile.getAddressOfSCA(chipInfo)
             val startupBootInfo = profile.getStartupBootInfo(scaAddress)
             val info = FirmwareInfo.fromBootInfo(startupBootInfo.bootInfo)
             _logEvents.tryEmit("固件信息读取完成")
@@ -204,7 +205,8 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         _logEvents.tryEmit("读取BootInfo")
         try {
             val profile = requireProfile()
-            val scaAddress = profile.getAddressOfSCA(null)
+            val chipInfo = profile.getChipInfo()
+            val scaAddress = profile.getAddressOfSCA(chipInfo)
             val startupBootInfo = profile.getStartupBootInfo(scaAddress)
             val bi = startupBootInfo.bootInfo
             val msg = buildString {
