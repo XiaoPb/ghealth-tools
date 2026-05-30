@@ -17,6 +17,7 @@ import com.ghealth.tools.core.model.TestConfig
 import com.ghealth.tools.core.storage.LogManager
 import com.juul.kable.ExperimentalApi
 import com.juul.kable.Peripheral
+import com.juul.kable.Scanner
 import com.juul.kable.State
 import com.juul.kable.WriteType
 import com.juul.kable.characteristicOf
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -75,6 +77,13 @@ sealed class ConnectionConstraint {
         is CompareLimitReached -> "对比设备已达最大数量（5个）"
         is Success -> ""
     }
+}
+
+sealed class DfuConnectionState {
+    object Idle : DfuConnectionState()
+    data class Reconnecting(val oldAddress: String, val newAddress: String) : DfuConnectionState()
+    data class Reconnected(val newAddress: String, val peripheral: Peripheral) : DfuConnectionState()
+    data class Failed(val error: String) : DfuConnectionState()
 }
 
 data class GHealthPeripheral(
@@ -302,6 +311,15 @@ class BleConnectionManager @Inject constructor(
             disconnect(address)
             return
         }
+
+        Timber.d("=== Discovered services for $address ===")
+        services.forEach { service ->
+            Timber.d("  Service: ${service.serviceUuid}")
+            service.characteristics.forEach { char ->
+                Timber.d("    Characteristic: ${char.characteristicUuid} [properties=${char.properties}]")
+            }
+        }
+        Timber.d("=== End of services for $address ===")
 
         when (role) {
             DeviceRole.MASTER, DeviceRole.SLAVE -> {
@@ -543,6 +561,69 @@ class BleConnectionManager @Inject constructor(
             _heartRateResults.value = emptyMap()
         }
         Timber.d("Device disconnected and removed: $address")
+    }
+
+    private val _dfuState = MutableStateFlow<DfuConnectionState>(DfuConnectionState.Idle)
+    val dfuState: StateFlow<DfuConnectionState> = _dfuState.asStateFlow()
+
+    suspend fun scanForDeviceWithMac(
+        targetMac: String,
+        timeoutMs: Long = 31_000,
+    ): Peripheral? {
+        Timber.i("DFU scanForDeviceWithMac: target=$targetMac, timeout=${timeoutMs}ms")
+        val targetAddress = targetMac.uppercase()
+        val scanner = Scanner {
+            logging { level = Logging.Level.Warnings }
+        }
+        return try {
+            withTimeoutOrNull(timeoutMs) {
+                scanner.advertisements
+                    .first { it.address.equals(targetAddress, ignoreCase = true) }
+                    .let { advertisement ->
+                        Timber.d("DFU scan found device: ${advertisement.address} name=${advertisement.name}")
+                        Peripheral(advertisement) {
+                            logging { level = Logging.Level.Warnings }
+                            onServicesDiscovered {
+                                requestMtu(247)
+                            }
+                        }
+                    }
+            }.also { result ->
+                if (result == null) {
+                    Timber.w("DFU scanForDeviceWithMac: 未找到设备 $targetMac (超时 ${timeoutMs}ms)")
+                } else {
+                    Timber.i("DFU scanForDeviceWithMac: 成功找到设备 $targetMac")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "DFU scanForDeviceWithMac failed for $targetMac")
+            null
+        }
+    }
+
+    suspend fun notifyDfuReconnect(oldAddress: String, newPeripheral: Peripheral) {
+        val newAddress = newPeripheral.identifier.toString()
+        Timber.i("DFU notifyDfuReconnect: $oldAddress -> $newAddress")
+        peripherals.remove(oldAddress)
+        val oldDevice = _devices.value[oldAddress]
+        val role = oldDevice?.role ?: DeviceRole.MASTER
+        val deviceType = oldDevice?.deviceType ?: DeviceType.GH3036
+
+        peripherals[newAddress] = GHealthPeripheral(
+            peripheral = newPeripheral,
+            role = role,
+            executor = null,
+            deviceType = deviceType
+        )
+        _devices.value = _devices.value - oldAddress + (newAddress to ConnectedDevice(
+            address = newAddress,
+            name = newPeripheral.name,
+            role = role,
+            state = ConnectionState.CONNECTING,
+            deviceType = deviceType
+        ))
+        _dfuState.value = DfuConnectionState.Reconnected(newAddress, newPeripheral)
+        Timber.d("DFU notifyDfuReconnect: 设备列表已更新, role=$role, deviceType=$deviceType")
     }
 }
 

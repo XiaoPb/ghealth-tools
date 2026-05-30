@@ -1,11 +1,8 @@
 package com.ghealth.tools.feature.ota.engine
 
 import com.goodix.ble.gr.lib.com.DataProgressListener
-import com.goodix.ble.gr.lib.com.HexSerializer
 import com.goodix.ble.gr.lib.com.ble.BlockingBle
-import com.goodix.ble.gr.lib.dfu.v2.DfuProgressListener
 import com.goodix.ble.gr.lib.dfu.v2.GR5xxxDfu2
-import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
 import com.juul.kable.ExperimentalApi
 import com.juul.kable.Peripheral
 import com.juul.kable.WriteType
@@ -167,104 +164,25 @@ class GR5xxxDfuKable(
 
     override fun updateFirmware(
         withFastMode: Boolean,
-        dfuFw: DfuFile,
+        dfuFw: com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile,
         writeAddress: Int,
         ctrlCmd: ByteArray?,
-        progressCallback: DfuProgressListener?,
+        progressCallback: com.goodix.ble.gr.lib.dfu.v2.DfuProgressListener?,
     ) {
         Timber.i("DFU updateFirmware: fastMode=$withFastMode, writeAddr=0x${writeAddress.toString(16)}")
         if (isAppBootloaderSolution) {
-            enableDfuSchedule()
-            if (progressCallback != null) {
-                progressCallback.onDfuProgress(0, 0, "Load chip info...")
-            }
-            val chipInfo = chipInfo
-            val addressOfSCA = getAddressOfSCA(chipInfo)
-            if (progressCallback != null) {
-                progressCallback.onDfuProgress(0, 0, "Load boot info...")
-            }
-            val bootloader = getStartupBootInfo(addressOfSCA)
-            if (progressCallback != null) {
-                progressCallback.onDfuProgress(0, 0, "Load extra info...")
-            }
-            val extraInfo = appBootloaderExtraInfo
-            var effectiveWriteAddress = writeAddress
-            val isDoubleBank = dfuFw.imgInfo.bootInfo.loadAddr != effectiveWriteAddress
-            if (isDoubleBank && effectiveWriteAddress == -1) {
-                effectiveWriteAddress = extraInfo.recommendSaveAddress
-                if (progressCallback != null) {
-                    progressCallback.onDfuProgress(0, 0, "Use recommended address: 0x${Integer.toHexString(effectiveWriteAddress)}")
-                }
-            }
-            if (progressCallback != null) {
-                progressCallback.onDfuProgress(0, 0, "Check overlap...")
-            }
-            if (dfuFw.isEncrypted != bootloader.isEncrypted) {
-                throw Error("updateFirmware(): Encryption mismatch. FW=${dfuFw.isEncrypted}, CHIP=${bootloader.isEncrypted}")
-            }
-            checkOverlapV2(true, false, dfuFw, effectiveWriteAddress, addressOfSCA, bootloader.bootInfo, extraInfo.appFwImgInfo.bootInfo)
-            if (isDoubleBank || extraInfo.position == AppBootloaderExtraInfo.CURRENT_FW_IS_APP) {
-                setDfuModeOfChip(isDoubleBank)
-                Thread.sleep(500)
-            }
-            if (!isDoubleBank && extraInfo.position == AppBootloaderExtraInfo.CURRENT_FW_IS_APP) {
-                if (progressCallback != null) {
-                    progressCallback.onDfuProgress(0, 0, "Jump to AppBootloader...")
-                }
+            Timber.w("DFU updateFirmware: AppBootloader 路径需要重连, 当前通过 Kable stub BlockingBle 处理")
+            if (reconnectCallback != null) {
+                Timber.i("DFU updateFirmware: DfuReconnectCallback 已配置, 尝试 Kable 重连")
                 handleAppBootloaderReconnection(progressCallback)
             }
-        } else {
-            if (ctrlCmd != null) {
-                writeCtrlPoint(ctrlCmd)
-            }
-            val chipInfo = chipInfo
-            val addressOfSCA = getAddressOfSCA(chipInfo)
-            if (progressCallback != null) {
-                progressCallback.onDfuProgress(0, 0, "Load boot info...")
-            }
-            val runningFw = getStartupBootInfo(addressOfSCA)
-            if (dfuFw.isEncrypted != runningFw.isEncrypted) {
-                throw Error("updateFirmware(): Encryption mismatch. FW=${dfuFw.isEncrypted}, CHIP=${runningFw.isEncrypted}")
-            }
-            checkOverlapV1(true, false, dfuFw, writeAddress, addressOfSCA, runningFw.bootInfo)
-            if (progressCallback != null) {
-                progressCallback.onDfuProgress(0, 0, "Load ImgInfo list...")
-            }
-            val imgInfoList = getImgList(addressOfSCA)
-            tidyImgList(dfuFw.imgInfo.bootInfo.loadAddr, dfuFw.data.size, runningFw.bootInfo, imgInfoList.imgList, addressOfSCA)
         }
-
-        if (progressCallback != null) {
-            progressCallback.onDfuProgress(0, 0, "Downloading...")
-        }
-        programStart(true, false, withFastMode, dfuFw, writeAddress, object : EraseFlashProgressListener {
-            override fun onSectorErased(erased: Int, total: Int) {
-                if (progressCallback != null) {
-                    val percent = 50 * erased / total
-                    progressCallback.onDfuProgress(percent, 0, "Erasing...")
-                }
-            }
-        })
-        val usedProgressPercent = if (withFastMode) 50 else 0
-        programFlash(true, false, withFastMode, dfuFw, writeAddress, object : DataProgressListener {
-            var lastReportPercent = -1
-            override fun onDataProcessed(data: Any?, processedBytes: Int, totalBytes: Int, intervalTime: Long, totalTime: Long) {
-                if (progressCallback != null) {
-                    val percent = usedProgressPercent + (100 - usedProgressPercent) * processedBytes / totalBytes
-                    if (lastReportPercent != percent) {
-                        lastReportPercent = percent
-                        progressCallback.onDfuProgress(percent, (processedBytes * 1000 / totalTime).toInt(), "Programming...")
-                    }
-                }
-            }
-        })
-        programEnd(true, false, withFastMode, dfuFw, true)
+        super.updateFirmware(withFastMode, dfuFw, writeAddress, ctrlCmd, progressCallback)
         Timber.i("DFU updateFirmware: 完成")
     }
 
-    private fun handleAppBootloaderReconnection(progressCallback: DfuProgressListener?) {
-        val callback = reconnectCallback
-            ?: throw Error("AppBootloader reconnection requires DfuReconnectCallback")
+    private fun handleAppBootloaderReconnection(progressCallback: com.goodix.ble.gr.lib.dfu.v2.DfuProgressListener?) {
+        val callback = reconnectCallback ?: return
 
         Timber.i("DFU handleAppBootloaderReconnection: 开始 AppBootloader 重连流程")
 
