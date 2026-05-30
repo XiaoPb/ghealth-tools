@@ -35,48 +35,48 @@ class Gh3300FrameDecoder {
         val (hdrRaw, p1) = readVarint(buf, pos); pos = p1
         raw.packHeader = Gh3300PackHeader(zigzagDecode(hdrRaw))
 
-        Timber.v("GH3300 decodeSingleFrame: startPos=$start, packHeader bits=${raw.packHeader.bits}")
+        if (debugLogEnabled) Timber.v("GH3300 decodeSingleFrame: startPos=$start, packHeader bits=${raw.packHeader.bits}")
 
         if (raw.packHeader.rawdataEn) {
             val (sz, p) = readSigned(buf, pos); pos = p
             val count = sz.coerceIn(0, MAX_CHANNELS_RAW_3300)
             val (arr, p2) = readSignedArray(buf, pos, count); pos = p2
             raw.rawdata = arr
-            Timber.v("  rawdata: sz=$sz, values=${arr.take(3).toList()}...")
+            if (debugLogEnabled) Timber.v("  rawdata: sz=$sz, values=${arr.take(3).toList()}...")
         }
         if (raw.packHeader.gsDataEn) {
             val (sz, p) = readSigned(buf, pos); pos = p
             val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_GS_DATA_3300)); pos = p2
             raw.gsData = arr
-            Timber.v("  gsData: sz=$sz, values=${arr.toList()}")
+            if (debugLogEnabled) Timber.v("  gsData: sz=$sz, values=${arr.toList()}")
         }
         if (raw.packHeader.flagsEn) {
             val (sz, p) = readSigned(buf, pos); pos = p
             val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_FLAG_DATA_3300)); pos = p2
             raw.flags = arr
-            Timber.v("  flags: sz=$sz")
+            if (debugLogEnabled) Timber.v("  flags: sz=$sz")
         }
         if (raw.packHeader.algDataEn) {
             val (sz, p) = readSigned(buf, pos); pos = p
             val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_ALGO_DATA_3300)); pos = p2
             raw.algoData = arr
-            Timber.v("  algoData: sz=$sz, values=${arr.toList()}")
+            if (debugLogEnabled) Timber.v("  algoData: sz=$sz, values=${arr.toList()}")
         }
         if (raw.packHeader.agcInfoEn) {
             val (sz, p) = readSigned(buf, pos); pos = p
             val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS_RAW_3300)); pos = p2
             raw.agcInfo = arr
-            Timber.v("  agcInfo: sz=$sz")
+            if (debugLogEnabled) Timber.v("  agcInfo: sz=$sz")
         }
         if (raw.packHeader.frameIdEn) {
             val (fid, pf) = readSigned(buf, pos); pos = pf
             raw.frameId = fid
-            Timber.v("  frameId: $fid")
+            if (debugLogEnabled) Timber.v("  frameId: $fid")
         }
         if (raw.packHeader.funcIdEn) {
             val (v, p) = readSigned(buf, pos); pos = p
             raw.functionId = v
-            Timber.v("  funcId: $v")
+            if (debugLogEnabled) Timber.v("  funcId: $v")
         }
         return Pair(pos, raw)
     }
@@ -123,6 +123,7 @@ class Gh3300FrameDecoder {
     }
 
     companion object {
+        @Volatile var debugLogEnabled = false
         fun readVarint(buffer: ByteArray, startPos: Int): Pair<Int, Int> {
             var value = 0; var shift = 0; var pos = startPos
             while (true) {

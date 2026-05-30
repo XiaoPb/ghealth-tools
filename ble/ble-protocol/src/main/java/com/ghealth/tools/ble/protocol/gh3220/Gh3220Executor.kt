@@ -45,7 +45,7 @@ class Gh3220Executor(
             val frames = frameDecoder.decode(unpacked)
 
             frames.forEach { frame ->
-                Timber.v("GH3220 GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}")
+                if (debugLogEnabled) Timber.v("GH3220 GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}")
                 frameCallback?.invoke(frame)
             }
         } catch (e: Exception) {
@@ -84,5 +84,9 @@ class Gh3220Executor(
 
     override fun resetFrameDecoder() {
         frameDecoder.reset()
+    }
+
+    companion object {
+        @Volatile var debugLogEnabled = false
     }
 }

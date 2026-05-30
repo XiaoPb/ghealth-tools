@@ -79,20 +79,20 @@ class Gh3220FrameDecoder {
         // 1. pack_header
         val (hdrRaw, p1) = readVarint(buf, pos); pos = p1
         raw.packHeader = Gh3220PackHeader(zigzagDecode(hdrRaw))
-        Timber.v("GH3220 frame @$start: header bits=${raw.packHeader.bits}")
+        if (debugLogEnabled) Timber.v("GH3220 frame @$start: header bits=${raw.packHeader.bits}")
 
         // 2. function_id
         if (raw.packHeader.funcIdEn) {
             val (v, p) = readSigned(buf, pos); pos = p
             raw.functionId = v
-            Timber.v("  funcId=$v (${Gh3220FuncId.from(v).label})")
+            if (debugLogEnabled) Timber.v("  funcId=$v (${Gh3220FuncId.from(v).label})")
         }
 
         // 3. frame_id
         if (raw.packHeader.frameIdEn) {
             val (v, p) = readSigned(buf, pos); pos = p
             raw.frameId = v
-            Timber.v("  frameId=$v")
+            if (debugLogEnabled) Timber.v("  frameId=$v")
         }
 
         // 4. rawdata (size + array)
@@ -101,7 +101,7 @@ class Gh3220FrameDecoder {
             val count = sz.coerceIn(0, MAX_CHANNELS_RAW_3220)
             val (arr, p2) = readSignedArray(buf, pos, count); pos = p2
             raw.rawdata = arr
-            Timber.v("  rawdata: sz=$count first=${arr.firstOrNull()}")
+            if (debugLogEnabled) Timber.v("  rawdata: sz=$count first=${arr.firstOrNull()}")
         }
 
         // 5. gs_data (size + array)
@@ -110,7 +110,7 @@ class Gh3220FrameDecoder {
             val count = sz.coerceIn(0, MAX_GS_DATA_3220)
             val (arr, p2) = readSignedArray(buf, pos, count); pos = p2
             raw.gsData = arr
-            Timber.v("  gsData: sz=$count values=${arr.toList()}")
+            if (debugLogEnabled) Timber.v("  gsData: sz=$count values=${arr.toList()}")
         }
 
         // 6. flags (size + array)
@@ -119,7 +119,7 @@ class Gh3220FrameDecoder {
             val count = sz.coerceIn(0, MAX_FLAG_DATA_3220)
             val (arr, p2) = readSignedArray(buf, pos, count); pos = p2
             raw.flags = arr
-            Timber.v("  flags: sz=$count")
+            if (debugLogEnabled) Timber.v("  flags: sz=$count")
         }
 
         // 7. algo_data (size + array)
@@ -128,7 +128,7 @@ class Gh3220FrameDecoder {
             val count = sz.coerceIn(0, MAX_ALGO_DATA_3220)
             val (arr, p2) = readSignedArray(buf, pos, count); pos = p2
             raw.algoData = arr
-            Timber.v("  algoData: sz=$count values=${arr.toList()}")
+            if (debugLogEnabled) Timber.v("  algoData: sz=$count values=${arr.toList()}")
         }
 
         // 8. agc_info (size + array)
@@ -137,7 +137,7 @@ class Gh3220FrameDecoder {
             val count = sz.coerceIn(0, MAX_AGC_INFO_3220)
             val (arr, p2) = readSignedArray(buf, pos, count); pos = p2
             raw.agcInfo = arr
-            Timber.v("  agcInfo: sz=$count")
+            if (debugLogEnabled) Timber.v("  agcInfo: sz=$count")
         }
 
         return Pair(pos, raw)
@@ -222,6 +222,7 @@ class Gh3220FrameDecoder {
     // ---- Companion: varint+zigzag decoding ----
 
     companion object {
+        @Volatile var debugLogEnabled = false
         /** Read a single unsigned varint from buffer. */
         fun readVarint(buffer: ByteArray, startPos: Int): Pair<Int, Int> {
             var value = 0

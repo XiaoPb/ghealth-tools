@@ -35,7 +35,7 @@ class Gh3036Executor(
         val frames = frameDecoder.decode(unpacked)
 
         frames.forEach { frame ->
-            Timber.v("GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}, timestamp=${frame.timestamp}")
+            if (debugLogEnabled) Timber.v("GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}, timestamp=${frame.timestamp}")
             frameCallback?.invoke(frame)
         }
     }
@@ -71,5 +71,9 @@ class Gh3036Executor(
 
     override fun resetFrameDecoder() {
         frameDecoder.reset()
+    }
+
+    companion object {
+        @Volatile var debugLogEnabled = false
     }
 }
