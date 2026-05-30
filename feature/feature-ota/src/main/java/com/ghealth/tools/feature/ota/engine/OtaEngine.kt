@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.ota.engine
 
 import android.content.Context
+import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.feature.ota.model.OtaConfig
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 import com.goodix.ble.gr.lib.com.LogcatLogger
@@ -40,7 +41,7 @@ data class DebugResult(
     val message: String = "",
 )
 
-class OtaEngine @Inject constructor() {
+class OtaEngine @Inject constructor(private val connectionManager: BleConnectionManager) {
 
     private val _progress = MutableStateFlow(OtaProgress())
     val progress: StateFlow<OtaProgress> = _progress.asStateFlow()
@@ -49,6 +50,29 @@ class OtaEngine @Inject constructor() {
     val logEvents: Flow<String> = _logEvents.asSharedFlow()
 
     private val stringLogger = StringLogger()
+
+    private val dfuReconnectCallback = object : GR5xxxDfuKable.DfuReconnectCallback {
+        override suspend fun onDfuDisconnectCurrent(): String {
+            val address = dfuProfile?.getCurrentMac() ?: throw Error("DFU Profile 未绑定")
+            Timber.i("DFU reconnect: 获取当前 MAC=$address")
+            return address
+        }
+
+        override suspend fun onDfuScanAndConnect(newMac: String): Peripheral? {
+            Timber.i("DFU reconnect: 开始扫描并连接 $newMac")
+            return connectionManager.scanForDeviceWithMac(newMac, 31_000)?.also { peripheral ->
+                Timber.d("DFU reconnect: 扫描到设备，开始连接")
+                peripheral.connect()
+                Timber.i("DFU reconnect: 连接成功 ${peripheral.identifier}")
+            }
+        }
+
+        override suspend fun onDfuReconnected(peripheral: Peripheral) {
+            val oldMac = dfuProfile?.getCurrentMac() ?: return
+            Timber.i("DFU reconnect: 通知 BleConnectionManager, $oldMac -> ${peripheral.identifier}")
+            connectionManager.notifyDfuReconnect(oldMac, peripheral)
+        }
+    }
 
     private var dfuProfile: GR5xxxDfuKable? = null
     @Volatile
@@ -59,7 +83,7 @@ class OtaEngine @Inject constructor() {
     @OptIn(ExperimentalApi::class)
     suspend fun bindDfuProfile(context: Context, peripheral: Peripheral) = withContext(Dispatchers.IO) {
         unbindDfuProfile()
-        val profile = GR5xxxDfuKable(peripheral)
+        val profile = GR5xxxDfuKable(peripheral, dfuReconnectCallback)
         profile.setLogger(null)
         profile.bind()
         dfuProfile = profile
