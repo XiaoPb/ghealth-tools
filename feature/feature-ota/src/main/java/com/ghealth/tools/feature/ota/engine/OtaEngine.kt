@@ -8,7 +8,6 @@ import com.goodix.ble.gr.lib.com.StringLogger
 import com.goodix.ble.gr.lib.dfu.v2.DfuProgressListener
 import com.goodix.ble.gr.lib.dfu.v2.GR5xxxDfu2.CmdOpcode
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
-import com.goodix.ble.gr.lib.com.ble.BlockingBle
 import com.goodix.ble.gr.lib.com.HexSerializer
 import com.juul.kable.ExperimentalApi
 import com.juul.kable.Peripheral
@@ -60,7 +59,6 @@ class OtaEngine @Inject constructor() {
     @OptIn(ExperimentalApi::class)
     suspend fun bindDfuProfile(context: Context, peripheral: Peripheral) = withContext(Dispatchers.IO) {
         unbindDfuProfile()
-        BlockingBle.setup(context.applicationContext)
         val profile = GR5xxxDfuKable(peripheral)
         profile.setLogger(null)
         profile.bind()
