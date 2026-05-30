@@ -65,8 +65,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ghealth.tools.feature.ota.engine.DebugResult
-import com.ghealth.tools.feature.ota.engine.DebugOperations
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
+import com.ghealth.tools.feature.ota.engine.OtaEngine
 import com.ghealth.tools.feature.ota.engine.OtaState
 import com.ghealth.tools.feature.ota.model.DebugMenuAction
 import com.ghealth.tools.feature.ota.model.StorageType
@@ -248,8 +248,8 @@ fun OtaScreen(
                 DebugActionCard(
                     action = action,
                     debugResult = state.debugResults[action],
-                    onDebugRead = { op -> viewModel.executeDebugCommand(action, op) },
-                    onDebugWrite = { op -> viewModel.executeDebugWrite(action, op) },
+                    onDebugRead = { engine -> viewModel.executeDebugCommand(action, engine) },
+                    onDebugWrite = { engine -> viewModel.executeDebugWrite(action, engine) },
                 )
             }
 
@@ -721,8 +721,8 @@ private fun ResourceUpgradeCard(
 private fun DebugActionCard(
     action: DebugMenuAction,
     debugResult: String?,
-    onDebugRead: (suspend (DebugOperations) -> Result<DebugResult>) -> Unit,
-    onDebugWrite: (suspend (DebugOperations) -> Result<DebugResult>) -> Unit,
+    onDebugRead: (suspend (OtaEngine) -> DebugResult) -> Unit,
+    onDebugWrite: (suspend (OtaEngine) -> DebugResult) -> Unit,
 ) {
     var addressText by remember { mutableStateOf("") }
     var lengthText by remember { mutableStateOf("") }
@@ -790,21 +790,21 @@ private fun DebugActionCard(
                         Button(onClick = {
                             val addr = parseAddress()
                             val len = parseLength()
-                            val readOp: suspend (DebugOperations) -> Result<DebugResult> =
+                            val readOp: suspend (OtaEngine) -> DebugResult =
                                 if (action == DebugMenuAction.RAM_READ_WRITE)
-                                    { ops -> ops.readRam(addr, len) }
+                                    { engine -> engine.readRam(addr, len) }
                                 else
-                                    { ops -> ops.readFlash(addr, len) }
+                                    { engine -> engine.readFlash(addr, len) }
                             onDebugRead(readOp)
                         }) { Text("读取") }
                         OutlinedButton(onClick = {
                             val addr = parseAddress()
                             val data = parseHexData() ?: return@OutlinedButton
-                            val writeOp: suspend (DebugOperations) -> Result<DebugResult> =
+                            val writeOp: suspend (OtaEngine) -> DebugResult =
                                 if (action == DebugMenuAction.RAM_READ_WRITE)
-                                    { ops -> ops.writeRam(addr, data) }
+                                    { engine -> engine.writeRam(addr, data) }
                                 else
-                                    { ops -> ops.writeFlash(addr, data) }
+                                    { engine -> engine.writeFlash(addr, data) }
                             onDebugWrite(writeOp)
                         }) { Text("写入") }
                     }
@@ -833,17 +833,17 @@ private fun DebugActionCard(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
                             val addr = parseAddress()
-                            onDebugRead { ops -> ops.readRegister(addr) }
+                            onDebugRead { engine -> engine.readRegister(addr) }
                         }) { Text("读取") }
                         OutlinedButton(onClick = {
                             val addr = parseAddress()
                             val data = parseHexData() ?: return@OutlinedButton
-                            onDebugWrite { ops -> ops.writeRegister(addr, data) }
+                            onDebugWrite { engine -> engine.writeRegister(addr, data) }
                         }) { Text("写入") }
                     }
                 }
                 DebugMenuAction.READ_EFUSE -> {
-                    Button(onClick = { onDebugRead { ops -> ops.readEfuse() } }) { Text("读取eFuse") }
+                    Button(onClick = { onDebugRead { engine -> engine.readEfuse() } }) { Text("读取eFuse") }
                 }
                 DebugMenuAction.NVDS_READ_WRITE -> {
                     OutlinedTextField(
@@ -858,15 +858,15 @@ private fun DebugActionCard(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onDebugRead { ops -> ops.readNvds() } }) { Text("读取NVDS") }
+                        Button(onClick = { onDebugRead { engine -> engine.readNvds() } }) { Text("读取NVDS") }
                         OutlinedButton(onClick = {
                             val data = parseHexData() ?: return@OutlinedButton
-                            onDebugWrite { ops -> ops.writeNvds(data) }
+                            onDebugWrite { engine -> engine.writeNvds(data) }
                         }) { Text("写入NVDS") }
                     }
                 }
                 DebugMenuAction.READ_BOOT_INFO -> {
-                    Button(onClick = { onDebugRead { ops -> ops.readBootInfo() } }) { Text("读取BootInfo") }
+                    Button(onClick = { onDebugRead { engine -> engine.readBootInfo() } }) { Text("读取BootInfo") }
                 }
             }
 
