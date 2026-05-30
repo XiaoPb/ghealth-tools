@@ -63,8 +63,24 @@ class GR5xxxDfuKable(
             ?: throw Error("rcvCmd(): BLE未连接")
         Timber.d("DFU rcvCmd: 等待通知, notifyUUID=$DFU_NOTIFY_CHARACTERISTIC_UUID, opcode=0x${opcode.toString(16)}")
 
-        val data = conn.readNtf(notifyChr, 20000L)
+        var data = conn.readNtf(notifyChr, 20000L)
             ?: throw Error("rcvCmd(): 等待通知超时 (opcode=$opcode)")
+
+        if (data.size < 6) {
+            throw Error("rcvCmd(): 头部数据不足, 需要至少6字节, 收到${data.size}字节")
+        }
+
+        val paramLen = ((data[4].toInt() and 0xFF) or ((data[5].toInt() and 0xFF) shl 8))
+        val totalExpected = 6 + paramLen + 2
+
+        while (data.size < totalExpected) {
+            val remaining = totalExpected - data.size
+            Timber.v("DFU rcvCmd: 等待分帧数据, 还需 $remaining bytes, opcode=0x${opcode.toString(16)}")
+            val nextData = conn.readNtf(notifyChr, 20000L)
+                ?: throw Error("rcvCmd(): 等待分帧数据超时 (opcode=$opcode), 已收到${data.size}/${totalExpected}字节")
+            Timber.v("DFU rcvCmd: 收到分帧 ${nextData.size} bytes, hex=${nextData.toHexString()}")
+            data = data + nextData
+        }
 
         Timber.v("DFU rcvCmd: 收到 ${data.size} bytes, notifyUUID=$DFU_NOTIFY_CHARACTERISTIC_UUID, hex=${data.toHexString()}")
 
@@ -75,7 +91,7 @@ class GR5xxxDfuKable(
 
         val magicNum = it.get(2)
         val rcvOpcode = it.get(2)
-        val paramLen = it.get(2)
+        val parsedParamLen = it.get(2)
         if (magicNum != 0x4744) {
             throw Error("rcvCmd(): 帧头错误, magic=0x${magicNum.toString(16)}")
         }
@@ -83,10 +99,10 @@ class GR5xxxDfuKable(
             throw Error("rcvCmd(): opcode不匹配, expected=0x${opcode.toString(16)}, actual=0x${rcvOpcode.toString(16)}")
         }
 
-        it.setRange(6, paramLen)
+        it.setRange(6, parsedParamLen)
         it.setPos(0)
         it.setReadonly(true)
-        Timber.d("DFU rcvCmd: 完成, opcode=0x${opcode.toString(16)}, paramLen=$paramLen")
+        Timber.d("DFU rcvCmd: 完成, opcode=0x${opcode.toString(16)}, paramLen=$parsedParamLen")
     }
 }
 

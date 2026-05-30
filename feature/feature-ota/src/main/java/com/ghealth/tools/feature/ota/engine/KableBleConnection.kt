@@ -143,10 +143,15 @@ class KableBleConnection(
     }
 
     override fun readNtf(chr: BleCharacteristic, timeout: Long, outBuf: ByteArray, offsetInBuf: Int, readSize: Int): Int {
-        val data = readNtf(chr, timeout) ?: return 0
-        val copySize = minOf(readSize, data.size, outBuf.size - offsetInBuf)
-        System.arraycopy(data, 0, outBuf, offsetInBuf, copySize)
-        return copySize
+        var totalRead = 0
+        while (totalRead < readSize) {
+            val data = readNtf(chr, timeout) ?: break
+            val copySize = minOf(readSize - totalRead, data.size, outBuf.size - offsetInBuf - totalRead)
+            if (copySize <= 0) break
+            System.arraycopy(data, 0, outBuf, offsetInBuf + totalRead, copySize)
+            totalRead += copySize
+        }
+        return totalRead
     }
 
     override fun readNtf(chr: BleCharacteristic, timeout: Long): ByteArray? = runBlocking {
