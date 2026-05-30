@@ -6,11 +6,12 @@ import com.ghealth.tools.feature.ota.model.OtaConfig
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 import com.goodix.ble.gr.lib.com.LogcatLogger
 import com.goodix.ble.gr.lib.com.StringLogger
+import com.goodix.ble.gr.lib.com.transport.BleConnection
+import com.goodix.ble.gr.lib.com.transport.DfuReconnectHandler
 import com.goodix.ble.gr.lib.dfu.v2.DfuProgressListener
 import com.goodix.ble.gr.lib.dfu.v2.GR5xxxDfu2.CmdOpcode
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
 import com.goodix.ble.gr.lib.com.HexSerializer
-import com.juul.kable.ExperimentalApi
 import com.juul.kable.Peripheral
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.InputStream
@@ -51,26 +53,28 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
 
     private val stringLogger = StringLogger()
 
-    private val dfuReconnectCallback = object : GR5xxxDfuKable.DfuReconnectCallback {
-        override suspend fun onDfuDisconnectCurrent(): String {
+    private val dfuReconnectHandler = object : DfuReconnectHandler {
+        override fun getCurrentDeviceAddress(): String {
             val address = dfuProfile?.getCurrentMac() ?: throw Error("DFU Profile 未绑定")
             Timber.i("DFU reconnect: 获取当前 MAC=$address")
             return address
         }
 
-        override suspend fun onDfuScanAndConnect(newMac: String): Peripheral? {
-            Timber.i("DFU reconnect: 开始扫描并连接 $newMac")
-            return connectionManager.scanForDeviceWithMac(newMac, 31_000)?.also { peripheral ->
+        override fun scanAndConnect(targetMac: String, timeoutMs: Long): BleConnection {
+            Timber.i("DFU reconnect: 开始扫描并连接 $targetMac")
+            return runBlocking {
+                val peripheral = connectionManager.scanForDeviceWithMac(targetMac, timeoutMs)
+                if (peripheral == null) {
+                    Timber.e("DFU reconnect: 扫描超时, MAC=$targetMac")
+                    throw Error("未找到 AppBootloader 广播: $targetMac")
+                }
                 Timber.d("DFU reconnect: 扫描到设备，开始连接")
                 peripheral.connect()
                 Timber.i("DFU reconnect: 连接成功 ${peripheral.identifier}")
+                val oldMac = dfuProfile?.getCurrentMac() ?: ""
+                connectionManager.notifyDfuReconnect(oldMac, peripheral)
+                KableBleConnection(peripheral)
             }
-        }
-
-        override suspend fun onDfuReconnected(peripheral: Peripheral) {
-            val oldMac = dfuProfile?.getCurrentMac() ?: return
-            Timber.i("DFU reconnect: 通知 BleConnectionManager, $oldMac -> ${peripheral.identifier}")
-            connectionManager.notifyDfuReconnect(oldMac, peripheral)
         }
     }
 
@@ -80,12 +84,12 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
 
     val isDfuReady: Boolean get() = dfuProfile != null
 
-    @OptIn(ExperimentalApi::class)
     suspend fun bindDfuProfile(context: Context, peripheral: Peripheral) = withContext(Dispatchers.IO) {
         unbindDfuProfile()
-        val profile = GR5xxxDfuKable(peripheral, dfuReconnectCallback)
+        val bleConnection = KableBleConnection(peripheral)
+        val profile = GR5xxxDfuKable(dfuReconnectHandler)
         profile.setLogger(null)
-        profile.bind()
+        profile.bind(bleConnection)
         dfuProfile = profile
         _logEvents.tryEmit("DFU Profile 已绑定")
     }
@@ -109,7 +113,6 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         info
     }
 
-    @OptIn(ExperimentalApi::class)
     suspend fun startFirmwareUpgrade(
         context: Context,
         firmwareStream: InputStream,
@@ -146,7 +149,6 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         }
     }
 
-    @OptIn(ExperimentalApi::class)
     suspend fun startResourceUpgrade(
         context: Context,
         resourceStream: InputStream,

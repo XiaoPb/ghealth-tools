@@ -30,13 +30,13 @@
 
 package com.goodix.ble.gr.lib.dfu.v2;
 
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattService;
-
 import com.goodix.ble.gr.lib.com.DataProgressListener;
 import com.goodix.ble.gr.lib.com.HexSerializer;
 import com.goodix.ble.gr.lib.com.HexString;
-import com.goodix.ble.gr.lib.com.ble.BlockingBle;
+import com.goodix.ble.gr.lib.com.transport.BleCharacteristic;
+import com.goodix.ble.gr.lib.com.transport.BleConnection;
+import com.goodix.ble.gr.lib.com.transport.BleProperty;
+import com.goodix.ble.gr.lib.com.transport.BleService;
 
 import java.util.List;
 import java.util.UUID;
@@ -48,19 +48,19 @@ public class DfuProfile {
     public final static UUID DFU_WRITE_CHARACTERISTIC_UUID = UUID.fromString("a6ed0403-d344-460a-8075-b9e8ec90d71b");
     public final static UUID DFU_CONTROL_CHARACTERISTIC_UUID = UUID.fromString("a6ed0404-d344-460a-8075-b9e8ec90d71b");
 
-    protected BlockingBle ble = null;
+    protected BleConnection ble = null;
 
     protected final HexSerializer rcvCmdBuf = new HexSerializer(2048);
     protected long defaultTimeout = 10_000;
     protected boolean isAppBootloaderSolution = false;
     protected int dfuProtocolVersion = 0;
 
-    protected BluetoothGattService dfuSvc;
-    protected BluetoothGattCharacteristic notifyChr;
-    protected BluetoothGattCharacteristic writeChr;
-    protected BluetoothGattCharacteristic ctrlChr;
+    protected BleService dfuSvc;
+    protected BleCharacteristic notifyChr;
+    protected BleCharacteristic writeChr;
+    protected BleCharacteristic ctrlChr;
 
-    synchronized public void bindTo(BlockingBle ble) throws Throwable {
+    synchronized public void bindTo(BleConnection ble) throws Throwable {
         if (ble == null) {
             throw new Error("bindTo(null)");
         }
@@ -71,7 +71,7 @@ public class DfuProfile {
 
         this.ble = ble;
 
-        List<BluetoothGattService> list = ble.queryServices(DFU_SERVICE_UUID);
+        List<BleService> list = ble.queryServices(DFU_SERVICE_UUID);
         if (list.isEmpty()) {
             throw new Error("Not found required service: " + DFU_SERVICE_UUID.toString());
         }
@@ -81,7 +81,7 @@ public class DfuProfile {
         writeChr = ble.queryCharacteristic(dfuSvc, DFU_WRITE_CHARACTERISTIC_UUID);
         ctrlChr = ble.queryCharacteristic(dfuSvc, DFU_CONTROL_CHARACTERISTIC_UUID);
 
-        this.isAppBootloaderSolution = (ctrlChr.getProperties() & BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0;
+        this.isAppBootloaderSolution = (ctrlChr.getProperties() & BleProperty.INDICATE) != 0;
         if (this.isAppBootloaderSolution) {
             dfuProtocolVersion = 2; // at least
         } else {
@@ -107,7 +107,7 @@ public class DfuProfile {
         ble.enableNotification(notifyChr, true);
     }
 
-    public synchronized BlockingBle getBondBle() {
+    public synchronized BleConnection getBondBle() {
         return ble;
     }
 
@@ -117,15 +117,15 @@ public class DfuProfile {
             return;
         }
 
-        final BlockingBle ble = this.ble;
+        final BleConnection ble = this.ble;
         if (ble == null) {
             throw new Error("writeCtrlPoint(): please call bindTo() firstly.");
         }
 
         final int properties = ctrlChr.getProperties();
-        if (0 != (properties & BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) {
+        if (0 != (properties & BleProperty.WRITE_NO_RESPONSE)) {
             ble.writeChrWithoutResponse(ctrlChr, defaultTimeout, data, 0, data.length, null);
-        } else if (0 != (properties & BluetoothGattCharacteristic.PROPERTY_WRITE)) {
+        } else if (0 != (properties & BleProperty.WRITE)) {
             ble.writeChrWithResponse(ctrlChr, defaultTimeout, data, 0, data.length, null);
         } else {
             throw new Error("writeCtrlPoint(): CTRL<" + ctrlChr.getUuid().toString() + "> is not writable.");
@@ -137,15 +137,15 @@ public class DfuProfile {
             return;
         }
 
-        final BlockingBle ble = this.ble;
+        final BleConnection ble = this.ble;
         if (ble == null) {
             throw new Error("sendCmdRaw(): please call bindTo() firstly.");
         }
 
         final int properties = writeChr.getProperties();
-        if (0 != (properties & BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) {
+        if (0 != (properties & BleProperty.WRITE_NO_RESPONSE)) {
             ble.writeChrWithoutResponse(writeChr, defaultTimeout, cmdFrame, 0, cmdFrame.length, progressListener);
-        } else if (0 != (properties & BluetoothGattCharacteristic.PROPERTY_WRITE)) {
+        } else if (0 != (properties & BleProperty.WRITE)) {
             ble.writeChrWithResponse(writeChr, defaultTimeout, cmdFrame, 0, cmdFrame.length, progressListener);
         } else {
             throw new Error("sendCtrlCmd(): RX<" + writeChr.getUuid().toString() + "> is not writable.");
@@ -174,7 +174,7 @@ public class DfuProfile {
     }
 
     public HexSerializer rcvCmd(int opcode) throws Throwable {
-        final BlockingBle ble = this.ble;
+        final BleConnection ble = this.ble;
         if (ble == null) {
             throw new Error("rcvCmd(): please call bindTo() firstly.");
         }
