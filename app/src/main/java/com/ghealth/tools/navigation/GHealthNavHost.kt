@@ -75,6 +75,8 @@ import com.ghealth.tools.feature.login.ProjectCreateScreen
 import com.ghealth.tools.feature.login.RegisterScreen
 import com.ghealth.tools.feature.settings.DeviceInfoScreen
 import com.ghealth.tools.feature.settings.SettingsScreen
+import com.ghealth.tools.ble.connection.DeviceRole
+import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.feature.ota.ConnectedDeviceInfo
 import com.ghealth.tools.feature.ota.OtaScreen
 import com.ghealth.tools.feature.ota.OtaTopBarMenu
@@ -460,9 +462,15 @@ private fun WideMainLayout(
                         onDispose { onOtaViewModelChange(null) }
                     }
                     LaunchedEffect(connectionState.connectedDevices) {
-                        val deviceInfos = connectionState.connectedDevices.values.map { device ->
-                            ConnectedDeviceInfo(address = device.address, name = device.name ?: device.address)
-                        }
+                        val deviceInfos = connectionState.connectedDevices.values
+                            .filter { it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED }
+                            .map { device ->
+                                ConnectedDeviceInfo(
+                                    address = device.address,
+                                    name = device.name ?: device.address,
+                                    role = device.role,
+                                )
+                            }
                         viewModel.loadAvailableDevices(deviceInfos)
                     }
                     OtaScreen(
@@ -644,9 +652,15 @@ private fun CompactMainLayout(
                     onDispose { onOtaViewModelChange(null) }
                 }
                 LaunchedEffect(connectionState.connectedDevices) {
-                    val deviceInfos = connectionState.connectedDevices.values.map { device ->
-                        ConnectedDeviceInfo(address = device.address, name = device.name ?: device.address)
-                    }
+                    val deviceInfos = connectionState.connectedDevices.values
+                        .filter { it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED }
+                        .map { device ->
+                            ConnectedDeviceInfo(
+                                address = device.address,
+                                name = device.name ?: device.address,
+                                role = device.role,
+                            )
+                        }
                     viewModel.loadAvailableDevices(deviceInfos)
                 }
                 OtaScreen(
