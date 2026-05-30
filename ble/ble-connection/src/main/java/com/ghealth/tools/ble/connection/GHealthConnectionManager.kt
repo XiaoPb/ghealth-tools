@@ -15,6 +15,7 @@ import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.TestConfig
 import com.ghealth.tools.core.storage.LogManager
+import com.juul.kable.Advertisement
 import com.juul.kable.ExperimentalApi
 import com.juul.kable.Peripheral
 import com.juul.kable.Scanner
@@ -142,7 +143,7 @@ class BleConnectionManager @Inject constructor(
     }
 
     private val peripherals = mutableMapOf<String, GHealthPeripheral>()
-    private val pendingConnections = mutableMapOf<String, Peripheral>()
+    private val advertisementCache = mutableMapOf<String, Advertisement>()
 
     fun getDeviceState(address: String): ConnectionState {
         return _devices.value[address]?.state ?: ConnectionState.DISCONNECTED
@@ -185,19 +186,30 @@ class BleConnectionManager @Inject constructor(
             return
         }
 
-        val peripheral = pendingConnections[address]
-        if (peripheral != null) {
+        val advertisement = advertisementCache[address]
+        if (advertisement != null) {
             scope.launch {
-                connect(peripheral, role)
+                try {
+                    val peripheral = Peripheral(advertisement) {
+                        logging { level = Logging.Level.Events }
+                        onServicesDiscovered {
+                            requestMtu(247)
+                        }
+                    }
+                    connect(peripheral, role)
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to create peripheral for $address")
+                    emitConnectionError(address, ConnectionError.ConnectionFailed("创建设备连接失败: ${e.message}"))
+                }
             }
         } else {
-            Timber.w("No peripheral found for address: $address")
+            Timber.w("No advertisement cached for address: $address")
             emitConnectionError(address, ConnectionError.ConnectionFailed("Device not found in scan results"))
         }
     }
 
-    fun registerPeripheral(peripheral: Peripheral) {
-        pendingConnections[peripheral.identifier.toString()] = peripheral
+    fun cacheAdvertisement(advertisement: Advertisement) {
+        advertisementCache[advertisement.identifier.toString()] = advertisement
     }
 
     @OptIn(ExperimentalUuidApi::class)
