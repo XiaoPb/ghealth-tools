@@ -8,13 +8,14 @@ import com.juul.kable.Peripheral
 import com.juul.kable.WriteType
 import com.juul.kable.characteristicOf
 import com.juul.kable.write
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
@@ -24,16 +25,20 @@ import kotlin.uuid.Uuid
 @OptIn(ExperimentalApi::class, ExperimentalUuidApi::class)
 class GR5xxxDfuKable(
     private var kablePeripheral: Peripheral,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    private val scope: CoroutineScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
+            Timber.e(e, "DFU scope 未捕获异常")
+        }
+    ),
 ) : GR5xxxDfu2() {
 
     private var notifyChannel: Channel<ByteArray>? = null
 
     companion object {
-        val DfuServiceUuid = Uuid.parseHex("a6ed0401-d344-460a-8075-b9e8ec90d71b")
-        val DfuWriteCharUuid = Uuid.parseHex("a6ed0403-d344-460a-8075-b9e8ec90d71b")
-        val DfuNotifyCharUuid = Uuid.parseHex("a6ed0402-d344-460a-8075-b9e8ec90d71b")
-        val DfuCtrlCharUuid = Uuid.parseHex("a6ed0404-d344-460a-8075-b9e8ec90d71b")
+        val DfuServiceUuid = Uuid.parse("a6ed0401-d344-460a-8075-b9e8ec90d71b")
+        val DfuWriteCharUuid = Uuid.parse("a6ed0403-d344-460a-8075-b9e8ec90d71b")
+        val DfuNotifyCharUuid = Uuid.parse("a6ed0402-d344-460a-8075-b9e8ec90d71b")
+        val DfuCtrlCharUuid = Uuid.parse("a6ed0404-d344-460a-8075-b9e8ec90d71b")
     }
 
     override fun getBondBle(): BlockingBle {
@@ -91,8 +96,12 @@ class GR5xxxDfuKable(
             service = DfuServiceUuid,
             characteristic = DfuCtrlCharUuid,
         )
-        runBlocking {
-            kablePeripheral.write(chara, data, WriteType.WithResponse)
+        runCatching {
+            runBlocking {
+                kablePeripheral.write(chara, data, WriteType.WithResponse)
+            }
+        }.onFailure {
+            Timber.e(it, "writeCtrlPoint failed")
         }
     }
 
@@ -105,7 +114,7 @@ class GR5xxxDfuKable(
             service = DfuServiceUuid,
             characteristic = DfuWriteCharUuid,
         )
-        scope.launch {
+        runBlocking {
             runCatching {
                 val startTime = System.currentTimeMillis()
                 kablePeripheral.write(writeChar, cmdFrame, WriteType.WithoutResponse)
