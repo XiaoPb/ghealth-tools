@@ -101,7 +101,8 @@ data class GHealthPeripheral(
 class BleConnectionManager @Inject constructor(
     private val blePreferences: BlePreferences,
     private val logManager: LogManager,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val bleScanner: com.ghealth.tools.ble.scanner.BleScanner
 ) {
     private val _devices = MutableStateFlow<Map<String, ConnectedDevice>>(emptyMap())
     val devices: StateFlow<Map<String, ConnectedDevice>> = _devices.asStateFlow()
@@ -143,7 +144,6 @@ class BleConnectionManager @Inject constructor(
     }
 
     private val peripherals = mutableMapOf<String, GHealthPeripheral>()
-    private val advertisementCache = mutableMapOf<String, Advertisement>()
 
     fun getDeviceState(address: String): ConnectionState {
         return _devices.value[address]?.state ?: ConnectionState.DISCONNECTED
@@ -186,7 +186,7 @@ class BleConnectionManager @Inject constructor(
             return
         }
 
-        val advertisement = advertisementCache[address]
+        val advertisement = bleScanner.getCachedAdvertisement(address)
         if (advertisement != null) {
             scope.launch {
                 try {
@@ -206,10 +206,6 @@ class BleConnectionManager @Inject constructor(
             Timber.w("No advertisement cached for address: $address")
             emitConnectionError(address, ConnectionError.ConnectionFailed("Device not found in scan results"))
         }
-    }
-
-    fun cacheAdvertisement(advertisement: Advertisement) {
-        advertisementCache[advertisement.identifier.toString()] = advertisement
     }
 
     @OptIn(ExperimentalUuidApi::class)

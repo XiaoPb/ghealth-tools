@@ -243,11 +243,6 @@ class ConnectionViewModel @Inject constructor(
     fun connectDevice(device: BleDevice) {
         val role = _uiState.value.scanForRole ?: return
         stopScan()
-        
-        val advertisement = bleScanner.getCachedAdvertisement(device.address)
-        if (advertisement != null) {
-            connectionManager.cacheAdvertisement(advertisement)
-        }
         connectionManager.connect(device.address, device.name, role)
         _uiState.update { it.copy(scanForRole = null) }
     }
