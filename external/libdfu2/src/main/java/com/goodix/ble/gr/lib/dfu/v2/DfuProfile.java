@@ -43,10 +43,10 @@ import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
 public class DfuProfile {
-    public final static UUID DFU_SERVICE_UUID = UUID.fromString("a6ed0401-d344-460a-8075-b9e8ec90d71b");
-    public final static UUID DFU_NOTIFY_CHARACTERISTIC_UUID = UUID.fromString("a6ed0402-d344-460a-8075-b9e8ec90d71b");
-    public final static UUID DFU_WRITE_CHARACTERISTIC_UUID = UUID.fromString("a6ed0403-d344-460a-8075-b9e8ec90d71b");
-    public final static UUID DFU_CONTROL_CHARACTERISTIC_UUID = UUID.fromString("a6ed0404-d344-460a-8075-b9e8ec90d71b");
+    public final static UUID DFU_SERVICE_UUID = new UUID(0xa6ed0401d344460aL, 0x8075b9e8ec90d71bL);
+    public final static UUID DFU_NOTIFY_CHARACTERISTIC_UUID = new UUID(0xa6ed0402d344460aL, 0x8075b9e8ec90d71bL);
+    public final static UUID DFU_WRITE_CHARACTERISTIC_UUID = new UUID(0xa6ed0403d344460aL, 0x8075b9e8ec90d71bL);
+    public final static UUID DFU_CONTROL_CHARACTERISTIC_UUID = new UUID(0xa6ed0404d344460aL, 0x8075b9e8ec90d71bL);
 
     protected BleConnection ble = null;
 

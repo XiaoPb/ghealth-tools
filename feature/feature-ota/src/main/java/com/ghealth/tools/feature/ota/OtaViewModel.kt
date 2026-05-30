@@ -84,7 +84,7 @@ class OtaViewModel @Inject constructor(
             try {
                 otaEngine.bindDfuProfile(context, device.address)
                 _uiState.update { it.copy(errorMessage = null) }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Timber.e(e, "Failed to bind DFU profile")
                 _uiState.update { it.copy(errorMessage = "DFU服务绑定失败: ${e.message}") }
             }
@@ -103,7 +103,7 @@ class OtaViewModel @Inject constructor(
                         errorMessage = null,
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Timber.e(e, "Failed to read firmware info")
                 _uiState.update {
                     it.copy(
@@ -257,7 +257,7 @@ class OtaViewModel @Inject constructor(
                     operation(stream)
                 }
                 tempFile.delete()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Timber.e(e, "Upgrade failed")
                 _uiState.update {
                     it.copy(

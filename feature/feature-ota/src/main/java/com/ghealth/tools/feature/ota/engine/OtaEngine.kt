@@ -109,11 +109,17 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
     suspend fun readFirmwareInfo(): FirmwareInfo = withContext(Dispatchers.IO) {
         val profile = requireProfile()
         _logEvents.tryEmit("读取固件信息...")
-        val scaAddress = profile.getAddressOfSCA(null)
-        val startupBootInfo = profile.getStartupBootInfo(scaAddress)
-        val info = FirmwareInfo.fromBootInfo(startupBootInfo.bootInfo)
-        _logEvents.tryEmit("固件信息读取完成")
-        info
+        try {
+            val scaAddress = profile.getAddressOfSCA(null)
+            val startupBootInfo = profile.getStartupBootInfo(scaAddress)
+            val info = FirmwareInfo.fromBootInfo(startupBootInfo.bootInfo)
+            _logEvents.tryEmit("固件信息读取完成")
+            info
+        } catch (e: Throwable) {
+            Timber.e(e, "读取固件信息失败, 设备可能不支持DFU命令")
+            _logEvents.tryEmit("读取固件信息失败: ${e.message}")
+            throw e
+        }
     }
 
     suspend fun startFirmwareUpgrade(
@@ -212,7 +218,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             }
             _logEvents.tryEmit("BootInfo读取完成")
             DebugResult(success = true, message = msg)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "读取BootInfo失败")
             DebugResult(success = false, message = "读取失败: ${e.message}")
         }
@@ -231,7 +237,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             System.arraycopy(rcv.buffer, rcv.offsetInBuffer, data, 0, rcv.rangeSize)
             _logEvents.tryEmit("RAM读取完成: ${data.size} bytes")
             DebugResult(success = true, data = data, message = "RAM读取成功: ${data.size} bytes")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "读取RAM失败")
             DebugResult(success = false, message = "读取失败: ${e.message}")
         }
@@ -249,7 +255,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             profile.rcvCmd(CmdOpcode.WRITE_RAM)
             _logEvents.tryEmit("RAM写入完成")
             DebugResult(success = true, message = "RAM写入成功: ${data.size} bytes")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "写入RAM失败")
             DebugResult(success = false, message = "写入失败: ${e.message}")
         }
@@ -268,7 +274,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             System.arraycopy(rcv.buffer, rcv.offsetInBuffer, data, 0, rcv.rangeSize)
             _logEvents.tryEmit("Flash读取完成: ${data.size} bytes")
             DebugResult(success = true, data = data, message = "Flash读取成功: ${data.size} bytes")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "读取Flash失败")
             DebugResult(success = false, message = "读取失败: ${e.message}")
         }
@@ -286,7 +292,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             profile.rcvCmd(CmdOpcode.UPDATE_FLASH)
             _logEvents.tryEmit("Flash写入完成")
             DebugResult(success = true, message = "Flash写入成功: ${data.size} bytes")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "写入Flash失败")
             DebugResult(success = false, message = "写入失败: ${e.message}")
         }
@@ -305,7 +311,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             val hexStr = data.joinToString(" ") { "%02X".format(it) }
             _logEvents.tryEmit("寄存器读取完成: $hexStr")
             DebugResult(success = true, data = data, message = "寄存器读取成功: $hexStr")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "读取寄存器失败")
             DebugResult(success = false, message = "读取失败: ${e.message}")
         }
@@ -322,7 +328,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             profile.rcvCmd(CmdOpcode.RW_REG)
             _logEvents.tryEmit("寄存器写入完成")
             DebugResult(success = true, message = "寄存器写入成功")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "写入寄存器失败")
             DebugResult(success = false, message = "写入失败: ${e.message}")
         }
@@ -341,7 +347,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             val hexStr = data.joinToString(" ") { "%02X".format(it) }
             _logEvents.tryEmit("eFuse读取完成: $hexStr")
             DebugResult(success = true, data = data, message = "eFuse读取成功: $hexStr")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "读取eFuse失败")
             DebugResult(success = false, message = "读取失败: ${e.message}")
         }
@@ -360,7 +366,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             val hexStr = data.joinToString(" ") { "%02X".format(it) }
             _logEvents.tryEmit("NVDS读取完成: $hexStr")
             DebugResult(success = true, data = data, message = "NVDS读取成功: $hexStr")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "读取NVDS失败")
             DebugResult(success = false, message = "读取失败: ${e.message}")
         }
@@ -377,7 +383,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             profile.rcvCmd(CmdOpcode.OPERATION_NVDS)
             _logEvents.tryEmit("NVDS写入完成")
             DebugResult(success = true, message = "NVDS写入成功")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "写入NVDS失败")
             DebugResult(success = false, message = "写入失败: ${e.message}")
         }
@@ -394,7 +400,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             profile.writeCtrlPoint(data)
             _logEvents.tryEmit("控制点写入完成")
             DebugResult(success = true, message = "控制点写入成功")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Timber.e(e, "写控制点失败")
             DebugResult(success = false, message = "写入失败: ${e.message}")
         }
