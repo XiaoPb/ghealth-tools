@@ -92,6 +92,7 @@ fi
 mkdir -p "${LOCAL_DIR}/logs"
 mkdir -p "${LOCAL_DIR}/server"
 mkdir -p "${LOCAL_DIR}/records"
+mkdir -p "${LOCAL_DIR}/crash"
 echo ""
 echo ">>> 本地输出目录: ${LOCAL_DIR}"
 
@@ -165,7 +166,7 @@ echo ">>> 拉取 CSV 文件 (records)..."
 pull_csv_dir "records" "records"
 
 echo "    共拉取 ${CSV_COUNT} 个 CSV 文件"
-
+"$ADB" shell dumpsys dropbox --print | grep -A 50 "crash" > "${LOCAL_DIR}/crash/crash_log_$(date +%Y%m%d).log"
 # ── 文件统计 ─────────────────────────────────────────
 echo ""
 echo "============================================="

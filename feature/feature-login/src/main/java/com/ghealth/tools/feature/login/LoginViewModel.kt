@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.net.ConnectException
+import java.net.UnknownHostException
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -146,11 +148,16 @@ class LoginViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Login failed")
+                val message = when {
+                    e is UnknownHostException ->
+                        "无法解析服务器地址，请检查网络连接或联系管理员确认 DNS 配置"
+                    e is ConnectException ->
+                        "无法连接服务器，请检查网络后重试"
+                    else ->
+                        "网络错误: ${e.localizedMessage ?: "连接失败"}"
+                }
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "网络错误: ${e.localizedMessage ?: "连接失败"}"
-                    )
+                    it.copy(isLoading = false, errorMessage = message)
                 }
             }
         }
