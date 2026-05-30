@@ -17,8 +17,6 @@ import com.ghealth.tools.core.model.TestConfig
 import com.ghealth.tools.core.model.WorkMode
 import com.ghealth.tools.feature.factory.model.RegEntry
 import com.ghealth.tools.feature.factory.parser.RegisterConfigParser
-import com.juul.kable.Advertisement
-import com.juul.kable.Peripheral
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -94,7 +92,6 @@ class ConnectionViewModel @Inject constructor(
     val uiState: StateFlow<ConnectionUiState> = _uiState.asStateFlow()
 
     private var scanJob: Job? = null
-    private val advertisementCache = mutableMapOf<String, Advertisement>()
 
     init {
         viewModelScope.launch {
@@ -193,10 +190,9 @@ class ConnectionViewModel @Inject constructor(
             )
         }
 
-        advertisementCache.clear()
         scanJob?.cancel()
         scanJob = viewModelScope.launch {
-            bleScanner.scanAdvertisements(minRssi = _uiState.value.minRssi)
+            bleScanner.scan(minRssi = _uiState.value.minRssi)
                 .catch { e ->
                     Timber.e(e, "Scan error")
                     val errorMsg = when (e) {
@@ -205,15 +201,7 @@ class ConnectionViewModel @Inject constructor(
                     }
                     _uiState.update { it.copy(isScanning = false, scanError = errorMsg) }
                 }
-                .collect { advertisement ->
-                    val address = advertisement.identifier.toString()
-                    advertisementCache[address] = advertisement
-                    
-                    val device = BleDevice(
-                        name = advertisement.name,
-                        address = address,
-                        rssi = advertisement.rssi
-                    )
+                .collect { device ->
                     _uiState.update { state ->
                         val currentIndex = state.scanResults.indexOfFirst { it.address == device.address }
                         if (currentIndex == -1) {
@@ -256,28 +244,11 @@ class ConnectionViewModel @Inject constructor(
         val role = _uiState.value.scanForRole ?: return
         stopScan()
         
-        val advertisement = advertisementCache[device.address]
+        val advertisement = bleScanner.getCachedAdvertisement(device.address)
         if (advertisement != null) {
-            viewModelScope.launch {
-                try {
-                    val peripheral = Peripheral(advertisement) {
-                        logging {
-                            level = com.juul.kable.logs.Logging.Level.Events
-                        }
-                        onServicesDiscovered {
-                            val negotiatedMtu = requestMtu(247)
-                            Timber.i("MTU negotiated: $negotiatedMtu")
-                        }
-                    }
-                    connectionManager.connect(peripheral, role)
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to create peripheral for ${device.address}")
-                    _uiState.update { it.copy(connectionError = "创建设备连接失败: ${e.message}") }
-                }
-            }
-        } else {
-            _uiState.update { it.copy(connectionError = "设备信息已过期，请重新扫描") }
+            connectionManager.cacheAdvertisement(advertisement)
         }
+        connectionManager.connect(device.address, device.name, role)
         _uiState.update { it.copy(scanForRole = null) }
     }
 
