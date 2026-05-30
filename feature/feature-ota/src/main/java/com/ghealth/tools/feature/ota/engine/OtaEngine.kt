@@ -12,7 +12,6 @@ import com.goodix.ble.gr.lib.dfu.v2.DfuProgressListener
 import com.goodix.ble.gr.lib.dfu.v2.GR5xxxDfu2.CmdOpcode
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
 import com.goodix.ble.gr.lib.com.HexSerializer
-import com.juul.kable.Peripheral
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -84,8 +83,14 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
 
     val isDfuReady: Boolean get() = dfuProfile != null
 
-    suspend fun bindDfuProfile(context: Context, peripheral: Peripheral) = withContext(Dispatchers.IO) {
+    suspend fun bindDfuProfile(context: Context, address: String) = withContext(Dispatchers.IO) {
         unbindDfuProfile()
+        val peripheral = connectionManager.getPeripheral(address)
+            ?: run {
+                Timber.e("DFU bind: 未找到设备 $address")
+                _logEvents.tryEmit("DFU Profile 绑定失败: 设备未连接")
+                return@withContext
+            }
         val bleConnection = KableBleConnection(peripheral)
         val profile = GR5xxxDfuKable(dfuReconnectHandler)
         profile.setLogger(null)

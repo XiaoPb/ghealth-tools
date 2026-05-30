@@ -14,7 +14,6 @@ import com.ghealth.tools.feature.ota.model.OtaConfig
 import com.ghealth.tools.feature.ota.model.StorageType
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
-import com.juul.kable.ExperimentalApi
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -83,12 +82,7 @@ class OtaViewModel @Inject constructor(
     private fun bindDfuProfile(device: ConnectedDeviceInfo) {
         viewModelScope.launch {
             try {
-                val peripheral = connectionManager.getPeripheral(device.address)
-                    ?: run {
-                        _uiState.update { it.copy(errorMessage = "设备未连接，无法绑定DFU服务") }
-                        return@launch
-                    }
-                otaEngine.bindDfuProfile(context, peripheral)
+                otaEngine.bindDfuProfile(context, device.address)
                 _uiState.update { it.copy(errorMessage = null) }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to bind DFU profile")
@@ -231,7 +225,6 @@ class OtaViewModel @Inject constructor(
         }
     }
 
-    @OptIn(ExperimentalApi::class)
     private fun prepareAndExecuteUpgrade(
         uriStr: String,
         fileName: String,
