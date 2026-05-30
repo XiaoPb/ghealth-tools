@@ -1,8 +1,11 @@
 package com.ghealth.tools.feature.ota.engine
 
 import com.goodix.ble.gr.lib.com.DataProgressListener
+import com.goodix.ble.gr.lib.com.HexSerializer
 import com.goodix.ble.gr.lib.com.ble.BlockingBle
+import com.goodix.ble.gr.lib.dfu.v2.DfuProgressListener
 import com.goodix.ble.gr.lib.dfu.v2.GR5xxxDfu2
+import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
 import com.juul.kable.ExperimentalApi
 import com.juul.kable.Peripheral
 import com.juul.kable.WriteType
@@ -25,6 +28,7 @@ import kotlin.uuid.Uuid
 @OptIn(ExperimentalApi::class, ExperimentalUuidApi::class)
 class GR5xxxDfuKable(
     private var kablePeripheral: Peripheral,
+    private val reconnectCallback: DfuReconnectCallback? = null,
     private val scope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
             Timber.e(e, "DFU scope 未捕获异常")
@@ -41,6 +45,12 @@ class GR5xxxDfuKable(
         val DfuCtrlCharUuid = Uuid.parse("a6ed0404-d344-460a-8075-b9e8ec90d71b")
     }
 
+    interface DfuReconnectCallback {
+        suspend fun onDfuDisconnectCurrent(): String
+        suspend fun onDfuScanAndConnect(newMac: String): Peripheral?
+        suspend fun onDfuReconnected(peripheral: Peripheral)
+    }
+
     override fun getBondBle(): BlockingBle {
         return object : BlockingBle(kablePeripheral.identifier) {
             override fun connect(preferredPhyMask: Int, timeout: Long) {}
@@ -49,19 +59,20 @@ class GR5xxxDfuKable(
         }
     }
 
+    fun getCurrentMac(): String = kablePeripheral.identifier.toString()
+
     suspend fun bind() {
         val mac = kablePeripheral.identifier
-        Timber.d("DFU bind: 使用共享Kable Peripheral $mac")
+        Timber.i("DFU bind: 开始绑定, peripheral=$mac")
 
         val services = kablePeripheral.services.first { it != null }
-        Timber.d("=== DFU Discovered services for $mac ===")
-        services!!.forEach { service ->
-            Timber.d("  Service: ${service.serviceUuid}")
+        Timber.d("DFU bind: 发现 ${services!!.size} 个服务")
+        services.forEach { service ->
+            Timber.v("DFU bind:   Service: ${service.serviceUuid}, chars=${service.characteristics.size}")
             service.characteristics.forEach { char ->
-                Timber.d("    Characteristic: ${char.characteristicUuid} [properties=${char.properties}]")
+                Timber.v("DFU bind:     Char: ${char.characteristicUuid} [props=${char.properties}]")
             }
         }
-        Timber.d("=== End of DFU services ===")
 
         val channel = Channel<ByteArray>(Channel.BUFFERED)
         notifyChannel = channel
@@ -71,19 +82,23 @@ class GR5xxxDfuKable(
             characteristic = DfuNotifyCharUuid,
         )
         kablePeripheral.observe(notifyChar)
-            .onEach { data -> channel.trySend(data) }
+            .onEach { data ->
+                Timber.v("DFU notify: 收到 ${data.size} bytes, hex=${data.take(16).toByteArray().toHexString()}${if (data.size > 16) "..." else ""}")
+                channel.trySend(data)
+            }
             .launchIn(scope)
 
-        Timber.d("DFU bind: DFU服务绑定成功")
+        Timber.i("DFU bind: 绑定成功, peripheral=$mac")
     }
 
     fun unbind() {
         notifyChannel?.close()
         notifyChannel = null
-        Timber.d("DFU unbind: 已解绑")
+        Timber.i("DFU unbind: 已解绑")
     }
 
     suspend fun onPeripheralReconnected(newPeripheral: Peripheral) {
+        Timber.i("DFU onPeripheralReconnected: ${kablePeripheral.identifier} -> ${newPeripheral.identifier}")
         unbind()
         kablePeripheral = newPeripheral
         bind()
@@ -96,12 +111,15 @@ class GR5xxxDfuKable(
             service = DfuServiceUuid,
             characteristic = DfuCtrlCharUuid,
         )
+        Timber.d("DFU writeCtrlPoint: ${data.size} bytes, hex=${data.toHexString()}")
         runCatching {
             runBlocking {
                 kablePeripheral.write(chara, data, WriteType.WithResponse)
             }
+        }.onSuccess {
+            Timber.v("DFU writeCtrlPoint: 写入成功")
         }.onFailure {
-            Timber.e(it, "writeCtrlPoint failed")
+            Timber.e(it, "DFU writeCtrlPoint failed: ${data.size} bytes")
         }
     }
 
@@ -114,16 +132,18 @@ class GR5xxxDfuKable(
             service = DfuServiceUuid,
             characteristic = DfuWriteCharUuid,
         )
+        Timber.v("DFU sendCmdRaw: ${cmdFrame.size} bytes, hex=${cmdFrame.take(32).toByteArray().toHexString()}${if (cmdFrame.size > 32) "..." else ""}")
         runBlocking {
             runCatching {
                 val startTime = System.currentTimeMillis()
                 kablePeripheral.write(writeChar, cmdFrame, WriteType.WithoutResponse)
                 val elapsed = System.currentTimeMillis() - startTime
+                Timber.v("DFU sendCmdRaw: 写入完成, 耗时=${elapsed}ms")
                 progressListener?.onDataProcessed(
                     null, cmdFrame.size, cmdFrame.size, elapsed, elapsed
                 )
             }.onFailure {
-                Timber.e(it, "sendCmdRaw failed")
+                Timber.e(it, "DFU sendCmdRaw failed: ${cmdFrame.size} bytes")
             }
         }
     }
@@ -131,13 +151,155 @@ class GR5xxxDfuKable(
     @Throws(Throwable::class)
     override fun rcvCmd(opcode: Int) = rcvCmdBuf.also {
         val channel = notifyChannel ?: throw Error("rcvCmd(): 通知通道未初始化")
+        Timber.d("DFU rcvCmd: 等待通知, opcode=0x${opcode.toString(16)}")
+
         val data = runBlocking {
             withTimeoutOrNull(20000L) { channel.receive() }
         } ?: throw Error("rcvCmd(): 等待通知超时 (opcode=$opcode)")
 
+        Timber.v("DFU rcvCmd: 收到 ${data.size} bytes, hex=${data.toHexString()}")
         it.setBuffer(data)
         it.setRangeAll()
         it.setPos(0)
         it.setReadonly(true)
+        Timber.d("DFU rcvCmd: 完成, opcode=0x${opcode.toString(16)}, size=${data.size}")
+    }
+
+    override fun updateFirmware(
+        withFastMode: Boolean,
+        dfuFw: DfuFile,
+        writeAddress: Int,
+        ctrlCmd: ByteArray?,
+        progressCallback: DfuProgressListener?,
+    ) {
+        Timber.i("DFU updateFirmware: fastMode=$withFastMode, writeAddr=0x${writeAddress.toString(16)}")
+        if (isAppBootloaderSolution) {
+            enableDfuSchedule()
+            if (progressCallback != null) {
+                progressCallback.onDfuProgress(0, 0, "Load chip info...")
+            }
+            val chipInfo = chipInfo
+            val addressOfSCA = getAddressOfSCA(chipInfo)
+            if (progressCallback != null) {
+                progressCallback.onDfuProgress(0, 0, "Load boot info...")
+            }
+            val bootloader = getStartupBootInfo(addressOfSCA)
+            if (progressCallback != null) {
+                progressCallback.onDfuProgress(0, 0, "Load extra info...")
+            }
+            val extraInfo = appBootloaderExtraInfo
+            var effectiveWriteAddress = writeAddress
+            val isDoubleBank = dfuFw.imgInfo.bootInfo.loadAddr != effectiveWriteAddress
+            if (isDoubleBank && effectiveWriteAddress == -1) {
+                effectiveWriteAddress = extraInfo.recommendSaveAddress
+                if (progressCallback != null) {
+                    progressCallback.onDfuProgress(0, 0, "Use recommended address: 0x${Integer.toHexString(effectiveWriteAddress)}")
+                }
+            }
+            if (progressCallback != null) {
+                progressCallback.onDfuProgress(0, 0, "Check overlap...")
+            }
+            if (dfuFw.isEncrypted != bootloader.isEncrypted) {
+                throw Error("updateFirmware(): Encryption mismatch. FW=${dfuFw.isEncrypted}, CHIP=${bootloader.isEncrypted}")
+            }
+            checkOverlapV2(true, false, dfuFw, effectiveWriteAddress, addressOfSCA, bootloader.bootInfo, extraInfo.appFwImgInfo.bootInfo)
+            if (isDoubleBank || extraInfo.position == AppBootloaderExtraInfo.CURRENT_FW_IS_APP) {
+                setDfuModeOfChip(isDoubleBank)
+                Thread.sleep(500)
+            }
+            if (!isDoubleBank && extraInfo.position == AppBootloaderExtraInfo.CURRENT_FW_IS_APP) {
+                if (progressCallback != null) {
+                    progressCallback.onDfuProgress(0, 0, "Jump to AppBootloader...")
+                }
+                handleAppBootloaderReconnection(progressCallback)
+            }
+        } else {
+            if (ctrlCmd != null) {
+                writeCtrlPoint(ctrlCmd)
+            }
+            val chipInfo = chipInfo
+            val addressOfSCA = getAddressOfSCA(chipInfo)
+            if (progressCallback != null) {
+                progressCallback.onDfuProgress(0, 0, "Load boot info...")
+            }
+            val runningFw = getStartupBootInfo(addressOfSCA)
+            if (dfuFw.isEncrypted != runningFw.isEncrypted) {
+                throw Error("updateFirmware(): Encryption mismatch. FW=${dfuFw.isEncrypted}, CHIP=${runningFw.isEncrypted}")
+            }
+            checkOverlapV1(true, false, dfuFw, writeAddress, addressOfSCA, runningFw.bootInfo)
+            if (progressCallback != null) {
+                progressCallback.onDfuProgress(0, 0, "Load ImgInfo list...")
+            }
+            val imgInfoList = getImgList(addressOfSCA)
+            tidyImgList(dfuFw.imgInfo.bootInfo.loadAddr, dfuFw.data.size, runningFw.bootInfo, imgInfoList.imgList, addressOfSCA)
+        }
+
+        if (progressCallback != null) {
+            progressCallback.onDfuProgress(0, 0, "Downloading...")
+        }
+        programStart(true, false, withFastMode, dfuFw, writeAddress, object : EraseFlashProgressListener {
+            override fun onSectorErased(erased: Int, total: Int) {
+                if (progressCallback != null) {
+                    val percent = 50 * erased / total
+                    progressCallback.onDfuProgress(percent, 0, "Erasing...")
+                }
+            }
+        })
+        val usedProgressPercent = if (withFastMode) 50 else 0
+        programFlash(true, false, withFastMode, dfuFw, writeAddress, object : DataProgressListener {
+            var lastReportPercent = -1
+            override fun onDataProcessed(data: Any?, processedBytes: Int, totalBytes: Int, intervalTime: Long, totalTime: Long) {
+                if (progressCallback != null) {
+                    val percent = usedProgressPercent + (100 - usedProgressPercent) * processedBytes / totalBytes
+                    if (lastReportPercent != percent) {
+                        lastReportPercent = percent
+                        progressCallback.onDfuProgress(percent, (processedBytes * 1000 / totalTime).toInt(), "Programming...")
+                    }
+                }
+            }
+        })
+        programEnd(true, false, withFastMode, dfuFw, true)
+        Timber.i("DFU updateFirmware: 完成")
+    }
+
+    private fun handleAppBootloaderReconnection(progressCallback: DfuProgressListener?) {
+        val callback = reconnectCallback
+            ?: throw Error("AppBootloader reconnection requires DfuReconnectCallback")
+
+        Timber.i("DFU handleAppBootloaderReconnection: 开始 AppBootloader 重连流程")
+
+        runBlocking {
+            val currentMac = callback.onDfuDisconnectCurrent()
+            val newMac = changeMacAddress(currentMac, +1)
+            Timber.i("DFU AppBootloader reconnection: $currentMac -> $newMac")
+
+            Timber.d("DFU: 等待设备断开 (100ms + 200ms)")
+            Thread.sleep(100)
+            Thread.sleep(200)
+
+            Timber.d("DFU: 开始扫描 AppBootloader 设备 $newMac")
+            val scanStartMs = System.currentTimeMillis()
+            val newPeripheral = callback.onDfuScanAndConnect(newMac)
+            val scanElapsedMs = System.currentTimeMillis() - scanStartMs
+
+            if (newPeripheral == null) {
+                Timber.e("DFU: 扫描 AppBootloader 超时 (${scanElapsedMs}ms), MAC=$newMac")
+                throw Error("updateFirmware(): 未找到 AppBootloader 广播: $newMac")
+            }
+            Timber.i("DFU: 找到 AppBootloader 设备 $newMac, 耗时 ${scanElapsedMs}ms")
+
+            Timber.d("DFU: 通知 BleConnectionManager 重连完成")
+            callback.onDfuReconnected(newPeripheral)
+            onPeripheralReconnected(newPeripheral)
+            Timber.i("DFU: AppBootloader 重连绑定完成, 新 Peripheral=${newPeripheral.identifier}")
+
+            if (progressCallback != null) {
+                progressCallback.onDfuProgress(0, 0, "Time for bootloader to take a deep breath...")
+            }
+            Timber.d("DFU: 等待 bootloader 就绪 (2000ms)")
+            Thread.sleep(2_000)
+        }
     }
 }
+
+private fun ByteArray.toHexString(): String = joinToString(" ") { "%02X".format(it) }
