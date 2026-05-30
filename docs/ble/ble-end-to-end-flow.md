@@ -16,11 +16,11 @@
 ### 2.1 扫描器层次
 
 ```
-BleScanner (通用扫描器)                GHealthScanner (专用扫描器)
-  ├── scan()                           ├── scan()
-  ├── scanAdvertisements()             ├── scanWithNameFilter()
-  ├── hasScanPermission                ├── scanWithServiceUuidFilter()
-  └── hasConnectPermission             └── scanWithAddressFilter()
+BleScanner (统一扫描器)
+  ├── scan() → Flow<BleDevice>
+  ├── 内部缓存 Advertisement 供 BleConnectionManager 使用
+  ├── hasScanPermission
+  └── hasConnectPermission
 ```
 
 ### 2.2 扫描流程
@@ -30,9 +30,8 @@ ConnectionViewModel.startScan()
   │
   ├── 1. 检查权限 (hasScanPermission / hasConnectPermission)
   │
-  ├── 2. 选择扫描器
-  │     ├── 通用模式: BleScanner.scan()
-  │     └── 过滤模式: GHealthScanner.scanWithNameFilter() / scanWithAddressFilter()
+  ├── 2. 启动扫描
+  │     └── BleScanner.scan() → Flow<BleDevice>
   │
   ├── 3. Kable Scanner 内部流程
   │     ├── 系统 BLE API 扫描

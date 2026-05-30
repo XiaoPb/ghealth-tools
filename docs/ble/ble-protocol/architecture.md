@@ -68,8 +68,7 @@ ble/ble-connection/src/main/java/com/ghealth/tools/ble/connection/
 
 ```
 ble/ble-scanner/src/main/java/com/ghealth/tools/ble/scanner/
-├── BleScanner.kt                     # 通用 BLE 扫描器
-└── GHealthScanner.kt                # GHealth 专用扫描器
+├── BleScanner.kt                     # BLE 统一扫描器 (基于 Kable)
 ```
 
 ## 3. 核心类型定义

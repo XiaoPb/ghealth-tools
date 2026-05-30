@@ -52,7 +52,7 @@ core-datastore
     ↑
 ble-protocol        # 协议解析 (rpccore, gh3036, gh3220, gh3300)
     ↑
-ble-scanner         # BLE 扫描 (BleScanner, GHealthScanner)
+ble-scanner         # BLE 扫描 (BleScanner)
     └───┐
 ble-connection      # BLE 连接管理 (BleConnectionManager)
     ↑   └─ 依赖 ble-protocol, ble-scanner, core-datastore, core-storage
@@ -61,14 +61,14 @@ core-storage
 
 ## 4. Feature 模块依赖
 
-| Feature 模块 | 依赖的 Core 模块 | 依赖的 BLE 模块 |
-|-------------|-----------------|----------------|
-| feature-login | core-model, core-network, core-datastore, core-ui | - |
-| feature-connection | core-model, core-ui, core-storage | ble-connection, ble-scanner, ble-protocol |
-| feature-demo | core-model, core-ui, core-storage, core-data | ble-connection, ble-protocol |
-| feature-factory | core-model, core-ui, core-storage | ble-connection, ble-protocol |
-| feature-ota | core-model, core-ui, core-network | ble-connection |
-| feature-settings | core-model, core-ui, core-datastore, core-storage | - |
+| Feature 模块 | 依赖的 Core 模块 | 依赖的 BLE 模块 | 直接依赖 Kable |
+|-------------|-----------------|----------------|--------------|
+| feature-login | core-model, core-network, core-datastore, core-ui | - | ❌ |
+| feature-connection | core-model, core-ui, core-storage | ble-connection, ble-scanner, ble-protocol | ❌ (已解耦) |
+| feature-demo | core-model, core-ui, core-storage, core-data | ble-connection, ble-protocol | ❌ |
+| feature-factory | core-model, core-ui, core-storage | ble-connection, ble-protocol | ❌ |
+| feature-ota | core-model, core-ui, core-network | ble-connection | ⚠️ (仅 KableBleConnection 适配器) |
+| feature-settings | core-model, core-ui, core-datastore, core-storage | - | ❌ |
 
 ## 5. 外部模块
 
@@ -91,6 +91,7 @@ core-storage
   ├── @Inject BlePreferences
   ├── @Inject LogManager
   ├── @Inject CoroutineScope
+  ├── @Inject BleScanner (ble-scanner, 用于获取扫描缓存)
   └── 内部创建 GHealthExecutor (根据 chipName)
         ├── Gh3036Executor → RpcCore + FrameParser + Gh3036FrameDecoder
         ├── Gh3220Executor → RpcCore + FrameParser + Gh3220FrameDecoder

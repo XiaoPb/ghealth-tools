@@ -44,7 +44,6 @@ ConnectionViewModel.startScan()
   ├── 2. 启动扫描
   │     ├── BleScanner.scan(minRssi=-80)
   │     │     └── 返回 Flow<BleDevice>
-  │     └── 或 GHealthScanner.scanWithNameFilter(name)
   │
   ├── 3. 收集扫描结果
   │     ├── 过滤已连接设备
