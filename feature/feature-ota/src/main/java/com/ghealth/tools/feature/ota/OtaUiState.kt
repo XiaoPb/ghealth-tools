@@ -1,5 +1,6 @@
 package com.ghealth.tools.feature.ota
 
+import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
 import com.ghealth.tools.feature.ota.engine.OtaState
 import com.ghealth.tools.feature.ota.model.DebugMenuAction
@@ -10,6 +11,7 @@ import com.ghealth.tools.feature.ota.model.UpgradeRegion
 data class ConnectedDeviceInfo(
     val address: String,
     val name: String,
+    val role: DeviceRole = DeviceRole.MASTER,
 )
 
 data class FirmwareFileInfo(
