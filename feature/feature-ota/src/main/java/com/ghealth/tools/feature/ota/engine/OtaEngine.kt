@@ -114,8 +114,17 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             val scaAddress = profile.getAddressOfSCA(chipInfo)
             val startupBootInfo = profile.getStartupBootInfo(scaAddress)
             val info = FirmwareInfo.fromBootInfo(startupBootInfo.bootInfo)
+            val imgInfoList = try {
+                profile.getImgList(scaAddress)
+            } catch (e: Throwable) {
+                Timber.w(e, "读取ImgList失败")
+                null
+            }
+            val result = info.copy(
+                imgList = imgInfoList?.imgList?.map { FirmwareInfo.fromImgInfo(it) } ?: emptyList()
+            )
             _logEvents.tryEmit("固件信息读取完成")
-            info
+            result
         } catch (e: Throwable) {
             Timber.e(e, "读取固件信息失败, 设备可能不支持DFU命令")
             _logEvents.tryEmit("读取固件信息失败: ${e.message}")
@@ -488,6 +497,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
 }
 
 data class FirmwareInfo(
+    val name: String = "",
     val version: Int = 0,
     val binSize: Int = 0,
     val checksum: Int = 0,
@@ -502,10 +512,12 @@ data class FirmwareInfo(
     val isDapBoot: Int = 0,
     val pattern: Int = 0,
     val comments: String = "",
+    val imgList: List<FirmwareInfo> = emptyList(),
 ) {
     companion object {
         fun fromBootInfo(bootInfo: com.goodix.ble.gr.lib.dfu.v2.pojo.BootInfo): FirmwareInfo {
             return FirmwareInfo(
+                name = "BootInfo",
                 binSize = bootInfo.binSize,
                 checksum = bootInfo.checksum,
                 loadAddr = bootInfo.loadAddr,
@@ -523,6 +535,7 @@ data class FirmwareInfo(
         fun fromImgInfo(imgInfo: com.goodix.ble.gr.lib.dfu.v2.pojo.ImgInfo): FirmwareInfo {
             val bi = imgInfo.bootInfo
             return FirmwareInfo(
+                name = imgInfo.comments?.takeIf { it.isNotEmpty() } ?: "Unknown",
                 pattern = imgInfo.pattern,
                 version = imgInfo.version,
                 comments = imgInfo.comments ?: "",

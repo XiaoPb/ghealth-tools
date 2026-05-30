@@ -216,10 +216,8 @@ fun OtaScreen(
             )
 
             FirmwareInfoCard(
-                firmwareInfo = state.firmwareInfo,
-                isLoading = state.isReadingFirmwareInfo,
-                onReadInfo = viewModel::readFirmwareInfo,
-                enabled = !state.isUpgrading && state.selectedDevice != null,
+                uiState = state,
+                onReadFwInfo = { viewModel.readFirmwareInfo() },
             )
 
             FirmwareUpgradeCard(
@@ -400,51 +398,114 @@ private fun DeviceDropdown(
 
 @Composable
 private fun FirmwareInfoCard(
-    firmwareInfo: FirmwareInfo?,
-    isLoading: Boolean,
-    onReadInfo: () -> Unit,
-    enabled: Boolean,
+    uiState: OtaUiState,
+    onReadFwInfo: () -> Unit,
 ) {
+    val firmwareInfo = uiState.firmwareInfo
+    val isLoading = uiState.isReadingFirmwareInfo
+    val enabled = !uiState.isUpgrading && uiState.selectedDevice != null
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("获取固件信息", style = MaterialTheme.typography.titleMedium)
+                Text("固件信息", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(modifier = Modifier.height(8.dp))
             if (firmwareInfo != null) {
-                if (firmwareInfo.pattern != 0) {
-                    if (firmwareInfo.comments.isNotEmpty()) {
-                        InfoRow("comments", firmwareInfo.comments)
-                    }
-                    InfoRow("version", "v${firmwareInfo.version}")
-                    InfoRow("pattern", "0x${firmwareInfo.pattern.toString(16).uppercase()}")
+                FirmwareBranch(info = firmwareInfo, isRoot = true)
+                firmwareInfo.imgList.forEachIndexed { index, imgInfo ->
+                    val isLast = index == firmwareInfo.imgList.lastIndex
+                    FirmwareBranch(info = imgInfo, isRoot = false, isLast = isLast)
                 }
-                InfoRow("binSize", "${firmwareInfo.binSize} (${formatFileSize(firmwareInfo.binSize.toLong())})")
-                InfoRow("checksum", "0x${firmwareInfo.checksum.toString(16).uppercase()}")
-                InfoRow("loadAddr", "0x${firmwareInfo.loadAddr.toString(16).uppercase()}")
-                InfoRow("runAddr", "0x${firmwareInfo.runAddr.toString(16).uppercase()}")
-                InfoRow("xqspiXipCmd", "0x${firmwareInfo.xqspiXipCmd.toString(16).uppercase()} (${xipCmdLabel(firmwareInfo.xqspiXipCmd)})")
-                InfoRow("xqspiSpeed", xqspiSpeedLabel(firmwareInfo.xqspiSpeed))
-                InfoRow("codeCopyMode", copyModeLabel(firmwareInfo.codeCopyMode))
-                InfoRow("systemClk", systemClkLabel(firmwareInfo.systemClk))
-                InfoRow("checkImage", "${firmwareInfo.checkImage}")
-                InfoRow("bootDelay", "${firmwareInfo.bootDelay}")
-                InfoRow("isDapBoot", "${firmwareInfo.isDapBoot}")
             } else {
-                Text("点击按钮获取设备上已下载的固件信息", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "点击按钮获取设备上已下载的固件信息",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = onReadInfo, enabled = enabled && !isLoading) {
+            Button(onClick = onReadFwInfo, enabled = enabled && !isLoading) {
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Text("获取信息")
+            }
+        }
+    }
+}
+
+@Composable
+private fun FirmwareBranch(
+    info: FirmwareInfo,
+    isRoot: Boolean,
+    isLast: Boolean = true,
+) {
+    val prefix = if (isRoot) "" else if (isLast) "  └─ " else "  ├─ "
+    val name = if (isRoot) "BootInfo" else info.name.ifEmpty { "Unknown" }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "$prefix$name",
+            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+            color = if (isRoot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.padding(vertical = 2.dp),
+        )
+        InfoGrid(info = info, indent = !isRoot)
+    }
+}
+
+@Composable
+private fun InfoGrid(info: FirmwareInfo, indent: Boolean) {
+    val indentModifier = if (indent) Modifier.padding(start = 16.dp) else Modifier
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontFamily = FontFamily.Monospace,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val valueStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
+
+    Column(modifier = indentModifier.fillMaxWidth()) {
+        val items = buildList {
+            if (info.pattern != 0) {
+                add("version" to "v${info.version}")
+                add("pattern" to "0x${info.pattern.toString(16).uppercase()}")
+            }
+            add("binSize" to "${info.binSize} (${formatFileSize(info.binSize.toLong())})")
+            add("checksum" to "0x${info.checksum.toString(16).uppercase()}")
+            add("loadAddr" to "0x${info.loadAddr.toString(16).uppercase()}")
+            add("runAddr" to "0x${info.runAddr.toString(16).uppercase()}")
+            add("xqspiXipCmd" to "0x${info.xqspiXipCmd.toString(16).uppercase()}")
+            add("xqspiSpeed" to xqspiSpeedLabel(info.xqspiSpeed))
+            add("codeCopyMode" to copyModeLabel(info.codeCopyMode))
+            add("systemClk" to systemClkLabel(info.systemClk))
+            add("checkImage" to "${info.checkImage}")
+            add("bootDelay" to "${info.bootDelay}")
+            add("isDapBoot" to "${info.isDapBoot}")
+        }
+        items.chunked(2).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                rowItems.forEach { (label, value) ->
+                    Row(modifier = Modifier.weight(1f)) {
+                        Text(text = "$label: ", style = labelStyle, maxLines = 1)
+                        Text(text = value, style = valueStyle, maxLines = 1)
+                    }
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }
