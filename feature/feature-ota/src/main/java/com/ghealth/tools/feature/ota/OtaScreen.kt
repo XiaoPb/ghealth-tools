@@ -416,12 +416,14 @@ private fun FirmwareInfoCard(
                 Text("获取固件信息", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            if (firmwareInfo != null && firmwareInfo.pattern != 0) {
-                if (firmwareInfo.comments.isNotEmpty()) {
-                    InfoRow("comments", firmwareInfo.comments)
+            if (firmwareInfo != null) {
+                if (firmwareInfo.pattern != 0) {
+                    if (firmwareInfo.comments.isNotEmpty()) {
+                        InfoRow("comments", firmwareInfo.comments)
+                    }
+                    InfoRow("version", "v${firmwareInfo.version}")
+                    InfoRow("pattern", "0x${firmwareInfo.pattern.toString(16).uppercase()}")
                 }
-                InfoRow("version", "v${firmwareInfo.version}")
-                InfoRow("pattern", "0x${firmwareInfo.pattern.toString(16).uppercase()}")
                 InfoRow("binSize", "${firmwareInfo.binSize} (${formatFileSize(firmwareInfo.binSize.toLong())})")
                 InfoRow("checksum", "0x${firmwareInfo.checksum.toString(16).uppercase()}")
                 InfoRow("loadAddr", "0x${firmwareInfo.loadAddr.toString(16).uppercase()}")
