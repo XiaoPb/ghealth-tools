@@ -18,11 +18,15 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import timber.log.Timber
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -88,9 +92,31 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideDns(): Dns {
+        return object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> {
+                val addresses = InetAddress.getAllByName(hostname)
+                val ipv4Count = addresses.count { it is Inet4Address }
+                val ipv6Count = addresses.count { it is Inet6Address }
+                Timber.tag("DNS").d("$hostname -> IPv4=$ipv4Count IPv6=$ipv6Count, total=${addresses.size}")
+
+                if (addresses.isEmpty()) {
+                    Timber.tag("DNS").w("$hostname 解析结果为空")
+                } else if (ipv4Count == 0 && ipv6Count > 0) {
+                    Timber.tag("DNS").w("$hostname 仅返回 IPv6 地址，无 IPv4 记录，请在 DNS 配置中添加 A 记录")
+                }
+
+                return addresses.toList()
+            }
+        }
+    }
+
+    @Provides
+    @Singleton
     fun provideOkHttpClient(
         authInterceptor: AuthInterceptor,
-        authAuthenticator: AuthAuthenticator
+        authAuthenticator: AuthAuthenticator,
+        dns: Dns
     ): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor(
             object : HttpLoggingInterceptor.Logger {
@@ -103,6 +129,7 @@ object NetworkModule {
         }
 
         return OkHttpClient.Builder()
+            .dns(dns)
             .addInterceptor(authInterceptor)
             .authenticator(authAuthenticator)
             .addInterceptor(loggingInterceptor)

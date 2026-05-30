@@ -5,7 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
-import com.ghealth.tools.feature.ota.engine.DebugOperations
+import com.ghealth.tools.feature.ota.engine.DebugResult
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
 import com.ghealth.tools.feature.ota.engine.OtaEngine
 import com.ghealth.tools.feature.ota.engine.OtaState
@@ -15,7 +15,6 @@ import com.ghealth.tools.feature.ota.model.StorageType
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
 import com.juul.kable.ExperimentalApi
-import com.juul.kable.Peripheral
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +37,6 @@ class OtaViewModel @Inject constructor(
     val uiState: StateFlow<OtaUiState> = _uiState.asStateFlow()
 
     private val context get() = getApplication<Application>()
-    private var debugOps: DebugOperations? = null
 
     init {
         viewModelScope.launch {
@@ -67,30 +65,58 @@ class OtaViewModel @Inject constructor(
     }
 
     fun loadAvailableDevices(devices: List<ConnectedDeviceInfo>) {
-        _uiState.update { it.copy(availableDevices = devices) }
+        val selectedDevice = devices.firstOrNull()
+        _uiState.update {
+            it.copy(
+                availableDevices = devices,
+                selectedDevice = selectedDevice,
+            )
+        }
+        selectedDevice?.let { bindDfuProfile(it) }
     }
 
     fun selectDevice(device: ConnectedDeviceInfo) {
         _uiState.update { it.copy(selectedDevice = device) }
+        bindDfuProfile(device)
+    }
+
+    private fun bindDfuProfile(device: ConnectedDeviceInfo) {
+        viewModelScope.launch {
+            try {
+                val peripheral = connectionManager.getPeripheral(device.address)
+                    ?: run {
+                        _uiState.update { it.copy(errorMessage = "设备未连接，无法绑定DFU服务") }
+                        return@launch
+                    }
+                otaEngine.bindDfuProfile(context, peripheral)
+                _uiState.update { it.copy(errorMessage = null) }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to bind DFU profile")
+                _uiState.update { it.copy(errorMessage = "DFU服务绑定失败: ${e.message}") }
+            }
+        }
     }
 
     fun readFirmwareInfo() {
-        val deviceInfo = _uiState.value.selectedDevice ?: run {
-            _uiState.update { it.copy(errorMessage = "请先选择目标设备") }
-            return
-        }
-        _uiState.update { it.copy(isReadingFirmwareInfo = true) }
+        _uiState.update { it.copy(isReadingFirmwareInfo = true, errorMessage = null) }
         viewModelScope.launch {
             try {
+                val firmwareInfo = otaEngine.readFirmwareInfo()
                 _uiState.update {
                     it.copy(
                         isReadingFirmwareInfo = false,
-                        errorMessage = "固件信息读取需通过DFU连接获取，请选择固件文件后通过文件解析查看信息",
+                        firmwareInfo = firmwareInfo,
+                        errorMessage = null,
                     )
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to read firmware info")
-                _uiState.update { it.copy(isReadingFirmwareInfo = false, errorMessage = e.message) }
+                _uiState.update {
+                    it.copy(
+                        isReadingFirmwareInfo = false,
+                        errorMessage = e.message ?: "读取固件信息失败",
+                    )
+                }
             }
         }
     }
@@ -172,8 +198,12 @@ class OtaViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = fileInfo.parseError ?: "无效的DFU固件文件，无法升级") }
             return
         }
-        prepareAndExecuteUpgrade(fileInfo.uri, fileInfo.fileName) { peripheral, stream ->
-            otaEngine.startFirmwareUpgrade(context, peripheral, stream, _uiState.value.otaConfig)
+        if (!otaEngine.isDfuReady) {
+            _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
+            return
+        }
+        prepareAndExecuteUpgrade(fileInfo.uri, fileInfo.fileName) { stream ->
+            otaEngine.startFirmwareUpgrade(context, stream, _uiState.value.otaConfig)
         }
     }
 
@@ -184,6 +214,10 @@ class OtaViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = "请先选择资源文件") }
             return
         }
+        if (!otaEngine.isDfuReady) {
+            _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
+            return
+        }
         _uiState.update {
             it.copy(
                 otaConfig = it.otaConfig.copy(
@@ -192,8 +226,8 @@ class OtaViewModel @Inject constructor(
                 )
             )
         }
-        prepareAndExecuteUpgrade(uriStr, state.resourceFile.fileName) { peripheral, stream ->
-            otaEngine.startResourceUpgrade(context, peripheral, stream, _uiState.value.otaConfig)
+        prepareAndExecuteUpgrade(uriStr, state.resourceFile.fileName) { stream ->
+            otaEngine.startResourceUpgrade(context, stream, _uiState.value.otaConfig)
         }
     }
 
@@ -201,17 +235,8 @@ class OtaViewModel @Inject constructor(
     private fun prepareAndExecuteUpgrade(
         uriStr: String,
         fileName: String,
-        operation: suspend (Peripheral, java.io.InputStream) -> Unit,
+        operation: suspend (java.io.InputStream) -> Unit,
     ) {
-        val deviceInfo = _uiState.value.selectedDevice ?: run {
-            _uiState.update { it.copy(errorMessage = "请先选择目标设备") }
-            return
-        }
-        val peripheral = connectionManager.getPeripheral(deviceInfo.address)
-            ?: run {
-                _uiState.update { it.copy(errorMessage = "设备未连接，请先连接设备") }
-                return
-            }
         if (uriStr.isEmpty()) {
             _uiState.update { it.copy(errorMessage = "请先选择固件文件") }
             return
@@ -236,7 +261,7 @@ class OtaViewModel @Inject constructor(
                 }
 
                 tempFile.inputStream().use { stream ->
-                    operation(peripheral, stream)
+                    operation(stream)
                 }
                 tempFile.delete()
             } catch (e: Exception) {
@@ -294,71 +319,68 @@ class OtaViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(showControlPointDialog = false) }
             val hex = _uiState.value.controlPointHex
-            debugOps?.writeControlPoint(hex)?.fold(
-                onSuccess = { result ->
-                    _uiState.update {
-                        it.copy(debugResults = emptyMap())
-                    }
-                },
-                onFailure = { error ->
-                    _uiState.update { it.copy(errorMessage = error.message ?: "写控制点失败") }
-                },
-            )
+            val result = otaEngine.writeControlPoint(hex)
+            if (result.success) {
+                _uiState.update { it.copy(debugResults = emptyMap()) }
+            } else {
+                _uiState.update { it.copy(errorMessage = result.message) }
+            }
         }
     }
 
     fun executeDebugCommand(
         action: DebugMenuAction,
-        operation: suspend (DebugOperations) -> Result<com.ghealth.tools.feature.ota.engine.DebugResult>,
+        operation: suspend (OtaEngine) -> DebugResult,
     ) {
         viewModelScope.launch {
-            val ops = debugOps ?: run {
-                _uiState.update { it.copy(errorMessage = "调试功能暂不可用，请先选择固件文件并启动升级准备") }
+            if (!otaEngine.isDfuReady) {
+                _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
                 return@launch
             }
-            operation(ops).fold(
-                onSuccess = { result ->
-                    _uiState.update {
-                        it.copy(debugResults = it.debugResults + (action to result.message))
-                    }
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(
-                            errorMessage = error.message ?: "调试操作失败",
-                            debugResults = it.debugResults + (action to "错误: ${error.message}"),
-                        )
-                    }
-                },
-            )
+            val result = operation(otaEngine)
+            if (result.success) {
+                _uiState.update {
+                    it.copy(debugResults = it.debugResults + (action to result.message))
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        errorMessage = result.message,
+                        debugResults = it.debugResults + (action to "错误: ${result.message}"),
+                    )
+                }
+            }
         }
     }
 
     fun executeDebugWrite(
         action: DebugMenuAction,
-        operation: suspend (DebugOperations) -> Result<com.ghealth.tools.feature.ota.engine.DebugResult>,
+        operation: suspend (OtaEngine) -> DebugResult,
     ) {
         viewModelScope.launch {
-            val ops = debugOps ?: run {
-                _uiState.update { it.copy(errorMessage = "调试功能暂不可用，请先选择固件文件并启动升级准备") }
+            if (!otaEngine.isDfuReady) {
+                _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
                 return@launch
             }
-            operation(ops).fold(
-                onSuccess = { result ->
-                    _uiState.update {
-                        it.copy(debugResults = it.debugResults + (action to result.message))
-                    }
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(
-                            errorMessage = error.message ?: "调试写入失败",
-                            debugResults = it.debugResults + (action to "错误: ${error.message}"),
-                        )
-                    }
-                },
-            )
+            val result = operation(otaEngine)
+            if (result.success) {
+                _uiState.update {
+                    it.copy(debugResults = it.debugResults + (action to result.message))
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        errorMessage = result.message,
+                        debugResults = it.debugResults + (action to "错误: ${result.message}"),
+                    )
+                }
+            }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        otaEngine.unbindDfuProfile()
     }
 
     private fun readFileName(uri: Uri): String {
