@@ -267,7 +267,7 @@ class OtaViewModel @Inject constructor(
                 errorMessage = null,
                 successMessage = null,
                 showResultDialog = false,
-                debugResult = null,
+                debugResults = emptyMap(),
             )
         }
     }
@@ -295,21 +295,68 @@ class OtaViewModel @Inject constructor(
             _uiState.update { it.copy(showControlPointDialog = false) }
             val hex = _uiState.value.controlPointHex
             debugOps?.writeControlPoint(hex)?.fold(
-                onSuccess = { result -> _uiState.update { it.copy(debugResult = result.message) } },
-                onFailure = { error -> _uiState.update { it.copy(errorMessage = error.message ?: "写控制点失败") } },
+                onSuccess = { result ->
+                    _uiState.update {
+                        it.copy(debugResults = emptyMap())
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update { it.copy(errorMessage = error.message ?: "写控制点失败") }
+                },
             )
         }
     }
 
-    fun executeDebugRead(operation: suspend (DebugOperations) -> Result<com.ghealth.tools.feature.ota.engine.DebugResult>) {
+    fun executeDebugCommand(
+        action: DebugMenuAction,
+        operation: suspend (DebugOperations) -> Result<com.ghealth.tools.feature.ota.engine.DebugResult>,
+    ) {
         viewModelScope.launch {
             val ops = debugOps ?: run {
-                _uiState.update { it.copy(errorMessage = "调试功能暂不可用") }
+                _uiState.update { it.copy(errorMessage = "调试功能暂不可用，请先选择固件文件并启动升级准备") }
                 return@launch
             }
             operation(ops).fold(
-                onSuccess = { result -> _uiState.update { it.copy(debugResult = result.message) } },
-                onFailure = { error -> _uiState.update { it.copy(errorMessage = error.message ?: "调试操作失败") } },
+                onSuccess = { result ->
+                    _uiState.update {
+                        it.copy(debugResults = it.debugResults + (action to result.message))
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(
+                            errorMessage = error.message ?: "调试操作失败",
+                            debugResults = it.debugResults + (action to "错误: ${error.message}"),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun executeDebugWrite(
+        action: DebugMenuAction,
+        operation: suspend (DebugOperations) -> Result<com.ghealth.tools.feature.ota.engine.DebugResult>,
+    ) {
+        viewModelScope.launch {
+            val ops = debugOps ?: run {
+                _uiState.update { it.copy(errorMessage = "调试功能暂不可用，请先选择固件文件并启动升级准备") }
+                return@launch
+            }
+            operation(ops).fold(
+                onSuccess = { result ->
+                    _uiState.update {
+                        it.copy(debugResults = it.debugResults + (action to result.message))
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(
+                            errorMessage = error.message ?: "调试写入失败",
+                            debugResults = it.debugResults + (action to "错误: ${error.message}"),
+                        )
+                    }
+                },
             )
         }
     }
