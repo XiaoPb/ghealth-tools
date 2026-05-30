@@ -83,7 +83,7 @@ sealed class ConnectionConstraint {
 sealed class DfuConnectionState {
     object Idle : DfuConnectionState()
     data class Reconnecting(val oldAddress: String, val newAddress: String) : DfuConnectionState()
-    data class Reconnected(val newAddress: String, val peripheral: Peripheral) : DfuConnectionState()
+    data class Reconnected(val newAddress: String, val channel: BleRawChannel) : DfuConnectionState()
     data class Failed(val error: String) : DfuConnectionState()
 }
 
@@ -150,6 +150,10 @@ class BleConnectionManager @Inject constructor(
     }
 
     fun getPeripheral(address: String): Peripheral? = peripherals[address]?.peripheral
+
+    fun getRawChannel(address: String): BleRawChannel? {
+        return peripherals[address]?.let { KableRawChannel(it.peripheral) }
+    }
 
     fun checkConnectionConstraint(role: DeviceRole): ConnectionConstraint {
         return when (role) {
@@ -577,7 +581,7 @@ class BleConnectionManager @Inject constructor(
     suspend fun scanForDeviceWithMac(
         targetMac: String,
         timeoutMs: Long = 31_000,
-    ): Peripheral? {
+    ): BleRawChannel? {
         Timber.i("DFU scanForDeviceWithMac: target=$targetMac, timeout=${timeoutMs}ms")
         val targetAddress = targetMac.uppercase()
         val scanner = Scanner {
@@ -589,18 +593,20 @@ class BleConnectionManager @Inject constructor(
                     .first { it.address.equals(targetAddress, ignoreCase = true) }
                     .let { advertisement ->
                         Timber.d("DFU scan found device: ${advertisement.address} name=${advertisement.name}")
-                        Peripheral(advertisement) {
+                        val peripheral = Peripheral(advertisement) {
                             logging { level = Logging.Level.Warnings }
                             onServicesDiscovered {
                                 requestMtu(247)
                             }
                         }
+                        peripheral.connect()
+                        KableRawChannel(peripheral)
                     }
             }.also { result ->
                 if (result == null) {
                     Timber.w("DFU scanForDeviceWithMac: 未找到设备 $targetMac (超时 ${timeoutMs}ms)")
                 } else {
-                    Timber.i("DFU scanForDeviceWithMac: 成功找到设备 $targetMac")
+                    Timber.i("DFU scanForDeviceWithMac: 成功连接设备 $targetMac")
                 }
             }
         } catch (e: Exception) {
@@ -609,8 +615,10 @@ class BleConnectionManager @Inject constructor(
         }
     }
 
-    suspend fun notifyDfuReconnect(oldAddress: String, newPeripheral: Peripheral) {
-        val newAddress = newPeripheral.identifier.toString()
+    suspend fun notifyDfuReconnect(oldAddress: String, channel: BleRawChannel) {
+        val newAddress = channel.address
+        val kableChannel = channel as KableRawChannel
+        val newPeripheral = kableChannel.kablePeripheral
         Timber.i("DFU notifyDfuReconnect: $oldAddress -> $newAddress")
         peripherals.remove(oldAddress)
         val oldDevice = _devices.value[oldAddress]
@@ -630,7 +638,7 @@ class BleConnectionManager @Inject constructor(
             state = ConnectionState.CONNECTING,
             deviceType = deviceType
         ))
-        _dfuState.value = DfuConnectionState.Reconnected(newAddress, newPeripheral)
+        _dfuState.value = DfuConnectionState.Reconnected(newAddress, channel)
         Timber.d("DFU notifyDfuReconnect: 设备列表已更新, role=$role, deviceType=$deviceType")
     }
 }

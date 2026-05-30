@@ -62,17 +62,15 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         override fun scanAndConnect(targetMac: String, timeoutMs: Long): BleConnection {
             Timber.i("DFU reconnect: 开始扫描并连接 $targetMac")
             return runBlocking {
-                val peripheral = connectionManager.scanForDeviceWithMac(targetMac, timeoutMs)
-                if (peripheral == null) {
+                val channel = connectionManager.scanForDeviceWithMac(targetMac, timeoutMs)
+                if (channel == null) {
                     Timber.e("DFU reconnect: 扫描超时, MAC=$targetMac")
                     throw Error("未找到 AppBootloader 广播: $targetMac")
                 }
-                Timber.d("DFU reconnect: 扫描到设备，开始连接")
-                peripheral.connect()
-                Timber.i("DFU reconnect: 连接成功 ${peripheral.identifier}")
+                Timber.i("DFU reconnect: 连接成功 ${channel.address}")
                 val oldMac = dfuProfile?.getCurrentMac() ?: ""
-                connectionManager.notifyDfuReconnect(oldMac, peripheral)
-                KableBleConnection(peripheral)
+                connectionManager.notifyDfuReconnect(oldMac, channel)
+                KableBleConnection(channel)
             }
         }
     }
@@ -85,13 +83,13 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
 
     suspend fun bindDfuProfile(context: Context, address: String) = withContext(Dispatchers.IO) {
         unbindDfuProfile()
-        val peripheral = connectionManager.getPeripheral(address)
+        val channel = connectionManager.getRawChannel(address)
             ?: run {
                 Timber.e("DFU bind: 未找到设备 $address")
                 _logEvents.tryEmit("DFU Profile 绑定失败: 设备未连接")
                 return@withContext
             }
-        val bleConnection = KableBleConnection(peripheral)
+        val bleConnection = KableBleConnection(channel)
         val profile = GR5xxxDfuKable(dfuReconnectHandler)
         profile.setLogger(null)
         profile.bind(bleConnection)

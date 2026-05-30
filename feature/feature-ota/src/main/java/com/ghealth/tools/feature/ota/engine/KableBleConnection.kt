@@ -1,31 +1,25 @@
 package com.ghealth.tools.feature.ota.engine
 
+import com.ghealth.tools.ble.connection.BleRawChannel
 import com.goodix.ble.gr.lib.com.DataProgressListener
 import com.goodix.ble.gr.lib.com.ILogger
 import com.goodix.ble.gr.lib.com.transport.BleCharacteristic
 import com.goodix.ble.gr.lib.com.transport.BleConnection
 import com.goodix.ble.gr.lib.com.transport.BleProperty
 import com.goodix.ble.gr.lib.com.transport.BleService
-import com.juul.kable.Peripheral
-import com.juul.kable.WriteType
-import com.juul.kable.characteristicOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.util.UUID
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 
-@OptIn(ExperimentalUuidApi::class)
 class KableBleConnection(
-    private val peripheral: Peripheral,
+    private val channel: BleRawChannel,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BleConnection {
 
@@ -33,40 +27,38 @@ class KableBleConnection(
     private val notifyChannels = mutableMapOf<UUID, Channel<ByteArray>>()
     private var cachedServices: List<KableBleService>? = null
 
-    override fun getTargetAddress(): String = peripheral.identifier
+    override fun getTargetAddress(): String = channel.address
 
-    override fun isConnected(): Boolean = runBlocking {
-        peripheral.state.value is com.juul.kable.State.Connected
-    }
+    override fun isConnected(): Boolean = channel.isConnected
 
     override fun connect() {
-        runBlocking { peripheral.connect() }
+        runBlocking { channel.connect() }
     }
 
     override fun connect(timeout: Long) {
         runBlocking {
-            withTimeoutOrNull(timeout) { peripheral.connect() }
+            withTimeoutOrNull(timeout) { channel.connect() }
                 ?: throw java.util.concurrent.TimeoutException("Connection timeout after ${timeout}ms")
         }
     }
 
     override fun disconnect() {
-        runBlocking { peripheral.disconnect() }
+        runBlocking { channel.disconnect() }
     }
 
     override fun discoverServices() {
         runBlocking {
-            val services = peripheral.services.first { it != null }
-            cachedServices = services!!.map { svc ->
+            val services = channel.discoverServices()
+            cachedServices = services.map { svc ->
                 KableBleService(
-                    serviceUuid = svc.serviceUuid,
+                    serviceUuid = svc.uuid,
                     characteristics = svc.characteristics.map { char ->
                         KableBleCharacteristic(
-                            serviceUuid = svc.serviceUuid,
-                            charUuid = char.characteristicUuid,
+                            serviceUuid = svc.uuid,
+                            charUuid = char.uuid,
                             props = mapKableProperties(char.properties),
                         )
-                    }
+                    },
                 )
             }
             Timber.d("KableBle: discovered ${cachedServices!!.size} services")
@@ -74,18 +66,16 @@ class KableBleConnection(
     }
 
     override fun setMtu(newMtu: Int) {
-        Timber.d("KableBle: setMtu($newMtu) - no-op with Kable (negotiated automatically)")
+        Timber.d("KableBle: setMtu($newMtu) - no-op with Kable")
     }
 
     override fun queryServices(uuid: UUID): List<BleService> {
-        val kableUuid = Uuid.parse(uuid.toString())
-        return cachedServices?.filter { it.serviceUuid == kableUuid } ?: emptyList()
+        return cachedServices?.filter { it.serviceUuid == uuid } ?: emptyList()
     }
 
     override fun queryCharacteristic(service: BleService, uuid: UUID): BleCharacteristic? {
         if (service is KableBleService) {
-            val kableUuid = Uuid.parse(uuid.toString())
-            return service.characteristics.find { it.charUuid == kableUuid }
+            return service.characteristics.find { it.charUuid == uuid }
         }
         return null
     }
@@ -95,16 +85,17 @@ class KableBleConnection(
         val uuid = chr.uuid
         if (notifyChannels.containsKey(uuid)) return
 
-        val kableChar = chr.toKableCharacteristic()
-        val channel = Channel<ByteArray>(Channel.BUFFERED)
-        notifyChannels[uuid] = channel
+        if (chr is KableBleCharacteristic) {
+            val channel = Channel<ByteArray>(Channel.BUFFERED)
+            notifyChannels[uuid] = channel
 
-        peripheral.observe(kableChar)
-            .onEach { data ->
-                channel.trySend(data)
-            }
-            .launchIn(scope)
-        Timber.d("KableBle: notification enabled for $uuid")
+            this.channel.observe(chr.serviceUuid, chr.charUuid)
+                .onEach { data ->
+                    channel.trySend(data)
+                }
+                .launchIn(scope)
+            Timber.d("KableBle: notification enabled for $uuid")
+        }
     }
 
     override fun writeChrWithResponse(
@@ -115,11 +106,11 @@ class KableBleConnection(
         writeSize: Int,
         listener: DataProgressListener?,
     ) {
+        if (chr !is KableBleCharacteristic) return
         runBlocking {
             val data = dat.copyOfRange(offsetInDat, offsetInDat + writeSize.coerceAtMost(dat.size - offsetInDat))
-            val kableChar = chr.toKableCharacteristic()
             val startTime = System.currentTimeMillis()
-            peripheral.write(kableChar, data, WriteType.WithResponse)
+            channel.write(chr.serviceUuid, chr.charUuid, data, withResponse = true)
             val elapsed = System.currentTimeMillis() - startTime
             listener?.onDataProcessed(null, data.size, data.size, elapsed, elapsed)
         }
@@ -133,11 +124,11 @@ class KableBleConnection(
         writeSize: Int,
         listener: DataProgressListener?,
     ) {
+        if (chr !is KableBleCharacteristic) return
         runBlocking {
             val data = dat.copyOfRange(offsetInDat, offsetInDat + writeSize.coerceAtMost(dat.size - offsetInDat))
-            val kableChar = chr.toKableCharacteristic()
             val startTime = System.currentTimeMillis()
-            peripheral.write(kableChar, data, WriteType.WithoutResponse)
+            channel.write(chr.serviceUuid, chr.charUuid, data, withResponse = false)
             val elapsed = System.currentTimeMillis() - startTime
             listener?.onDataProcessed(null, data.size, data.size, elapsed, elapsed)
         }
@@ -167,30 +158,23 @@ class KableBleConnection(
         notifyChannels.clear()
     }
 
-    private fun BleCharacteristic.toKableCharacteristic() = (this as KableBleCharacteristic).let { char ->
-        characteristicOf(
-            service = char.serviceUuid,
-            characteristic = char.charUuid,
-        )
-    }
-
-    private fun mapKableProperties(properties: com.juul.kable.Characteristic.Properties): Int {
-        return properties.value and (BleProperty.READ or BleProperty.WRITE or BleProperty.WRITE_NO_RESPONSE or BleProperty.NOTIFY or BleProperty.INDICATE)
+    private fun mapKableProperties(properties: Int): Int {
+        return properties and (BleProperty.READ or BleProperty.WRITE or BleProperty.WRITE_NO_RESPONSE or BleProperty.NOTIFY or BleProperty.INDICATE)
     }
 
     internal class KableBleService(
-        val serviceUuid: Uuid,
+        val serviceUuid: UUID,
         val characteristics: List<KableBleCharacteristic>,
     ) : BleService {
-        override fun getUuid(): UUID = UUID.fromString(serviceUuid.toString())
+        override fun getUuid(): UUID = serviceUuid
     }
 
     internal class KableBleCharacteristic(
-        val serviceUuid: Uuid,
-        val charUuid: Uuid,
+        val serviceUuid: UUID,
+        val charUuid: UUID,
         private val props: Int,
     ) : BleCharacteristic {
-        override fun getUuid(): UUID = UUID.fromString(charUuid.toString())
+        override fun getUuid(): UUID = charUuid
         override fun getProperties(): Int = props
     }
 }
