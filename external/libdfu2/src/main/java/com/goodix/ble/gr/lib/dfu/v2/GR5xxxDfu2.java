@@ -36,9 +36,9 @@ import com.goodix.ble.gr.lib.com.DataProgressListener;
 import com.goodix.ble.gr.lib.com.HexSerializer;
 import com.goodix.ble.gr.lib.com.HexString;
 import com.goodix.ble.gr.lib.com.ILogger;
-import com.goodix.ble.gr.lib.com.ble.BlockingBle;
-import com.goodix.ble.gr.lib.com.ble.BlockingBleUtil;
-import com.goodix.ble.gr.lib.com.ble.BlockingLeScanner;
+import com.goodix.ble.gr.lib.com.transport.BleConnection;
+import com.goodix.ble.gr.lib.com.transport.DfuReconnectHandler;
+import com.goodix.ble.gr.lib.com.transport.MacUtils;
 import com.goodix.ble.gr.lib.dfu.v2.pojo.BootInfo;
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuChipInfo;
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile;
@@ -51,11 +51,16 @@ import java.util.concurrent.TimeoutException;
 public class GR5xxxDfu2 extends DfuProfile {
     private static final String TAG = "GR5xxxDfu2";
     private ILogger logger = null;
+    protected DfuReconnectHandler reconnectHandler = null;
 
     private static final byte[] CTRL_POINT_PATTERN = new byte[]{0x44, 0x4F, 0x4F, 0x47};
 
     public void setLogger(ILogger logger) {
         this.logger = logger;
+    }
+
+    public void setReconnectHandler(DfuReconnectHandler handler) {
+        this.reconnectHandler = handler;
     }
 
     //任务
@@ -617,27 +622,27 @@ public class GR5xxxDfu2 extends DfuProfile {
                     progressCallback.onDfuProgress(0, 0, "Jump to AppBootloader...");
                 }
 
-                String newDeviceMac = changeMacAddress(this.ble.targetDevice.getAddress(), +1);
+                String newDeviceMac = changeMacAddress(this.ble.getTargetAddress(), +1);
 
                 Thread.sleep(100);
                 this.ble.disconnect();
                 Thread.sleep(200);
 
-                final BlockingLeScanner scanner = new BlockingLeScanner(BlockingBle.appCtx);
-                final BlockingLeScanner.Report report = scanner.scanForDevice(31_000, newDeviceMac);
-                if (report != null) {
-                    final BlockingBle newBle = new BlockingBle(report.device);
-                    newBle.connect();
-                    newBle.discoverServices();
-                    newBle.setMtu(247);
-                    this.bindTo(newBle);
-                    if (progressCallback != null) {
-                        progressCallback.onDfuProgress(0, 0, "Time for bootloader to take a deep breath...");
+                if (reconnectHandler != null) {
+                    final BleConnection newBle = reconnectHandler.scanAndConnect(newDeviceMac, 31_000);
+                    if (newBle != null) {
+                        newBle.discoverServices();
+                        newBle.setMtu(247);
+                        this.bindTo(newBle);
+                        if (progressCallback != null) {
+                            progressCallback.onDfuProgress(0, 0, "Time for bootloader to take a deep breath...");
+                        }
+                        Thread.sleep(2_000);
+                    } else {
+                        throw new Error("updateFirmware(): Not found the advertisement of AppBootloader:" + newDeviceMac);
                     }
-                    Thread.sleep(2_000);
                 } else {
-                    // not found
-                    throw new Error("updateFirmware(): Not found the advertisement of AppBootloader:" + newDeviceMac);
+                    throw new Error("updateFirmware(): DfuReconnectHandler not set for AppBootloader reconnection");
                 }
             }
 
@@ -931,19 +936,7 @@ public class GR5xxxDfu2 extends DfuProfile {
     }
 
     public static String changeMacAddress(String address, int delta) {
-        if (address == null)
-            return "00:00:00:00:00:00";
-
-        final long macValue = BlockingBleUtil.macToValue(address);
-        long leastByteOfMac = macValue & 0xFFL;
-        long otherByteOfMac = macValue & 0xFFFF_FFFF_FF00L;
-
-        // only change the least significant byte.
-        leastByteOfMac = (leastByteOfMac + delta) & 0xFFL;
-
-        final long newMacValue = otherByteOfMac | leastByteOfMac;
-
-        return BlockingBleUtil.valueToMac(newMacValue);
+        return MacUtils.changeMacAddress(address, delta);
     }
 
     public static class StartupBootInfo {
