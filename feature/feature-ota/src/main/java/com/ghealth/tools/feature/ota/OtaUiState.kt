@@ -41,7 +41,7 @@ data class OtaUiState(
     val showControlPointDialog: Boolean = false,
     val controlPointHex: String = "",
 
-    val debugResult: String? = null,
+    val debugResults: Map<DebugMenuAction, String> = emptyMap(),
 
     val otaState: OtaState = OtaState.IDLE,
     val progressPercent: Float = 0f,
