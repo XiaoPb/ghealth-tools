@@ -21,7 +21,7 @@ class GR5xxxDfuKable(
         Timber.i("DFU bind: 开始绑定, address=$mac")
         bleConnection.discoverServices()
         bindTo(bleConnection)
-        Timber.i("DFU bind: 绑定成功, address=$mac")
+        Timber.i("DFU bind: 绑定成功, address=$mac, serviceUUID=$DFU_SERVICE_UUID, notifyUUID=$DFU_NOTIFY_CHARACTERISTIC_UUID, writeUUID=$DFU_WRITE_CHARACTERISTIC_UUID, ctrlUUID=$DFU_CONTROL_CHARACTERISTIC_UUID")
     }
 
     fun unbind() {
@@ -33,7 +33,7 @@ class GR5xxxDfuKable(
     @Throws(Throwable::class)
     override fun writeCtrlPoint(data: ByteArray) {
         if (data.isEmpty()) return
-        Timber.d("DFU writeCtrlPoint: ${data.size} bytes, hex=${data.toHexString()}")
+        Timber.d("DFU writeCtrlPoint: ${data.size} bytes, ctrlUUID=$DFU_CONTROL_CHARACTERISTIC_UUID, hex=${data.toHexString()}")
         try {
             super.writeCtrlPoint(data)
             Timber.v("DFU writeCtrlPoint: 写入成功")
@@ -48,7 +48,7 @@ class GR5xxxDfuKable(
         cmdFrame: ByteArray,
         progressListener: DataProgressListener?,
     ) {
-        Timber.v("DFU sendCmdRaw: ${cmdFrame.size} bytes, hex=${cmdFrame.take(32).toByteArray().toHexString()}${if (cmdFrame.size > 32) "..." else ""}")
+        Timber.v("DFU sendCmdRaw: ${cmdFrame.size} bytes, writeUUID=$DFU_WRITE_CHARACTERISTIC_UUID, hex=${cmdFrame.take(32).toByteArray().toHexString()}${if (cmdFrame.size > 32) "..." else ""}")
         try {
             super.sendCmdRaw(cmdFrame, progressListener)
         } catch (e: Throwable) {
@@ -61,12 +61,12 @@ class GR5xxxDfuKable(
     override fun rcvCmd(opcode: Int) = rcvCmdBuf.also {
         val conn = ble
             ?: throw Error("rcvCmd(): BLE未连接")
-        Timber.d("DFU rcvCmd: 等待通知, opcode=0x${opcode.toString(16)}")
+        Timber.d("DFU rcvCmd: 等待通知, notifyUUID=$DFU_NOTIFY_CHARACTERISTIC_UUID, opcode=0x${opcode.toString(16)}")
 
         val data = conn.readNtf(notifyChr, 20000L)
             ?: throw Error("rcvCmd(): 等待通知超时 (opcode=$opcode)")
 
-        Timber.v("DFU rcvCmd: 收到 ${data.size} bytes, hex=${data.toHexString()}")
+        Timber.v("DFU rcvCmd: 收到 ${data.size} bytes, notifyUUID=$DFU_NOTIFY_CHARACTERISTIC_UUID, hex=${data.toHexString()}")
 
         it.setBuffer(data)
         it.setRangeAll()

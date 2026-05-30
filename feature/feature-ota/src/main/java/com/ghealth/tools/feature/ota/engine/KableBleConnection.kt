@@ -62,6 +62,12 @@ class KableBleConnection(
                 )
             }
             Timber.d("KableBle: discovered ${cachedServices!!.size} services")
+            cachedServices?.forEach { svc ->
+                Timber.d("KableBle:   svcUUID=${svc.serviceUuid}")
+                svc.characteristics.forEach { chr ->
+                    Timber.d("KableBle:     charUUID=${chr.charUuid}, props=0x${chr.getProperties().toString(16)}")
+                }
+            }
         }
     }
 
@@ -94,7 +100,7 @@ class KableBleConnection(
                     channel.trySend(data)
                 }
                 .launchIn(scope)
-            Timber.d("KableBle: notification enabled for $uuid")
+            Timber.d("KableBle: notification enabled svcUUID=${chr.serviceUuid}, charUUID=${chr.charUuid}")
         }
     }
 
@@ -110,6 +116,7 @@ class KableBleConnection(
         runBlocking {
             val data = dat.copyOfRange(offsetInDat, offsetInDat + writeSize.coerceAtMost(dat.size - offsetInDat))
             val startTime = System.currentTimeMillis()
+            Timber.v("KableBle: writeWithResponse svcUUID=${chr.serviceUuid}, charUUID=${chr.charUuid}, size=$writeSize")
             channel.write(chr.serviceUuid, chr.charUuid, data, withResponse = true)
             val elapsed = System.currentTimeMillis() - startTime
             listener?.onDataProcessed(null, data.size, data.size, elapsed, elapsed)
@@ -128,6 +135,7 @@ class KableBleConnection(
         runBlocking {
             val data = dat.copyOfRange(offsetInDat, offsetInDat + writeSize.coerceAtMost(dat.size - offsetInDat))
             val startTime = System.currentTimeMillis()
+            Timber.v("KableBle: writeWithoutResponse svcUUID=${chr.serviceUuid}, charUUID=${chr.charUuid}, size=$writeSize")
             channel.write(chr.serviceUuid, chr.charUuid, data, withResponse = false)
             val elapsed = System.currentTimeMillis() - startTime
             listener?.onDataProcessed(null, data.size, data.size, elapsed, elapsed)
@@ -144,6 +152,7 @@ class KableBleConnection(
     override fun readNtf(chr: BleCharacteristic, timeout: Long): ByteArray? = runBlocking {
         val channel = notifyChannels[chr.uuid]
             ?: throw Error("Notification channel not initialized for ${chr.uuid}")
+        Timber.v("KableBle: readNtf waiting charUUID=${chr.uuid}, timeout=$timeout")
         withTimeoutOrNull(timeout) { channel.receive() }
     }
 
