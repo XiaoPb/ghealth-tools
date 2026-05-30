@@ -26,6 +26,7 @@ class GR5xxxDfuKable(
 
     fun unbind() {
         (ble as? KableBleConnection)?.close()
+        ble = null
         Timber.i("DFU unbind: 已解绑")
     }
 
@@ -66,11 +67,26 @@ class GR5xxxDfuKable(
             ?: throw Error("rcvCmd(): 等待通知超时 (opcode=$opcode)")
 
         Timber.v("DFU rcvCmd: 收到 ${data.size} bytes, hex=${data.toHexString()}")
+
         it.setBuffer(data)
         it.setRangeAll()
         it.setPos(0)
+        it.setReadonly(false)
+
+        val magicNum = it.get(2)
+        val rcvOpcode = it.get(2)
+        val paramLen = it.get(2)
+        if (magicNum != 0x4744) {
+            throw Error("rcvCmd(): 帧头错误, magic=0x${magicNum.toString(16)}")
+        }
+        if (rcvOpcode != opcode) {
+            throw Error("rcvCmd(): opcode不匹配, expected=0x${opcode.toString(16)}, actual=0x${rcvOpcode.toString(16)}")
+        }
+
+        it.setRange(6, paramLen)
+        it.setPos(0)
         it.setReadonly(true)
-        Timber.d("DFU rcvCmd: 完成, opcode=0x${opcode.toString(16)}, size=${data.size}")
+        Timber.d("DFU rcvCmd: 完成, opcode=0x${opcode.toString(16)}, paramLen=$paramLen")
     }
 }
 
