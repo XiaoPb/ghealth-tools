@@ -37,6 +37,10 @@ class BleScanner @Inject constructor(
             true
         }
 
+    private val _advertisementCache = mutableMapOf<String, Advertisement>()
+
+    fun getCachedAdvertisement(address: String): Advertisement? = _advertisementCache[address]
+
     fun scan(
         filters: List<Any> = emptyList(),
         settings: Any = Unit,
@@ -51,6 +55,7 @@ class BleScanner @Inject constructor(
             .advertisements
             .filter { it.rssi >= minRssi }
             .map { advertisement ->
+                _advertisementCache[advertisement.identifier.toString()] = advertisement
                 _isBluetoothEnabled = true
                 BleDevice(
                     name = advertisement.name,
@@ -58,17 +63,6 @@ class BleScanner @Inject constructor(
                     rssi = advertisement.rssi
                 )
             }
-    }
-
-    fun scanAdvertisements(minRssi: Int = -100): Flow<Advertisement> {
-        Timber.d("Starting BLE advertisement scan with minRssi=$minRssi")
-        return Scanner {
-            logging {
-                level = Logging.Level.Events
-            }
-        }
-            .advertisements
-            .filter { it.rssi >= minRssi }
     }
 }
 
