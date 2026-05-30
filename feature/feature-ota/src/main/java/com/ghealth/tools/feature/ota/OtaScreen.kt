@@ -247,8 +247,9 @@ fun OtaScreen(
             state.activeDebugActions.forEach { action ->
                 DebugActionCard(
                     action = action,
-                    debugResult = state.debugResult,
-                    onDebugRead = viewModel::executeDebugRead,
+                    debugResult = state.debugResults[action],
+                    onDebugRead = { op -> viewModel.executeDebugCommand(action, op) },
+                    onDebugWrite = { op -> viewModel.executeDebugWrite(action, op) },
                 )
             }
 
@@ -721,10 +722,28 @@ private fun DebugActionCard(
     action: DebugMenuAction,
     debugResult: String?,
     onDebugRead: (suspend (DebugOperations) -> Result<DebugResult>) -> Unit,
+    onDebugWrite: (suspend (DebugOperations) -> Result<DebugResult>) -> Unit,
 ) {
     var addressText by remember { mutableStateOf("") }
     var lengthText by remember { mutableStateOf("") }
     var dataText by remember { mutableStateOf("") }
+
+    fun parseAddress(): Int {
+        val raw = addressText.trim().removePrefix("0x").removePrefix("0X")
+        return raw.toLongOrNull(16)?.toInt() ?: 0
+    }
+
+    fun parseLength(): Int = lengthText.trim().toIntOrNull() ?: 64
+
+    fun parseHexData(): ByteArray? {
+        val raw = dataText.trim()
+        if (raw.isEmpty()) return null
+        val clean = raw.replace(" ", "").replace("\n", "").replace("\r", "")
+        if (clean.length % 2 != 0) return null
+        return ByteArray(clean.length / 2) { i ->
+            ((Character.digit(clean[i * 2], 16) shl 4) + Character.digit(clean[i * 2 + 1], 16)).toByte()
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -756,10 +775,21 @@ private fun DebugActionCard(
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = dataText,
+                        onValueChange = { dataText = it },
+                        label = { Text("写入数据 (Hex)") },
+                        placeholder = { Text("AA BB CC DD") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                        singleLine = false,
+                        maxLines = 3,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
-                            val addr = addressText.removePrefix("0x").toLongOrNull(16)?.toInt() ?: 0
-                            val len = lengthText.toIntOrNull() ?: 64
+                            val addr = parseAddress()
+                            val len = parseLength()
                             val readOp: suspend (DebugOperations) -> Result<DebugResult> =
                                 if (action == DebugMenuAction.RAM_READ_WRITE)
                                     { ops -> ops.readRam(addr, len) }
@@ -767,7 +797,16 @@ private fun DebugActionCard(
                                     { ops -> ops.readFlash(addr, len) }
                             onDebugRead(readOp)
                         }) { Text("读取") }
-                        OutlinedButton(onClick = { }) { Text("写入") }
+                        OutlinedButton(onClick = {
+                            val addr = parseAddress()
+                            val data = parseHexData() ?: return@OutlinedButton
+                            val writeOp: suspend (DebugOperations) -> Result<DebugResult> =
+                                if (action == DebugMenuAction.RAM_READ_WRITE)
+                                    { ops -> ops.writeRam(addr, data) }
+                                else
+                                    { ops -> ops.writeFlash(addr, data) }
+                            onDebugWrite(writeOp)
+                        }) { Text("写入") }
                     }
                 }
                 DebugMenuAction.REGISTER_READ_WRITE -> {
@@ -780,21 +819,50 @@ private fun DebugActionCard(
                         singleLine = true,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = dataText,
+                        onValueChange = { dataText = it },
+                        label = { Text("写入数据 (Hex)") },
+                        placeholder = { Text("AA BB CC DD") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                        singleLine = false,
+                        maxLines = 2,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
-                            val addr = addressText.removePrefix("0x").toLongOrNull(16)?.toInt() ?: 0
+                            val addr = parseAddress()
                             onDebugRead { ops -> ops.readRegister(addr) }
                         }) { Text("读取") }
-                        OutlinedButton(onClick = { }) { Text("写入") }
+                        OutlinedButton(onClick = {
+                            val addr = parseAddress()
+                            val data = parseHexData() ?: return@OutlinedButton
+                            onDebugWrite { ops -> ops.writeRegister(addr, data) }
+                        }) { Text("写入") }
                     }
                 }
                 DebugMenuAction.READ_EFUSE -> {
                     Button(onClick = { onDebugRead { ops -> ops.readEfuse() } }) { Text("读取eFuse") }
                 }
                 DebugMenuAction.NVDS_READ_WRITE -> {
+                    OutlinedTextField(
+                        value = dataText,
+                        onValueChange = { dataText = it },
+                        label = { Text("写入数据 (Hex)") },
+                        placeholder = { Text("AA BB CC DD") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                        singleLine = false,
+                        maxLines = 3,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { onDebugRead { ops -> ops.readNvds() } }) { Text("读取NVDS") }
-                        OutlinedButton(onClick = { }) { Text("写入NVDS") }
+                        OutlinedButton(onClick = {
+                            val data = parseHexData() ?: return@OutlinedButton
+                            onDebugWrite { ops -> ops.writeNvds(data) }
+                        }) { Text("写入NVDS") }
                     }
                 }
                 DebugMenuAction.READ_BOOT_INFO -> {
@@ -804,7 +872,11 @@ private fun DebugActionCard(
 
             debugResult?.let { result ->
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "结果: $result", style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+                Text(
+                    text = result,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
