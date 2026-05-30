@@ -112,7 +112,7 @@ public class GR5xxxDfu2 extends DfuProfile {
         cmdParam.put(2, 24);
         super.sendCmd(cmdOpcode, cmdParam.getBuffer());
         //接收+解码
-        HexSerializer rcvParam = super.rcvCmd(cmdOpcode);
+        HexSerializer rcvParam = this.rcvCmd(cmdOpcode);
         int resp = rcvParam.get(1);
         if (resp != 1) {
             throw new Error("getStartupBootInfo(): response = " + resp);
