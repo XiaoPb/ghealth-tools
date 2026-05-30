@@ -41,7 +41,7 @@ data class OtaUiState(
 
     val activeDebugActions: List<DebugMenuAction> = emptyList(),
     val showControlPointDialog: Boolean = false,
-    val controlPointHex: String = "",
+    val controlPointHex: String = "444F4F47",
 
     val debugResults: Map<DebugMenuAction, String> = emptyMap(),
 
