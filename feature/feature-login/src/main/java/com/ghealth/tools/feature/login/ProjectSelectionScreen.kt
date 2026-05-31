@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -124,7 +125,7 @@ fun ProjectSelectionScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = onCreateProject) {
+                            Button(shape = ButtonShape, onClick = onCreateProject) {
                                 Text("创建项目")
                             }
                         }
@@ -147,6 +148,7 @@ fun ProjectSelectionScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedButton(
+                        shape = ButtonShape,
                         onClick = onCreateProject,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -162,6 +164,7 @@ fun ProjectSelectionScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedButton(
+                        shape = ButtonShape,
                         onClick = onManageProjects,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -171,6 +174,7 @@ fun ProjectSelectionScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Button(
+                        shape = ButtonShape,
                         onClick = {
                             viewModel.confirmSelection(onProjectSelected)
                         },

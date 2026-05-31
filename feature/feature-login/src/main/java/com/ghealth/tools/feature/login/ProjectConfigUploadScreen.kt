@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -234,6 +235,7 @@ fun ProjectConfigUploadScreen(
             }
 
             Button(
+                shape = ButtonShape,
                 onClick = { viewModel.uploadConfig(onUploadComplete) },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isUploading && uiState.jsonConfigUri != null
@@ -253,6 +255,7 @@ fun ProjectConfigUploadScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedButton(
+                shape = ButtonShape,
                 onClick = onUploadComplete,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -317,6 +320,7 @@ private fun ConfigFilePickerCard(
             }
             Spacer(modifier = Modifier.width(8.dp))
             OutlinedButton(
+                shape = ButtonShape,
                 onClick = onPick,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     horizontal = 12.dp,

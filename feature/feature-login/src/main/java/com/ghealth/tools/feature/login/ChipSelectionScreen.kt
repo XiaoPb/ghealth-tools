@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -116,6 +117,7 @@ fun ChipSelectionScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             Button(
+                shape = ButtonShape,
                 onClick = { viewModel.confirm(onChipSelected) },
                 modifier = Modifier.fillMaxWidth()
             ) {

@@ -36,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -716,6 +717,7 @@ private fun RegularConfigUploadDialog(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedButton(
+                    shape = ButtonShape,
                     onClick = { filePickerLauncher.launch("*/*") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isUploading
@@ -981,6 +983,7 @@ private fun CsvFileUploadDialog(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedButton(
+                    shape = ButtonShape,
                     onClick = { filePickerLauncher.launch("*/*") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isUploading

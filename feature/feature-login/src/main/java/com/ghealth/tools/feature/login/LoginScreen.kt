@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -169,6 +170,7 @@ fun LoginScreen(
                 }
 
                 Button(
+                    shape = ButtonShape,
                     onClick = { viewModel.login(onLoginSuccess) },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isLoading
@@ -185,6 +187,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedButton(
+                    shape = ButtonShape,
                     onClick = onOfflineMode,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isLoading
@@ -194,6 +197,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedButton(
+                    shape = ButtonShape,
                     onClick = onNavigateToRegister,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isLoading

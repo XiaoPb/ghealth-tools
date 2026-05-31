@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -142,8 +143,9 @@ fun ProjectCreateScreen(
             }
 
             Button(
-                        onClick = { viewModel.createProject() },
-                        modifier = Modifier.fillMaxWidth(),
+                shape = ButtonShape,
+                onClick = { viewModel.createProject() },
+                modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isLoading
             ) {
                 if (uiState.isLoading) {

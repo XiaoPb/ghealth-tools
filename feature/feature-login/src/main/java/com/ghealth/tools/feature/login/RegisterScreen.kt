@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -185,6 +186,7 @@ fun RegisterScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Button(
+                    shape = ButtonShape,
                     onClick = {
                         viewModel.register(
                             onSuccess = onRegisterSuccess,
