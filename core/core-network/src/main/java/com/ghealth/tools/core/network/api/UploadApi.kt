@@ -47,8 +47,8 @@ interface UploadApi {
         @Part lpctr_config: MultipartBody.Part? = null,
         @Part lplctr_config: MultipartBody.Part? = null,
         @Part ppg_noise_config: MultipartBody.Part? = null,
-        @Part hardware_version: RequestBody? = null,
-        @Part test_frequency: RequestBody? = null
+        @Part("hardware_version") hardware_version: RequestBody? = null,
+        @Part("test_frequency") test_frequency: RequestBody? = null
     ): Response<ApiResponse<ProductionTestConfigResponse>>
 
     @Multipart
@@ -60,8 +60,8 @@ interface UploadApi {
         @Part lpctr_config: MultipartBody.Part? = null,
         @Part lplctr_config: MultipartBody.Part? = null,
         @Part ppg_noise_config: MultipartBody.Part? = null,
-        @Part hardware_version: RequestBody? = null,
-        @Part test_frequency: RequestBody? = null
+        @Part("hardware_version") hardware_version: RequestBody? = null,
+        @Part("test_frequency") test_frequency: RequestBody? = null
     ): Response<ApiResponse<ProductionTestConfigResponse>>
 
     @Multipart
@@ -69,8 +69,8 @@ interface UploadApi {
     suspend fun uploadProdTestConfigZip(
         @Path("project_id") projectId: Int,
         @Part zip_file: MultipartBody.Part,
-        @Part hardware_version: RequestBody? = null,
-        @Part test_frequency: RequestBody? = null
+        @Part("hardware_version") hardware_version: RequestBody? = null,
+        @Part("test_frequency") test_frequency: RequestBody? = null
     ): Response<ApiResponse<ProductionTestConfigResponse>>
 
     @Multipart
@@ -78,7 +78,7 @@ interface UploadApi {
     suspend fun updateProdTestConfigZip(
         @Path("project_id") projectId: Int,
         @Part zip_file: MultipartBody.Part,
-        @Part hardware_version: RequestBody? = null,
-        @Part test_frequency: RequestBody? = null
+        @Part("hardware_version") hardware_version: RequestBody? = null,
+        @Part("test_frequency") test_frequency: RequestBody? = null
     ): Response<ApiResponse<ProductionTestConfigResponse>>
 }

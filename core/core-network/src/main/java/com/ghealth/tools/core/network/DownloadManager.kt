@@ -29,7 +29,11 @@ class DownloadManager @Inject constructor(
         try {
             val response = downloadApi.downloadProdTestConfig(configId)
             if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("下载失败: ${response.code()}"))
+                val message = when (response.code()) {
+                    404 -> "配置文件尚未上传，请先在网页端上传产测配置文件"
+                    else -> "下载失败: ${response.code()}"
+                }
+                return@withContext Result.failure(Exception(message))
             }
             val body = response.body()
                 ?: return@withContext Result.failure(Exception("响应体为空"))

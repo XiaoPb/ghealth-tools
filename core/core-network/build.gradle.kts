@@ -20,6 +20,7 @@ dependencies {
     api(libs.okhttp)
     api(libs.okhttp.logging)
     api(libs.moshi)
+    ksp(libs.moshi.codegen)
 
     implementation(libs.datastore.preferences)
     implementation(libs.security.crypto)

@@ -39,6 +39,12 @@ class ConfigDownloader @Inject constructor(
             }
 
             val config = response.body()!!.data!!
+            if (!config.isComplete) {
+                return@withContext Result.failure(
+                    Exception("产测配置文件尚未上传，请先在网页端上传配置文件")
+                )
+            }
+
             val downloadedFile = downloadConfigFiles(config, targetDir)
             Result.success(downloadedFile)
         } catch (e: Exception) {
