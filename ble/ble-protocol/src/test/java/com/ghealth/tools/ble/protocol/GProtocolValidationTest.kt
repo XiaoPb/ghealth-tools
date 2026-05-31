@@ -3,6 +3,7 @@ package com.ghealth.tools.ble.protocol
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036FrameDecoder
 import com.ghealth.tools.ble.protocol.rpccore.FrameParser
 import com.ghealth.tools.ble.protocol.rpccore.unpackU8Array
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import java.io.File
 
@@ -11,6 +12,8 @@ class GProtocolValidationTest {
     @Test
     fun `validate G protocol parsing against Rust reference output`() {
         val rawLogPath = "E:/Code/CPP/combridge-rust/libs/protocol_rust/test/test_data/ble_raw_F51817331068_2026-05-18.log"
+
+        assumeTrue(File(rawLogPath).exists(), "Skipped: reference data file not found at $rawLogPath")
 
         val parser = FrameParser()
         val decoder = Gh3036FrameDecoder()
