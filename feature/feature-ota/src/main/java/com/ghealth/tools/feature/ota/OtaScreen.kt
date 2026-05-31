@@ -511,26 +511,6 @@ private fun InfoGrid(info: FirmwareInfo, indent: Boolean) {
     }
 }
 
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 1.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-        )
-    }
-}
-
 private fun xipCmdLabel(cmd: Int): String = when (cmd) {
     0x03 -> "Normal Read"
     0x0B -> "Fast Read"
@@ -581,35 +561,25 @@ private fun FirmwareUpgradeCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("升级固件", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (fileInfo.fileName.isNotEmpty()) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(fileInfo.fileName, style = MaterialTheme.typography.bodyMedium)
-                        Text("大小: ${formatFileSize(fileInfo.fileSize)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                OutlinedButton(onClick = { if (enabled) onSelectFile() }, enabled = enabled) {
-                    Text(if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件")
-                }
-                if (fileInfo.fileName.isNotEmpty() && fileInfo.isValid) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = onStartUpgrade, enabled = enabled) {
-                        Text(if (upgradeRegion == UpgradeRegion.SINGLE) "开始升级" else "开始双区升级")
-                    }
-                }
+            if (fileInfo.fileName.isNotEmpty()) {
+                Text(
+                    text = fileInfo.fileName,
+                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "大小: ${formatFileSize(fileInfo.fileSize)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             if (fileInfo.parseError != null) {
@@ -618,73 +588,145 @@ private fun FirmwareUpgradeCard(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = fileInfo.parseError,
                             color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.labelSmall,
                         )
                     }
                 }
             }
 
             if (fileInfo.imgInfo != null && fileInfo.isValid) {
-                Spacer(modifier = Modifier.height(8.dp))
-                if (fileInfo.imgInfo.comments.isNotEmpty()) {
-                    InfoRow("comments", fileInfo.imgInfo.comments)
-                }
-                InfoRow("version", "v${fileInfo.imgInfo.version}")
-                InfoRow("pattern", "0x${fileInfo.imgInfo.pattern.toString(16).uppercase()}")
-                InfoRow("binSize", "${fileInfo.imgInfo.binSize} (${formatFileSize(fileInfo.imgInfo.binSize.toLong())})")
-                InfoRow("checksum", "0x${fileInfo.imgInfo.checksum.toString(16).uppercase()}")
-                InfoRow("loadAddr", "0x${fileInfo.imgInfo.loadAddr.toString(16).uppercase()}")
-                InfoRow("runAddr", "0x${fileInfo.imgInfo.runAddr.toString(16).uppercase()}")
-                InfoRow("xqspiXipCmd", "0x${fileInfo.imgInfo.xqspiXipCmd.toString(16).uppercase()} (${xipCmdLabel(fileInfo.imgInfo.xqspiXipCmd)})")
-                InfoRow("xqspiSpeed", xqspiSpeedLabel(fileInfo.imgInfo.xqspiSpeed))
-                InfoRow("codeCopyMode", copyModeLabel(fileInfo.imgInfo.codeCopyMode))
-                InfoRow("systemClk", systemClkLabel(fileInfo.imgInfo.systemClk))
-                InfoRow("checkImage", "${fileInfo.imgInfo.checkImage}")
-                InfoRow("bootDelay", "${fileInfo.imgInfo.bootDelay}")
-                InfoRow("isDapBoot", "${fileInfo.imgInfo.isDapBoot}")
-            }
-
-            if (upgradeRegion == UpgradeRegion.DUAL) {
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = if (copyAddress == 0L) "" else "0x${copyAddress.toString(16).uppercase()}",
-                    onValueChange = { text ->
-                        val parsed = text.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0L
-                        onCopyAddressChange(parsed)
-                    },
-                    label = { Text("拷贝地址 (Hex)") },
-                    placeholder = { Text("0x00000000") },
-                    enabled = enabled,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
-                )
+                Spacer(modifier = Modifier.height(4.dp))
+                FwInfoGrid(info = fileInfo.imgInfo)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = upgradeRegion == UpgradeRegion.SINGLE,
-                        onClick = { if (enabled) onSelectRegion(UpgradeRegion.SINGLE) },
-                        enabled = enabled,
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = upgradeRegion == UpgradeRegion.SINGLE,
+                    onClick = { if (enabled) onSelectRegion(UpgradeRegion.SINGLE) },
+                    enabled = enabled,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text("单区升级", style = MaterialTheme.typography.labelMedium)
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = upgradeRegion == UpgradeRegion.DUAL,
+                    onClick = { if (enabled) onSelectRegion(UpgradeRegion.DUAL) },
+                    enabled = enabled,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text("双区升级", style = MaterialTheme.typography.labelMedium)
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(
+                    onClick = { if (enabled) onSelectFile() },
+                    enabled = enabled,
+                    contentPadding = ButtonDefaults.TextButtonContentPadding,
+                    modifier = Modifier.height(28.dp),
+                ) {
+                    Text(
+                        if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件",
+                        style = MaterialTheme.typography.labelSmall,
                     )
-                    Text("单区升级", style = MaterialTheme.typography.bodyMedium)
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = upgradeRegion == UpgradeRegion.DUAL,
-                        onClick = { if (enabled) onSelectRegion(UpgradeRegion.DUAL) },
+                if (fileInfo.fileName.isNotEmpty() && fileInfo.isValid) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = onStartUpgrade,
                         enabled = enabled,
+                        contentPadding = ButtonDefaults.TextButtonContentPadding,
+                        modifier = Modifier.height(28.dp),
+                    ) {
+                        Text("升级", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+
+            if (upgradeRegion == UpgradeRegion.DUAL) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "拷贝地址",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Text("双区升级", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedTextField(
+                        value = if (copyAddress == 0L) "" else "0x${copyAddress.toString(16).uppercase()}",
+                        onValueChange = { text ->
+                            val parsed = text.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0L
+                            onCopyAddressChange(parsed)
+                        },
+                        placeholder = { Text("0x00000000", style = MaterialTheme.typography.labelSmall) },
+                        enabled = enabled,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FwInfoGrid(info: FirmwareInfo) {
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontFamily = FontFamily.Monospace,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val valueStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (info.comments.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(modifier = Modifier.weight(1f)) {
+                    Text(text = "comments: ", style = labelStyle, maxLines = 1)
+                    Text(text = info.comments, style = valueStyle, maxLines = 1)
+                }
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+        val items = buildList {
+            add("version" to "v${info.version}")
+            add("pattern" to "0x${info.pattern.toString(16).uppercase()}")
+            add("binSize" to "${info.binSize} (${formatFileSize(info.binSize.toLong())})")
+            add("checksum" to "0x${info.checksum.toString(16).uppercase()}")
+            add("loadAddr" to "0x${info.loadAddr.toString(16).uppercase()}")
+            add("runAddr" to "0x${info.runAddr.toString(16).uppercase()}")
+            add("xqspiXipCmd" to "0x${info.xqspiXipCmd.toString(16).uppercase()}")
+            add("xqspiSpeed" to xqspiSpeedLabel(info.xqspiSpeed))
+            add("codeCopyMode" to copyModeLabel(info.codeCopyMode))
+            add("systemClk" to systemClkLabel(info.systemClk))
+            add("checkImage" to "${info.checkImage}")
+            add("bootDelay" to "${info.bootDelay}")
+            add("isDapBoot" to "${info.isDapBoot}")
+        }
+        items.chunked(2).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                rowItems.forEach { (label, value) ->
+                    Row(modifier = Modifier.weight(1f)) {
+                        Text(text = "$label: ", style = labelStyle, maxLines = 1)
+                        Text(text = value, style = valueStyle, maxLines = 1)
+                    }
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }
