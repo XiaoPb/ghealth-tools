@@ -6,6 +6,7 @@ import com.ghealth.tools.core.network.AuthInterceptor
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
 import com.ghealth.tools.core.network.api.DownloadApi
+import com.ghealth.tools.core.network.api.GitHubApi
 import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.network.api.UploadApi
 import com.squareup.moshi.Moshi
@@ -36,9 +37,12 @@ import javax.inject.Singleton
 object NetworkModule {
 
     private const val DEFAULT_BASE_URL = "https://api.health.xiaopb.cn:8861/api/"
+    private const val GITHUB_BASE_URL = "https://api.github.com/"
     private const val CONNECT_TIMEOUT = 30L
     private const val READ_TIMEOUT = 30L
     private const val WRITE_TIMEOUT = 60L
+    private const val GITHUB_CONNECT_TIMEOUT = 15L
+    private const val GITHUB_READ_TIMEOUT = 15L
 
     @Provides
     @Singleton
@@ -175,5 +179,49 @@ object NetworkModule {
     @Singleton
     fun provideDownloadApi(retrofit: Retrofit): DownloadApi {
         return retrofit.create(DownloadApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @Named("githubOkHttpClient")
+    fun provideGitHubOkHttpClient(dns: Dns): OkHttpClient {
+        val loggingInterceptor = HttpLoggingInterceptor(
+            object : HttpLoggingInterceptor.Logger {
+                override fun log(message: String) {
+                    Timber.tag("GitHubAPI").d(message)
+                }
+            }
+        ).apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
+
+        return OkHttpClient.Builder()
+            .dns(dns)
+            .addInterceptor(loggingInterceptor)
+            .connectTimeout(GITHUB_CONNECT_TIMEOUT, TimeUnit.SECONDS)
+            .readTimeout(GITHUB_READ_TIMEOUT, TimeUnit.SECONDS)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    @Named("githubRetrofit")
+    fun provideGitHubRetrofit(
+        @Named("githubOkHttpClient") okHttpClient: OkHttpClient,
+        moshi: Moshi,
+    ): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(GITHUB_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideGitHubApi(
+        @Named("githubRetrofit") retrofit: Retrofit
+    ): GitHubApi {
+        return retrofit.create(GitHubApi::class.java)
     }
 }
