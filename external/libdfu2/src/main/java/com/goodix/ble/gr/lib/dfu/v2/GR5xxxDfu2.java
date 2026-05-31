@@ -110,7 +110,7 @@ public class GR5xxxDfu2 extends DfuProfile {
         cmdParam.put(1, 0);
         cmdParam.put(4, addressOfSCA);
         cmdParam.put(2, 24);
-        super.sendCmd(cmdOpcode, cmdParam.getBuffer());
+        this.sendCmd(cmdOpcode, cmdParam.getBuffer());
         //接收+解码
         HexSerializer rcvParam = this.rcvCmd(cmdOpcode);
         int resp = rcvParam.get(1);
@@ -274,9 +274,9 @@ public class GR5xxxDfu2 extends DfuProfile {
             // fill remain bytes
             cmd.fill(400, 0xFF);
 
-            sendCmd(CmdOpcode.SYSTEM_CONFIG, cmd.getBuffer());
+            this.sendCmd(CmdOpcode.SYSTEM_CONFIG, cmd.getBuffer());
             //接收+解码
-            final HexSerializer rcvParam = rcvCmd(CmdOpcode.SYSTEM_CONFIG);
+            final HexSerializer rcvParam = this.rcvCmd(CmdOpcode.SYSTEM_CONFIG);
             int resp = rcvParam.get(1);
             if (resp != 1) throw new Error("tidyImgList(): Response = " + resp);
         }
@@ -374,7 +374,7 @@ public class GR5xxxDfu2 extends DfuProfile {
             param.put(4, dfuFw.getData().length);
         }
 
-        sendCmd(CmdOpcode.PROGRAM_START, param.getBuffer());
+        this.sendCmd(CmdOpcode.PROGRAM_START, param.getBuffer());
         HexSerializer rcvCmdParam = rcvCmd(CmdOpcode.PROGRAM_START);
         int resp = rcvCmdParam.get(1);
 
@@ -399,7 +399,7 @@ public class GR5xxxDfu2 extends DfuProfile {
 
             while (totalSector > 0) {
                 // wait erasing...
-                rcvCmdParam = rcvCmd(CmdOpcode.PROGRAM_START);
+                rcvCmdParam = this.rcvCmd(CmdOpcode.PROGRAM_START);
                 resp = rcvCmdParam.get(1);
                 eraseState = rcvCmdParam.get(1);
                 int erasedCnt = rcvCmdParam.get(2);

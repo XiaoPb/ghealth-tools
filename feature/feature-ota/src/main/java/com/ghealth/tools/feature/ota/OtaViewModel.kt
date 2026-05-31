@@ -74,11 +74,6 @@ class OtaViewModel @Inject constructor(
         selectedDevice?.let { bindDfuProfile(it) }
     }
 
-    fun selectDevice(device: ConnectedDeviceInfo) {
-        _uiState.update { it.copy(selectedDevice = device) }
-        bindDfuProfile(device)
-    }
-
     private fun bindDfuProfile(device: ConnectedDeviceInfo) {
         viewModelScope.launch {
             try {

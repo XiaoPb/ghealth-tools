@@ -61,6 +61,35 @@ class DownloadManager @Inject constructor(
         }
     }
 
+    suspend fun downloadProdTestConfigFile(
+        configId: Int,
+        field: String,
+        filename: String
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            val response = downloadApi.downloadProdTestConfigFile(configId, field)
+            if (!response.isSuccessful) {
+                val message = when (response.code()) {
+                    404 -> "文件不存在"
+                    400 -> "无效的文件字段: $field"
+                    else -> "下载失败: ${response.code()}"
+                }
+                return@withContext Result.failure(Exception(message))
+            }
+            val body = response.body()
+                ?: return@withContext Result.failure(Exception("响应体为空"))
+            val dir = getDownloadDir()
+            if (!dir.exists()) dir.mkdirs()
+            val file = File(dir, filename)
+            writeToFile(body, file)
+            Timber.d("Downloaded prod test config file $field to ${file.absolutePath}")
+            Result.success(file)
+        } catch (e: Exception) {
+            Timber.e(e, "Download prod test config file failed")
+            Result.failure(e)
+        }
+    }
+
     suspend fun downloadRegularConfig(
         configId: Int,
         filename: String
@@ -68,7 +97,11 @@ class DownloadManager @Inject constructor(
         try {
             val response = downloadApi.downloadRegularConfig(configId)
             if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("下载失败: ${response.code()}"))
+                val message = when (response.code()) {
+                    404 -> "配置文件不存在或已被删除"
+                    else -> "下载失败: ${response.code()}"
+                }
+                return@withContext Result.failure(Exception(message))
             }
             val body = response.body()
                 ?: return@withContext Result.failure(Exception("响应体为空"))
@@ -91,7 +124,11 @@ class DownloadManager @Inject constructor(
         try {
             val response = downloadApi.downloadCsvFile(fileId)
             if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("下载失败: ${response.code()}"))
+                val message = when (response.code()) {
+                    404 -> "CSV文件不存在或已被删除"
+                    else -> "下载失败: ${response.code()}"
+                }
+                return@withContext Result.failure(Exception(message))
             }
             val body = response.body()
                 ?: return@withContext Result.failure(Exception("响应体为空"))

@@ -14,6 +14,13 @@ interface DownloadApi {
     ): Response<ResponseBody>
 
     @Streaming
+    @GET("prod-test-config/{id}/download/{field}/")
+    suspend fun downloadProdTestConfigFile(
+        @Path("id") configId: Int,
+        @Path("field") field: String
+    ): Response<ResponseBody>
+
+    @Streaming
     @GET("regular-configs/{id}/download/")
     suspend fun downloadRegularConfig(
         @Path("id") configId: Int
