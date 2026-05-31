@@ -799,7 +799,7 @@ private fun RegularConfigUploadDialog(
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedButton(
                     shape = ButtonShape,
-                    onClick = { filePickerLauncher.launch("application/octet-stream") },
+                    onClick = { filePickerLauncher.launch("*/*") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isUploading
                 ) {
