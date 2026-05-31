@@ -1,6 +1,7 @@
 package com.ghealth.tools.core.network
 
 import android.content.Context
+import com.ghealth.tools.core.network.api.DownloadApi
 import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.network.model.ProductionTestConfigResponse
 import com.ghealth.tools.core.network.model.RegularConfigResponse
@@ -12,6 +13,7 @@ import okhttp3.Request
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
+import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -20,6 +22,7 @@ import javax.inject.Singleton
 class ConfigDownloader @Inject constructor(
     @ApplicationContext private val context: Context,
     private val projectApi: ProjectApi,
+    private val downloadApi: DownloadApi,
     private val tokenManager: TokenManager,
     @Named("baseUrl") private val baseUrl: String
 ) {
@@ -45,7 +48,7 @@ class ConfigDownloader @Inject constructor(
                 )
             }
 
-            val downloadedFile = downloadConfigFiles(config, targetDir)
+            val downloadedFile = downloadAndUnzipConfig(config, targetDir)
             Result.success(downloadedFile)
         } catch (e: Exception) {
             Timber.e(e, "Download config failed")
@@ -95,42 +98,60 @@ class ConfigDownloader @Inject constructor(
         }
     }
 
-    private suspend fun downloadConfigFiles(
+    private suspend fun downloadAndUnzipConfig(
         config: ProductionTestConfigResponse,
         targetDir: File
     ): File? {
+        val zipResponse = downloadApi.downloadProdTestConfig(config.id)
+        if (!zipResponse.isSuccessful) {
+            val message = when (zipResponse.code()) {
+                403 -> "没有下载权限，请联系管理员"
+                else -> "下载 ZIP 失败: ${zipResponse.code()}"
+            }
+            throw Exception(message)
+        }
+
+        val body = zipResponse.body()
+            ?: throw Exception("响应体为空")
+
         if (!targetDir.exists()) {
             targetDir.mkdirs()
         }
 
-        val token = tokenManager.getAccessTokenSync()
-        val client = OkHttpClient.Builder().build()
-
-        val filesToDownload = buildList {
-            config.jsonConfig?.let { add(it to "factory_config.json") }
-            config.baseNoiseConfig?.let { add(it to "base_noise.config") }
-            config.lpctrConfig?.let { add(it to "lpctr.config") }
-            config.lplctrConfig?.let { add(it to "lplctr.config") }
-            config.ppgNoiseConfig?.let { add(it to "ppg_noise.config") }
-        }
-
-        var downloadedJsonFile: File? = null
-
-        for ((url, filename) in filesToDownload) {
-            try {
-                val file = File(targetDir, filename)
-                downloadFile(client, url, file, token)
-
-                if (filename == "factory_config.json") {
-                    downloadedJsonFile = file
-                }
-                Timber.d("Downloaded config file: $filename")
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to download: $filename")
+        val tempZipFile = File(targetDir.parentFile, "temp_${config.id}_config.zip")
+        body.byteStream().use { input ->
+            FileOutputStream(tempZipFile).use { output ->
+                input.copyTo(output)
             }
         }
 
-        return downloadedJsonFile
+        var jsonConfigFile: File? = null
+        ZipInputStream(tempZipFile.inputStream()).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    val fileName = entry.name.substringAfterLast('/')
+                    val targetFile = File(targetDir, fileName)
+                    if (entry.size > maxConfigFileSize) {
+                        zis.closeEntry()
+                        entry = zis.nextEntry
+                        continue
+                    }
+                    FileOutputStream(targetFile).use { output ->
+                        zis.copyTo(output)
+                    }
+                    if (fileName == "factory_config.json") {
+                        jsonConfigFile = targetFile
+                    }
+                }
+                zis.closeEntry()
+                entry = zis.nextEntry
+            }
+        }
+
+        tempZipFile.delete()
+
+        return jsonConfigFile
     }
 
     private fun downloadFile(
