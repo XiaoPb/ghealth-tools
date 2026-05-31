@@ -36,7 +36,13 @@ data class SettingsUiState(
     val selectedProjectId: Int? = null,
     val isDeletingProject: Boolean = false,
     val isSyncingConfig: Boolean = false,
-    val operationMessage: String? = null
+    val operationMessage: String? = null,
+    val showUpdateDialog: Boolean = false,
+    val updateVersionName: String = "",
+    val updateChangelog: String = "",
+    val updateDownloadUrl: String = "",
+    val isForceUpdate: Boolean = false,
+    val isCheckingUpdate: Boolean = false,
 )
 
 @HiltViewModel
@@ -47,7 +53,8 @@ class SettingsViewModel @Inject constructor(
     private val userPreferences: UserPreferences,
     private val configSyncManager: ConfigSyncManager,
     private val projectApi: ProjectApi,
-    private val configPathProvider: ConfigPathProvider
+    private val configPathProvider: ConfigPathProvider,
+    private val updateChecker: UpdateChecker
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState(appVersion = versionName))
@@ -205,5 +212,59 @@ class SettingsViewModel @Inject constructor(
 
     fun clearOperationMessage() {
         _uiState.update { it.copy(operationMessage = null) }
+    }
+
+    fun checkForUpdate() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCheckingUpdate = true) }
+            try {
+                val result = updateChecker.checkForUpdate()
+                if (result.hasUpdate && result.updateInfo != null) {
+                    _uiState.update {
+                        it.copy(
+                            isCheckingUpdate = false,
+                            showUpdateDialog = true,
+                            updateVersionName = result.updateInfo.versionName,
+                            updateChangelog = result.updateInfo.changelog,
+                            updateDownloadUrl = result.updateInfo.downloadUrl,
+                            isForceUpdate = result.isForceUpdate,
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isCheckingUpdate = false,
+                            operationMessage = result.errorMessage ?: "已是最新版本"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isCheckingUpdate = false,
+                        operationMessage = "检查更新失败: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        _uiState.update {
+            it.copy(
+                showUpdateDialog = false,
+                updateVersionName = "",
+                updateChangelog = "",
+                updateDownloadUrl = "",
+                isForceUpdate = false,
+            )
+        }
+    }
+
+    fun openDownloadPage() {
+        val url = _uiState.value.updateDownloadUrl
+        if (url.isNotEmpty()) {
+            updateChecker.openDownloadUrl(url)
+        }
     }
 }
