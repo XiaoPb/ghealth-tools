@@ -1,4 +1,5 @@
 -dontwarn javax.annotation.**
+-dontwarn com.google.errorprone.annotations.**
 -keepattributes *Annotation*
 
 -keep class com.ghealth.tools.core.database.** { *; }
