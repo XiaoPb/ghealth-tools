@@ -71,6 +71,7 @@ import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
 import com.ghealth.tools.core.ui.adaptive.shouldUseLandscapeLayout
 import com.ghealth.tools.core.ui.component.EmptyStateView
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
@@ -1074,6 +1075,7 @@ private fun EditSpo2Sheet(
                     val value = raw?.coerceIn(SPO2_MIN, SPO2_MAX)
                     onUpdate(value)
                 },
+                shape = ButtonShape,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("更新") }
         }

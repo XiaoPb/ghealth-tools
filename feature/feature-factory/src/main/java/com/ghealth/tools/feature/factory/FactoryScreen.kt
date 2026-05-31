@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import com.ghealth.tools.feature.factory.engine.LogLevel
 import com.ghealth.tools.feature.factory.model.TestType
 import java.text.SimpleDateFormat
@@ -91,6 +92,7 @@ fun FactoryScreen(
             Button(
                 onClick = { viewModel.startTest() },
                 enabled = !state.isTestRunning && state.selectedProject != null,
+                shape = ButtonShape,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Science, contentDescription = null)
