@@ -63,4 +63,22 @@ interface UploadApi {
         @Part hardware_version: RequestBody? = null,
         @Part test_frequency: RequestBody? = null
     ): Response<ApiResponse<ProductionTestConfigResponse>>
+
+    @Multipart
+    @POST("projects/{project_id}/prod-test-config/")
+    suspend fun uploadProdTestConfigZip(
+        @Path("project_id") projectId: Int,
+        @Part zip_file: MultipartBody.Part,
+        @Part hardware_version: RequestBody? = null,
+        @Part test_frequency: RequestBody? = null
+    ): Response<ApiResponse<ProductionTestConfigResponse>>
+
+    @Multipart
+    @PUT("projects/{project_id}/prod-test-config/")
+    suspend fun updateProdTestConfigZip(
+        @Path("project_id") projectId: Int,
+        @Part zip_file: MultipartBody.Part,
+        @Part hardware_version: RequestBody? = null,
+        @Part test_frequency: RequestBody? = null
+    ): Response<ApiResponse<ProductionTestConfigResponse>>
 }

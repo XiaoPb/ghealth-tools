@@ -197,6 +197,9 @@ fun GHealthNavHost() {
                 },
                 onViewCsvFiles = { id, name ->
                     navController.navigate(Routes.csvFileList(id, name))
+                },
+                onUploadProdConfig = { projectId, projectName ->
+                    navController.navigate(Routes.configUpload(projectId, projectName))
                 }
             )
         }

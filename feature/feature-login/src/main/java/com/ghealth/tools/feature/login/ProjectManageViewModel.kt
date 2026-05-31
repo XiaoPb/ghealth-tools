@@ -47,8 +47,15 @@ class ProjectManageViewModel @Inject constructor(
             try {
                 val response = projectApi.getProjects()
                 if (response.isSuccessful) {
-                    val projects = response.body()?.data ?: emptyList()
-                    _uiState.update { it.copy(isLoading = false, projects = projects) }
+                    val apiResponse = response.body()
+                    if (apiResponse == null) {
+                        _uiState.update {
+                            it.copy(isLoading = false, errorMessage = "服务器返回数据为空")
+                        }
+                    } else {
+                        val projects = apiResponse.data ?: emptyList()
+                        _uiState.update { it.copy(isLoading = false, projects = projects) }
+                    }
                 } else {
                     _uiState.update {
                         it.copy(isLoading = false, errorMessage = "加载项目失败: ${response.code()}")

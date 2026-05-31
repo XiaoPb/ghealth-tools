@@ -38,8 +38,14 @@ data class ConfigUploadUiState(
     val testFrequency: String = "100Hz",
     val isUploading: Boolean = false,
     val errorMessage: String? = null,
-    val isSuccess: Boolean = false
+    val isSuccess: Boolean = false,
+    val uploadMode: UploadMode = UploadMode.INDIVIDUAL_FILES,
+    val zipUri: Uri? = null,
+    val zipFileName: String = "",
+    val zipValidationResult: ZipValidationResult? = null
 )
+
+enum class UploadMode { INDIVIDUAL_FILES, ZIP_PACKAGE }
 
 @HiltViewModel
 class ProjectConfigUploadViewModel @Inject constructor(
@@ -85,10 +91,48 @@ class ProjectConfigUploadViewModel @Inject constructor(
 
     fun uploadConfig(onSuccess: () -> Unit) {
         val state = _uiState.value
-        if (state.jsonConfigUri == null) {
-            _uiState.update { it.copy(errorMessage = "请选择 factory_config.json") }
-            return
+        when (state.uploadMode) {
+            UploadMode.INDIVIDUAL_FILES -> {
+                if (state.jsonConfigUri == null) {
+                    _uiState.update { it.copy(errorMessage = "请选择 factory_config.json") }
+                    return
+                }
+                uploadIndividualFiles(state, onSuccess)
+            }
+            UploadMode.ZIP_PACKAGE -> {
+                if (state.zipUri == null) {
+                    _uiState.update { it.copy(errorMessage = "请选择ZIP文件") }
+                    return
+                }
+                if (state.zipValidationResult?.isValid != true) {
+                    _uiState.update { it.copy(errorMessage = "ZIP文件内容不完整，请检查") }
+                    return
+                }
+                uploadZipFile(state, onSuccess)
+            }
         }
+    }
+
+    fun setUploadMode(mode: UploadMode) {
+        _uiState.update { it.copy(uploadMode = mode, zipValidationResult = null) }
+    }
+
+    fun setZipFile(uri: Uri, fileName: String) {
+        val result = ZipValidator.validate(appContext, uri)
+        _uiState.update {
+            it.copy(
+                zipUri = uri,
+                zipFileName = fileName,
+                zipValidationResult = result
+            )
+        }
+    }
+
+    fun clearMessages() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    private fun uploadIndividualFiles(state: ConfigUploadUiState, onSuccess: () -> Unit) {
 
         viewModelScope.launch {
             _uiState.update { it.copy(isUploading = true, errorMessage = null) }
@@ -115,6 +159,39 @@ class ProjectConfigUploadViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Config upload failed")
+                _uiState.update {
+                    it.copy(
+                        isUploading = false,
+                        errorMessage = "上传失败: ${e.message ?: "网络错误"}"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun uploadZipFile(state: ConfigUploadUiState, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUploading = true, errorMessage = null) }
+            try {
+                val filePart = uriToPart(
+                    state.zipUri!!, state.zipFileName, "application/zip"
+                )
+                val response = uploadApi.uploadProdTestConfigZip(
+                    projectId = state.projectId,
+                    zip_file = filePart,
+                    hardware_version = state.hardwareVersion.takeIf { it.isNotBlank() }
+                        ?.toRequestBody("text/plain".toMediaTypeOrNull()),
+                    test_frequency = state.testFrequency.toRequestBody("text/plain".toMediaTypeOrNull())
+                )
+                if (response.isSuccessful) {
+                    _uiState.update { it.copy(isUploading = false, isSuccess = true) }
+                    onSuccess()
+                } else {
+                    val errorMsg = apiErrorParser.parseErrors(response)
+                    _uiState.update { it.copy(isUploading = false, errorMessage = errorMsg) }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "ZIP config upload failed")
                 _uiState.update {
                     it.copy(
                         isUploading = false,

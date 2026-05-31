@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,6 +71,7 @@ fun ProjectManageScreen(
     onNavigateBack: () -> Unit,
     onEditProject: (Int, String) -> Unit,
     onViewCsvFiles: (Int, String) -> Unit,
+    onUploadProdConfig: (Int, String) -> Unit = { _, _ -> },
     viewModel: ProjectManageViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -130,20 +132,27 @@ fun ProjectManageScreen(
                             exportingProjectId = uiState.exportingProjectId,
                             isDeleting = uiState.isDeleting,
                             deletingProjectId = uiState.deletingProjectId,
+                            errorMessage = uiState.errorMessage,
+                            selectedProjectId = selectedProject?.id,
                             modifier = Modifier.padding(innerPadding),
                             onEdit = { onEditProject(it.id, it.name) },
                             onDelete = { deleteTarget = it },
                             onArchive = { archiveTarget = it },
                             onRestore = { viewModel.restoreProject(it) },
                             onExport = { viewModel.exportProject(it) },
-                            onSelect = { selectedProject = it; selectedTab = ProjectManageTab.PROD_CONFIG }
+                            onSelect = { selectedProject = it },
+                            onRetry = { viewModel.loadProjects() }
                         )
                     }
                     ProjectManageTab.PROD_CONFIG -> {
                         if (selectedProject != null) {
                             ProdTestConfigManageContent(
                                 projectId = selectedProject!!.id,
-                                projectName = selectedProject!!.name
+                                projectName = selectedProject!!.name,
+                                onUpload = {
+                                    onUploadProdConfig(selectedProject!!.id, selectedProject!!.name)
+                                },
+                                modifier = Modifier.padding(innerPadding)
                             )
                         } else {
                             EmptyTabContent("请先在项目列表中选择一个项目")
@@ -154,7 +163,8 @@ fun ProjectManageScreen(
                             RegularConfigManageContent(
                                 projectId = selectedProject!!.id,
                                 projectName = selectedProject!!.name,
-                                chipModel = selectedProject!!.chipModel
+                                chipModel = selectedProject!!.chipModel,
+                                modifier = Modifier.padding(innerPadding)
                             )
                         } else {
                             EmptyTabContent("请先在项目列表中选择一个项目")
@@ -164,7 +174,8 @@ fun ProjectManageScreen(
                         if (selectedProject != null) {
                             CsvFileManageContent(
                                 projectId = selectedProject!!.id,
-                                projectName = selectedProject!!.name
+                                projectName = selectedProject!!.name,
+                                modifier = Modifier.padding(innerPadding)
                             )
                         } else {
                             EmptyTabContent("请先在项目列表中选择一个项目")
@@ -248,20 +259,60 @@ private fun ProjectListContent(
     exportingProjectId: Int?,
     isDeleting: Boolean,
     deletingProjectId: Int?,
+    errorMessage: String? = null,
+    selectedProjectId: Int? = null,
     modifier: Modifier = Modifier,
     onEdit: (ProjectResponse) -> Unit,
     onDelete: (ProjectResponse) -> Unit,
     onArchive: (ProjectResponse) -> Unit,
     onRestore: (ProjectResponse) -> Unit,
     onExport: (ProjectResponse) -> Unit,
-    onSelect: (ProjectResponse) -> Unit
+    onSelect: (ProjectResponse) -> Unit,
+    onRetry: () -> Unit = {}
 ) {
+    if (errorMessage != null) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("加载失败", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    errorMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedButton(onClick = onRetry) {
+                    Text("重试")
+                }
+            }
+        }
+        return
+    }
+
     if (projects.isEmpty()) {
         Box(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text("暂无项目", style = MaterialTheme.typography.bodyLarge)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.Folder,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("暂无项目", style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "请确认已在项目选择页创建项目",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         return
     }
@@ -280,6 +331,7 @@ private fun ProjectListContent(
             ProjectManageCard(
                 project = project,
                 isProcessing = isProcessing,
+                isSelected = project.id == selectedProjectId,
                 onEdit = { onEdit(project) },
                 onDelete = { onDelete(project) },
                 onArchive = { onArchive(project) },
@@ -294,13 +346,23 @@ private fun ProjectListContent(
 private fun ProjectManageCard(
     project: ProjectResponse,
     isProcessing: Boolean,
+    isSelected: Boolean = false,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onArchive: () -> Unit,
     onExport: () -> Unit,
     onSelect: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), onClick = onSelect) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onSelect,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            else
+                MaterialTheme.colorScheme.surface
+        )
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -413,7 +475,9 @@ private fun EmptyTabContent(message: String) {
 @Composable
 private fun ProdTestConfigManageContent(
     projectId: Int,
-    projectName: String
+    projectName: String,
+    onUpload: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     val configViewModel: ProdTestConfigManageViewModel = hiltViewModel()
     val configState by configViewModel.uiState.collectAsState()
@@ -434,12 +498,26 @@ private fun ProdTestConfigManageContent(
     )
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
+        modifier = modifier.fillMaxSize().padding(16.dp)
     ) {
-        Text(
-            text = "产测配置 - $projectName",
-            style = MaterialTheme.typography.titleMedium
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "产测配置 - $projectName",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = onUpload,
+                enabled = !configState.isLoading
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(if (configState.config != null) "更新配置" else "上传配置")
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         when {
@@ -510,7 +588,8 @@ private fun ProdTestConfigManageContent(
 private fun RegularConfigManageContent(
     projectId: Int,
     projectName: String,
-    chipModel: String
+    chipModel: String,
+    modifier: Modifier = Modifier
 ) {
     val configViewModel: RegularConfigListViewModel = hiltViewModel()
     val configState by configViewModel.uiState.collectAsState()
@@ -531,7 +610,7 @@ private fun RegularConfigManageContent(
     )
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
+        modifier = modifier.fillMaxSize().padding(16.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -718,7 +797,7 @@ private fun RegularConfigUploadDialog(
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedButton(
                     shape = ButtonShape,
-                    onClick = { filePickerLauncher.launch("*/*") },
+                    onClick = { filePickerLauncher.launch("application/octet-stream") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isUploading
                 ) {
@@ -781,7 +860,8 @@ private fun RegularConfigUploadDialog(
 @Composable
 private fun CsvFileManageContent(
     projectId: Int,
-    projectName: String
+    projectName: String,
+    modifier: Modifier = Modifier
 ) {
     val csvViewModel: CsvFileManageViewModel = hiltViewModel()
     val csvState by csvViewModel.uiState.collectAsState()
@@ -802,7 +882,7 @@ private fun CsvFileManageContent(
     )
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
+        modifier = modifier.fillMaxSize().padding(16.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -984,7 +1064,7 @@ private fun CsvFileUploadDialog(
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedButton(
                     shape = ButtonShape,
-                    onClick = { filePickerLauncher.launch("*/*") },
+                    onClick = { filePickerLauncher.launch("text/csv") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isUploading
                 ) {

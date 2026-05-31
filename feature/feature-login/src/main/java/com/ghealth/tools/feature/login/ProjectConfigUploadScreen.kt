@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
@@ -27,6 +28,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -84,6 +86,14 @@ fun ProjectConfigUploadScreen(
     val lpctrPicker = rememberFilePicker { uri, name -> viewModel.setLpctrConfig(uri, name) }
     val lplctrPicker = rememberFilePicker { uri, name -> viewModel.setLplctrConfig(uri, name) }
     val ppgNoisePicker = rememberFilePicker { uri, name -> viewModel.setPpgNoiseConfig(uri, name) }
+    val zipPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            val fileName = uri.lastPathSegment ?: "unknown.zip"
+            viewModel.setZipFile(uri, fileName)
+        }
+    }
 
     var freqExpanded by remember { mutableStateOf(false) }
 
@@ -122,7 +132,29 @@ fun ProjectConfigUploadScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            ConfigFilePickerCard(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = uiState.uploadMode == UploadMode.INDIVIDUAL_FILES,
+                    onClick = { viewModel.setUploadMode(UploadMode.INDIVIDUAL_FILES) },
+                    label = { Text("逐个文件上传") },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                FilterChip(
+                    selected = uiState.uploadMode == UploadMode.ZIP_PACKAGE,
+                    onClick = { viewModel.setUploadMode(UploadMode.ZIP_PACKAGE) },
+                    label = { Text("ZIP包上传") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            when (uiState.uploadMode) {
+                UploadMode.INDIVIDUAL_FILES -> {
+                    ConfigFilePickerCard(
                 fileField = ConfigFileField(
                     label = "factory_config.json",
                     hint = "JSON 格式产测流程配置文件",
@@ -181,6 +213,17 @@ fun ProjectConfigUploadScreen(
                 onPick = { ppgNoisePicker.launch(arrayOf("*/*")) }
             )
             Spacer(modifier = Modifier.height(16.dp))
+                }
+                UploadMode.ZIP_PACKAGE -> {
+                    ZipUploadContent(
+                        zipFileName = uiState.zipFileName,
+                        validationResult = uiState.zipValidationResult,
+                        isUploading = uiState.isUploading,
+                        onPickZip = { zipPicker.launch(arrayOf("application/zip")) }
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
 
             OutlinedTextField(
                 value = uiState.hardwareVersion,
@@ -238,7 +281,10 @@ fun ProjectConfigUploadScreen(
                 shape = ButtonShape,
                 onClick = { viewModel.uploadConfig(onUploadComplete) },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !uiState.isUploading && uiState.jsonConfigUri != null
+                enabled = !uiState.isUploading && when (uiState.uploadMode) {
+                UploadMode.INDIVIDUAL_FILES -> uiState.jsonConfigUri != null
+                UploadMode.ZIP_PACKAGE -> uiState.zipUri != null && uiState.zipValidationResult?.isValid == true
+            }
             ) {
                 if (uiState.isUploading) {
                     CircularProgressIndicator(
@@ -343,3 +389,110 @@ private fun rememberFilePicker(onResult: (Uri, String) -> Unit) =
             onResult(uri, fileName)
         }
     }
+
+@Composable
+private fun ZipUploadContent(
+    zipFileName: String,
+    validationResult: ZipValidationResult?,
+    isUploading: Boolean,
+    onPickZip: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            shape = ButtonShape,
+            onClick = onPickZip,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isUploading
+        ) {
+            Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(if (zipFileName.isEmpty()) "选择ZIP文件" else zipFileName)
+        }
+
+        if (validationResult != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (validationResult.isValid)
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                    else
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = if (validationResult.isValid) "ZIP 自检通过" else "ZIP 自检未通过",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (validationResult.isValid)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (validationResult.matchedFiles.isNotEmpty()) {
+                        Text(
+                            "已匹配文件:",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        validationResult.matchedFiles.forEach { (field, name) ->
+                            val displayName = when (field) {
+                                "json_config" -> "factory_config.json"
+                                "base_noise_config" -> "Base_Noise_*.config"
+                                "lpctr_config" -> "LPCTR_*.config"
+                                "lplctr_config" -> "LPLCTR_*.config"
+                                "ppg_noise_config" -> "PPG_Noise_*.config"
+                                else -> field
+                            }
+                            Text(
+                                "  ✓ $name → $displayName",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    if (validationResult.missingFields.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "缺失文件:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        validationResult.missingFields.forEach { field ->
+                            val displayName = when (field) {
+                                "json_config" -> "factory_config.json"
+                                "base_noise_config" -> "Base_Noise_*.config"
+                                "lpctr_config" -> "LPCTR_*.config"
+                                "lplctr_config" -> "LPLCTR_*.config"
+                                "ppg_noise_config" -> "PPG_Noise_*.config"
+                                else -> field
+                            }
+                            Text(
+                                "  ✗ $displayName",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
+                    if (validationResult.unrecognizedFiles.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "未识别文件:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        validationResult.unrecognizedFiles.forEach { name ->
+                            Text(
+                                "  ? $name",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
