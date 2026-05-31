@@ -4,27 +4,21 @@ import android.content.Context
 import com.ghealth.tools.core.network.api.DownloadApi
 import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.network.model.ProductionTestConfigResponse
-import com.ghealth.tools.core.network.model.RegularConfigResponse
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
-import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
 class ConfigDownloader @Inject constructor(
     @ApplicationContext private val context: Context,
     private val projectApi: ProjectApi,
-    private val downloadApi: DownloadApi,
-    private val tokenManager: TokenManager,
-    @Named("baseUrl") private val baseUrl: String
+    private val downloadApi: DownloadApi
 ) {
     private val maxConfigFileSize = 5 * 1024 * 1024L
 
@@ -74,17 +68,13 @@ class ConfigDownloader @Inject constructor(
                 targetDir.mkdirs()
             }
 
-            val token = tokenManager.getAccessTokenSync()
-            val client = OkHttpClient.Builder().build()
-
             for (config in configs) {
-                val configUrl = config.configFileUrl ?: config.configFile ?: continue
                 val filename = config.filename
                 if (filename.isBlank()) continue
 
                 try {
                     val file = File(targetDir, filename)
-                    downloadFile(client, configUrl, file, token)
+                    downloadRegularConfigFile(config.id, file)
                     Timber.d("Downloaded regular config: $filename")
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to download regular config: $filename")
@@ -95,6 +85,27 @@ class ConfigDownloader @Inject constructor(
         } catch (e: Exception) {
             Timber.e(e, "Download regular configs failed")
             Result.failure(e)
+        }
+    }
+
+    private suspend fun downloadRegularConfigFile(configId: Int, targetFile: File) {
+        val response = downloadApi.downloadRegularConfig(configId)
+        if (!response.isSuccessful) {
+            throw Exception("Download HTTP ${response.code()}")
+        }
+
+        val body = response.body()
+            ?: throw Exception("响应体为空")
+
+        val contentLength = body.contentLength()
+        if (contentLength > maxConfigFileSize) {
+            throw Exception("Config file too large: $contentLength bytes")
+        }
+
+        body.byteStream().use { input ->
+            FileOutputStream(targetFile).use { output ->
+                input.copyTo(output)
+            }
         }
     }
 
@@ -152,39 +163,5 @@ class ConfigDownloader @Inject constructor(
         tempZipFile.delete()
 
         return jsonConfigFile
-    }
-
-    private fun downloadFile(
-        client: OkHttpClient,
-        url: String,
-        targetFile: File,
-        token: String?
-    ) {
-        val baseUrlStripped = baseUrl.trimEnd('/')
-        val fullUrl = if (url.startsWith("http")) url else "$baseUrlStripped$url"
-
-        val requestBuilder = Request.Builder().url(fullUrl)
-        if (!token.isNullOrEmpty()) {
-            requestBuilder.addHeader("Authorization", "Bearer $token")
-        }
-
-        val request = requestBuilder.build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw Exception("Download HTTP ${response.code}")
-            }
-
-            val contentLength = response.body?.contentLength() ?: 0L
-
-            if (contentLength > maxConfigFileSize) {
-                throw Exception("Config file too large: $contentLength bytes")
-            }
-
-            response.body?.byteStream()?.use { input ->
-                FileOutputStream(targetFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-        }
     }
 }
