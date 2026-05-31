@@ -61,6 +61,7 @@ import com.ghealth.tools.ble.protocol.gh3036.CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.CommandParamDef
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.ParamType
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -316,7 +317,8 @@ private fun CommandCard(
                             onExecute(params)
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !executionState.isExecuting
+                        enabled = !executionState.isExecuting,
+                        shape = ButtonShape
                     ) {
                         if (executionState.isExecuting) {
                             CircularProgressIndicator(
@@ -625,7 +627,7 @@ private fun MultiRegWriteInput(
         }
         OutlinedButton(onClick = {
             onChange(pairs + Pair("", ""))
-        }, modifier = Modifier.fillMaxWidth()) {
+        }, modifier = Modifier.fillMaxWidth(), shape = ButtonShape) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(4.dp))
             Text("添加寄存器")
@@ -757,6 +759,7 @@ private fun RegisterConfigDownloadCard(
                     OutlinedButton(
                         onClick = { onLoadConfigs(chipName) },
                         modifier = Modifier.fillMaxWidth(),
+                        shape = ButtonShape,
                         enabled = downloadState.status != DownloadStatus.LOADING_CONFIGS
                                 && downloadState.status != DownloadStatus.DOWNLOADING
                     ) {
@@ -849,6 +852,7 @@ private fun RegisterConfigDownloadCard(
                     Button(
                         onClick = onExecute,
                         modifier = Modifier.fillMaxWidth(),
+                        shape = ButtonShape,
                         enabled = downloadState.selectedConfig != null
                                 && downloadState.status != DownloadStatus.DOWNLOADING
                     ) {
@@ -892,7 +896,8 @@ private fun RegisterConfigDownloadCard(
                                 selectedLabel = "请选择配置文件"
                                 onReset()
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = ButtonShape
                         ) {
                             Text("重置")
                         }

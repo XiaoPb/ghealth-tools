@@ -39,12 +39,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -64,6 +61,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ghealth.tools.core.ui.theme.ButtonShape
 import com.ghealth.tools.feature.ota.engine.DebugResult
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
 import com.ghealth.tools.feature.ota.engine.OtaEngine
@@ -208,12 +206,7 @@ fun OtaScreen(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-            DeviceSelectionCard(
-                devices = state.availableDevices,
-                selectedDevice = state.selectedDevice,
-                onSelectDevice = viewModel::selectDevice,
-                enabled = !state.isUpgrading,
-            )
+            DeviceInfoBar(selectedDevice = state.selectedDevice)
 
             FirmwareInfoCard(
                 uiState = state,
@@ -336,62 +329,37 @@ fun OtaTopBarMenu(viewModel: OtaViewModel) {
 }
 
 @Composable
-private fun DeviceSelectionCard(
-    devices: List<ConnectedDeviceInfo>,
-    selectedDevice: ConnectedDeviceInfo?,
-    onSelectDevice: (ConnectedDeviceInfo) -> Unit,
-    enabled: Boolean,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+private fun DeviceInfoBar(selectedDevice: ConnectedDeviceInfo?) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("目标设备", style = MaterialTheme.typography.titleMedium)
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            if (devices.isEmpty()) {
-                Text("暂无已连接设备，请先在主界面连接设备", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                DeviceDropdown(devices = devices, selected = selectedDevice, onSelect = onSelectDevice, enabled = enabled)
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DeviceDropdown(
-    devices: List<ConnectedDeviceInfo>,
-    selected: ConnectedDeviceInfo?,
-    onSelect: (ConnectedDeviceInfo) -> Unit,
-    enabled: Boolean,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { if (enabled) expanded = it }) {
-        OutlinedTextField(
-            value = selected?.let { "${it.name} (${it.address})" } ?: "选择设备",
-            onValueChange = {},
-            readOnly = true,
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+        Icon(
+            Icons.Default.PhoneAndroid,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            devices.forEach { device ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(device.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(device.address, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    },
-                    onClick = { onSelect(device); expanded = false },
-                )
-            }
+        if (selectedDevice != null) {
+            Text(
+                text = selectedDevice.name,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = selectedDevice.address,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                "暂无已连接设备，请先在主界面连接设备",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -430,7 +398,7 @@ private fun FirmwareInfoCard(
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = onReadFwInfo, enabled = enabled && !isLoading) {
+            Button(onClick = onReadFwInfo, enabled = enabled && !isLoading, shape = ButtonShape) {
                 if (isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
@@ -629,6 +597,7 @@ private fun FirmwareUpgradeCard(
                 OutlinedButton(
                     onClick = { if (enabled) onSelectFile() },
                     enabled = enabled,
+                    shape = ButtonShape,
                     contentPadding = ButtonDefaults.TextButtonContentPadding,
                     modifier = Modifier.height(28.dp),
                 ) {
@@ -642,6 +611,7 @@ private fun FirmwareUpgradeCard(
                     Button(
                         onClick = onStartUpgrade,
                         enabled = enabled,
+                        shape = ButtonShape,
                         contentPadding = ButtonDefaults.TextButtonContentPadding,
                         modifier = Modifier.height(28.dp),
                     ) {
@@ -756,27 +726,31 @@ private fun ResourceUpgradeCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (fileInfo.fileName.isNotEmpty()) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(fileInfo.fileName, style = MaterialTheme.typography.bodyMedium)
-                        Text("大小: ${formatFileSize(fileInfo.fileSize)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                OutlinedButton(onClick = { if (enabled) onSelectFile() }, enabled = enabled) {
-                    Text(if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件")
-                }
-                if (fileInfo.fileName.isNotEmpty()) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = onStartUpgrade, enabled = enabled) {
-                        Text("开始升级资源")
-                    }
-                }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "资源文件:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = fileInfo.fileName.ifEmpty { "未选择文件" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "文件大小(Byte):",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = if (fileInfo.fileSize > 0) "${fileInfo.fileSize}" else "-",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -787,7 +761,7 @@ private fun ResourceUpgradeCard(
                     val parsed = text.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0L
                     onStartAddressChange(parsed)
                 },
-                label = { Text("起始地址 (Hex)") },
+                label = { Text("起始地址(0x)") },
                 placeholder = { Text("0x00000000") },
                 enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
@@ -798,8 +772,7 @@ private fun ResourceUpgradeCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("存储器:", style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.width(8.dp))
+                Text("存储器类型：", style = MaterialTheme.typography.bodyMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(
                         selected = storageType == StorageType.INTERNAL,
@@ -816,6 +789,28 @@ private fun ResourceUpgradeCard(
                         enabled = enabled,
                     )
                     Text("外部", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(
+                    onClick = { if (enabled) onSelectFile() },
+                    enabled = enabled,
+                    shape = ButtonShape,
+                ) {
+                    Text(if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件")
+                }
+                if (fileInfo.fileName.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = onStartUpgrade, enabled = enabled, shape = ButtonShape) {
+                        Text("升级")
+                    }
                 }
             }
         }
@@ -892,7 +887,8 @@ private fun DebugActionCard(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
+                        Button(
+                            onClick = {
                             val addr = parseAddress()
                             val len = parseLength()
                             val readOp: suspend (OtaEngine) -> DebugResult =
@@ -901,8 +897,9 @@ private fun DebugActionCard(
                                 else
                                     { engine -> engine.readFlash(addr, len) }
                             onDebugRead(readOp)
-                        }) { Text("读取") }
-                        OutlinedButton(onClick = {
+                        }, shape = ButtonShape) { Text("读取") }
+                        OutlinedButton(
+                            onClick = {
                             val addr = parseAddress()
                             val data = parseHexData() ?: return@OutlinedButton
                             val writeOp: suspend (OtaEngine) -> DebugResult =
@@ -911,7 +908,7 @@ private fun DebugActionCard(
                                 else
                                     { engine -> engine.writeFlash(addr, data) }
                             onDebugWrite(writeOp)
-                        }) { Text("写入") }
+                        }, shape = ButtonShape) { Text("写入") }
                     }
                 }
                 DebugMenuAction.REGISTER_READ_WRITE -> {
@@ -936,19 +933,24 @@ private fun DebugActionCard(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
+                        Button(
+                            onClick = {
                             val addr = parseAddress()
                             onDebugRead { engine -> engine.readRegister(addr) }
-                        }) { Text("读取") }
-                        OutlinedButton(onClick = {
+                        }, shape = ButtonShape) { Text("读取") }
+                        OutlinedButton(
+                            onClick = {
                             val addr = parseAddress()
                             val data = parseHexData() ?: return@OutlinedButton
                             onDebugWrite { engine -> engine.writeRegister(addr, data) }
-                        }) { Text("写入") }
+                        }, shape = ButtonShape) { Text("写入") }
                     }
                 }
                 DebugMenuAction.READ_EFUSE -> {
-                    Button(onClick = { onDebugRead { engine -> engine.readEfuse() } }) { Text("读取eFuse") }
+                    Button(
+                        onClick = { onDebugRead { engine -> engine.readEfuse() } },
+                        shape = ButtonShape,
+                    ) { Text("读取eFuse") }
                 }
                 DebugMenuAction.NVDS_READ_WRITE -> {
                     OutlinedTextField(
@@ -963,15 +965,22 @@ private fun DebugActionCard(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onDebugRead { engine -> engine.readNvds() } }) { Text("读取NVDS") }
-                        OutlinedButton(onClick = {
+                        Button(
+                            onClick = { onDebugRead { engine -> engine.readNvds() } },
+                            shape = ButtonShape,
+                        ) { Text("读取NVDS") }
+                        OutlinedButton(
+                            onClick = {
                             val data = parseHexData() ?: return@OutlinedButton
                             onDebugWrite { engine -> engine.writeNvds(data) }
-                        }) { Text("写入NVDS") }
+                        }, shape = ButtonShape) { Text("写入NVDS") }
                     }
                 }
                 DebugMenuAction.READ_BOOT_INFO -> {
-                    Button(onClick = { onDebugRead { engine -> engine.readBootInfo() } }) { Text("读取BootInfo") }
+                    Button(
+                        onClick = { onDebugRead { engine -> engine.readBootInfo() } },
+                        shape = ButtonShape,
+                    ) { Text("读取BootInfo") }
                 }
             }
 

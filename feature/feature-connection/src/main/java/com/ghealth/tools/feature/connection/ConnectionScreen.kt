@@ -71,6 +71,7 @@ import com.ghealth.tools.core.ui.adaptive.shouldUseLandscapeLayout
 import com.ghealth.tools.core.ui.component.EmptyStateView
 import com.ghealth.tools.core.ui.component.StatusBadge
 import com.ghealth.tools.core.ui.component.ConnectionStatus
+import com.ghealth.tools.core.ui.theme.ButtonShape
 
 private object CommandRoutes {
     const val MAIN = "main"
@@ -568,7 +569,8 @@ private fun ScanSection(
                 }
                 FilledTonalButton(
                     onClick = onStop,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    shape = ButtonShape
                 ) {
                     Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.height(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
