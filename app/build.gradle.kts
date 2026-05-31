@@ -64,6 +64,13 @@ android {
         compose = true
         buildConfig = true
     }
+
+    applicationVariants.all {
+        outputs.all {
+            val outputFileName = "ghealth-tools-${versionName}.apk"
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = outputFileName
+        }
+    }
 }
 
 dependencies {
