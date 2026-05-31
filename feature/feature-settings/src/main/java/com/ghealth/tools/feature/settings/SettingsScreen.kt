@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +31,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -41,6 +44,7 @@ import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -348,15 +352,47 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
         SectionHeader("关于")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            ListItem(
-                headlineContent = { Text("版本") },
-                trailingContent = { Text(state.appVersion) }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("应用名称") },
-                trailingContent = { Text("GHealth Tools") }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text("版本更新", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "当前版本: ${state.appVersion}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (state.isCheckingUpdate) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    OutlinedButton(onClick = { viewModel.checkForUpdate() }) {
+                        Text("检查更新")
+                    }
+                }
+            }
+        }
+
+        if (state.showUpdateDialog) {
+            UpdateDialog(
+                versionName = state.updateVersionName,
+                changelog = state.updateChangelog,
+                isForceUpdate = state.isForceUpdate,
+                onDownload = {
+                    viewModel.openDownloadPage()
+                    viewModel.dismissUpdateDialog()
+                },
+                onDismiss = { viewModel.dismissUpdateDialog() },
             )
         }
     }
