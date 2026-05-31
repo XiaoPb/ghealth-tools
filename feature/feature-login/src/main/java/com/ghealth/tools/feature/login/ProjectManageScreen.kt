@@ -149,6 +149,7 @@ fun ProjectManageScreen(
                             ProdTestConfigManageContent(
                                 projectId = selectedProject!!.id,
                                 projectName = selectedProject!!.name,
+                                chipModel = selectedProject!!.chipModel,
                                 onUpload = {
                                     onUploadProdConfig(selectedProject!!.id, selectedProject!!.name)
                                 },
@@ -476,6 +477,7 @@ private fun EmptyTabContent(message: String) {
 private fun ProdTestConfigManageContent(
     projectId: Int,
     projectName: String,
+    chipModel: String = "",
     onUpload: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -483,7 +485,7 @@ private fun ProdTestConfigManageContent(
     val configState by configViewModel.uiState.collectAsState()
 
     LaunchedEffect(projectId) {
-        configViewModel.loadConfig(projectId, projectName)
+        configViewModel.loadConfig(projectId, projectName, chipModel)
     }
 
     ErrorEffect(

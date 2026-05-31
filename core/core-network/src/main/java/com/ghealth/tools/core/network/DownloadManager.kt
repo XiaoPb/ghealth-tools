@@ -9,13 +9,15 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
+import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class DownloadManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val downloadApi: DownloadApi
+    private val downloadApi: DownloadApi,
+    private val configPathProvider: ConfigPathProvider
 ) {
     private fun getDownloadDir(): File {
         return context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
@@ -24,7 +26,8 @@ class DownloadManager @Inject constructor(
 
     suspend fun downloadProdTestConfig(
         configId: Int,
-        projectName: String
+        projectName: String,
+        chip: String = ""
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
             val response = downloadApi.downloadProdTestConfig(configId)
@@ -37,12 +40,21 @@ class DownloadManager @Inject constructor(
             }
             val body = response.body()
                 ?: return@withContext Result.failure(Exception("响应体为空"))
-            val dir = getDownloadDir()
-            if (!dir.exists()) dir.mkdirs()
-            val file = File(dir, "${projectName}_prod_test_config.zip")
-            writeToFile(body, file)
-            Timber.d("Downloaded prod test config to ${file.absolutePath}")
-            Result.success(file)
+
+            val zipFile = File(getDownloadDir(), "${projectName}_prod_test_config.zip")
+            writeToFile(body, zipFile)
+            Timber.d("Downloaded prod test config to ${zipFile.absolutePath}")
+
+            val targetDir = configPathProvider.getFactoryConfigDir(chip, projectName)
+            if (!targetDir.exists()) {
+                targetDir.mkdirs()
+            }
+
+            unzipFile(zipFile, targetDir)
+            zipFile.delete()
+            Timber.d("Extracted prod test config to ${targetDir.absolutePath}")
+
+            Result.success(targetDir)
         } catch (e: Exception) {
             Timber.e(e, "Download prod test config failed")
             Result.failure(e)
@@ -99,6 +111,23 @@ class DownloadManager @Inject constructor(
         body.byteStream().use { input ->
             FileOutputStream(file).use { output ->
                 input.copyTo(output)
+            }
+        }
+    }
+
+    private fun unzipFile(zipFile: File, targetDir: File) {
+        ZipInputStream(zipFile.inputStream()).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    val fileName = entry.name.substringAfterLast('/')
+                    val targetFile = File(targetDir, fileName)
+                    FileOutputStream(targetFile).use { output ->
+                        zis.copyTo(output)
+                    }
+                }
+                zis.closeEntry()
+                entry = zis.nextEntry
             }
         }
     }

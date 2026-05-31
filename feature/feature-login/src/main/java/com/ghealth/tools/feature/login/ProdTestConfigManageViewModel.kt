@@ -18,6 +18,7 @@ import javax.inject.Inject
 data class ProdTestConfigManageUiState(
     val projectId: Int = 0,
     val projectName: String = "",
+    val chipModel: String = "",
     val config: ProductionTestConfigResponse? = null,
     val isLoading: Boolean = false,
     val isDownloading: Boolean = false,
@@ -36,8 +37,8 @@ class ProdTestConfigManageViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ProdTestConfigManageUiState())
     val uiState: StateFlow<ProdTestConfigManageUiState> = _uiState.asStateFlow()
 
-    fun loadConfig(projectId: Int, projectName: String) {
-        _uiState.update { it.copy(projectId = projectId, projectName = projectName) }
+    fun loadConfig(projectId: Int, projectName: String, chipModel: String = "") {
+        _uiState.update { it.copy(projectId = projectId, projectName = projectName, chipModel = chipModel) }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
@@ -63,11 +64,11 @@ class ProdTestConfigManageViewModel @Inject constructor(
         val config = state.config ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isDownloading = true) }
-            val result = downloadManager.downloadProdTestConfig(config.id, state.projectName)
+            val result = downloadManager.downloadProdTestConfig(config.id, state.projectName, state.chipModel)
             result.fold(
-                onSuccess = { file ->
+                onSuccess = { dir ->
                     _uiState.update {
-                        it.copy(isDownloading = false, successMessage = "下载成功: ${file.absolutePath}")
+                        it.copy(isDownloading = false, successMessage = "下载成功: ${dir.absolutePath}")
                     }
                 },
                 onFailure = { error ->
