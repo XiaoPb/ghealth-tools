@@ -20,7 +20,7 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0.0-dev.$buildTimestamp"
+        versionName = "1.0.0"
     }
 
     signingConfigs {
@@ -33,10 +33,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            versionName = "1.0.0-dev.$buildTimestamp"
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("ghealth")
+            versionName = "1.0.0-build.$buildTimestamp"
         }
     }
 
