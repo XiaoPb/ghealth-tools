@@ -1,5 +1,6 @@
 package com.ghealth.tools.feature.login
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -31,6 +33,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,10 +57,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ghealth.tools.core.network.model.ProjectResponse
 import com.ghealth.tools.core.ui.component.ErrorEffect
+import com.ghealth.tools.core.ui.adaptive.CONTENT_MAX_WIDTH
+import com.ghealth.tools.core.ui.adaptive.isWide
 
 private enum class ProjectManageTab(val label: String) {
     PROJECTS("项目列表"),
@@ -65,7 +72,7 @@ private enum class ProjectManageTab(val label: String) {
     CSV_FILES("CSV 文件")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun ProjectManageScreen(
     onNavigateBack: () -> Unit,
@@ -79,6 +86,10 @@ fun ProjectManageScreen(
     var selectedProject by remember { mutableStateOf<ProjectResponse?>(null) }
     var deleteTarget by remember { mutableStateOf<ProjectResponse?>(null) }
     var archiveTarget by remember { mutableStateOf<ProjectResponse?>(null) }
+
+    val context = LocalContext.current
+    val windowSizeClass = calculateWindowSizeClass(context as Activity)
+    val maxW = if (windowSizeClass.widthSizeClass.isWide) CONTENT_MAX_WIDTH else Dp.Infinity
 
     ErrorEffect(
         errorMessage = uiState.errorMessage,
@@ -112,74 +123,81 @@ fun ProjectManageScreen(
             }
         }
     ) { innerPadding ->
-        when {
-            uiState.isLoading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(innerPadding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-            else -> {
-                when (selectedTab) {
-                    ProjectManageTab.PROJECTS -> {
-                        ProjectListContent(
-                            projects = uiState.projects,
-                            isArchiving = uiState.isArchiving,
-                            archivingProjectId = uiState.archivingProjectId,
-                            isExporting = uiState.isExporting,
-                            exportingProjectId = uiState.exportingProjectId,
-                            isDeleting = uiState.isDeleting,
-                            deletingProjectId = uiState.deletingProjectId,
-                            errorMessage = uiState.errorMessage,
-                            selectedProjectId = selectedProject?.id,
-                            modifier = Modifier.padding(innerPadding),
-                            onEdit = { onEditProject(it.id, it.name) },
-                            onDelete = { deleteTarget = it },
-                            onArchive = { archiveTarget = it },
-                            onRestore = { viewModel.restoreProject(it) },
-                            onExport = { viewModel.exportProject(it) },
-                            onSelect = { selectedProject = it },
-                            onRetry = { viewModel.loadProjects() }
-                        )
-                    }
-                    ProjectManageTab.PROD_CONFIG -> {
-                        if (selectedProject != null) {
-                            ProdTestConfigManageContent(
-                                projectId = selectedProject!!.id,
-                                projectName = selectedProject!!.name,
-                                chipModel = selectedProject!!.chipModel,
-                                onUpload = {
-                                    onUploadProdConfig(selectedProject!!.id, selectedProject!!.name)
-                                },
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                        } else {
-                            EmptyTabContent("请先在项目列表中选择一个项目")
+        Box(
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Column(modifier = Modifier.widthIn(max = maxW).fillMaxSize()) {
+                when {
+                    uiState.isLoading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
                         }
                     }
-                    ProjectManageTab.REGULAR_CONFIG -> {
-                        if (selectedProject != null) {
-                            RegularConfigManageContent(
-                                projectId = selectedProject!!.id,
-                                projectName = selectedProject!!.name,
-                                chipModel = selectedProject!!.chipModel,
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                        } else {
-                            EmptyTabContent("请先在项目列表中选择一个项目")
-                        }
-                    }
-                    ProjectManageTab.CSV_FILES -> {
-                        if (selectedProject != null) {
-                            CsvFileManageContent(
-                                projectId = selectedProject!!.id,
-                                projectName = selectedProject!!.name,
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                        } else {
-                            EmptyTabContent("请先在项目列表中选择一个项目")
+                    else -> {
+                        when (selectedTab) {
+                            ProjectManageTab.PROJECTS -> {
+                                ProjectListContent(
+                                    projects = uiState.projects,
+                                    isArchiving = uiState.isArchiving,
+                                    archivingProjectId = uiState.archivingProjectId,
+                                    isExporting = uiState.isExporting,
+                                    exportingProjectId = uiState.exportingProjectId,
+                                    isDeleting = uiState.isDeleting,
+                                    deletingProjectId = uiState.deletingProjectId,
+                                    errorMessage = uiState.errorMessage,
+                                    selectedProjectId = selectedProject?.id,
+                                    modifier = Modifier,
+                                    onEdit = { onEditProject(it.id, it.name) },
+                                    onDelete = { deleteTarget = it },
+                                    onArchive = { archiveTarget = it },
+                                    onRestore = { viewModel.restoreProject(it) },
+                                    onExport = { viewModel.exportProject(it) },
+                                    onSelect = { selectedProject = it },
+                                    onRetry = { viewModel.loadProjects() }
+                                )
+                            }
+                            ProjectManageTab.PROD_CONFIG -> {
+                                if (selectedProject != null) {
+                                    ProdTestConfigManageContent(
+                                        projectId = selectedProject!!.id,
+                                        projectName = selectedProject!!.name,
+                                        chipModel = selectedProject!!.chipModel,
+                                        onUpload = {
+                                            onUploadProdConfig(selectedProject!!.id, selectedProject!!.name)
+                                        },
+                                        modifier = Modifier
+                                    )
+                                } else {
+                                    EmptyTabContent("请先在项目列表中选择一个项目")
+                                }
+                            }
+                            ProjectManageTab.REGULAR_CONFIG -> {
+                                if (selectedProject != null) {
+                                    RegularConfigManageContent(
+                                        projectId = selectedProject!!.id,
+                                        projectName = selectedProject!!.name,
+                                        chipModel = selectedProject!!.chipModel,
+                                        modifier = Modifier
+                                    )
+                                } else {
+                                    EmptyTabContent("请先在项目列表中选择一个项目")
+                                }
+                            }
+                            ProjectManageTab.CSV_FILES -> {
+                                if (selectedProject != null) {
+                                    CsvFileManageContent(
+                                        projectId = selectedProject!!.id,
+                                        projectName = selectedProject!!.name,
+                                        modifier = Modifier
+                                    )
+                                } else {
+                                    EmptyTabContent("请先在项目列表中选择一个项目")
+                                }
+                            }
                         }
                     }
                 }

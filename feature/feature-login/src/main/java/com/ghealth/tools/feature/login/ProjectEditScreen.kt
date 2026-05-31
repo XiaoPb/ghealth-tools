@@ -1,5 +1,16 @@
 package com.ghealth.tools.feature.login
 
+import android.app.Activity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import com.ghealth.tools.core.ui.adaptive.FORM_MAX_WIDTH
+import com.ghealth.tools.core.ui.adaptive.isWide
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ghealth.tools.core.ui.component.ErrorEffect
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun ProjectEditScreen(
     projectId: Int,
@@ -46,6 +57,10 @@ fun ProjectEditScreen(
     viewModel: ProjectEditViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    val context = LocalContext.current
+    val windowSizeClass = calculateWindowSizeClass(context as Activity)
+    val maxW = if (windowSizeClass.widthSizeClass.isWide) FORM_MAX_WIDTH else Dp.Infinity
 
     LaunchedEffect(projectId) {
         viewModel.loadProject(projectId)
@@ -73,109 +88,115 @@ fun ProjectEditScreen(
         }
     ) { innerPadding ->
         if (uiState.isLoading) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(innerPadding)
+            Box(
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
             }
             return@Scaffold
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState())
+        Box(
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
-            OutlinedTextField(
-                value = uiState.name,
-                onValueChange = viewModel::updateName,
-                label = { Text("项目名称") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            var chipExpanded by remember { mutableStateOf(false) }
-            val chipOptions = listOf("gh3036" to "GH3036", "gh3300" to "GH3300", "gh3220" to "GH3220")
-            ExposedDropdownMenuBox(
-                expanded = chipExpanded,
-                onExpandedChange = { chipExpanded = it }
+            Column(
+                modifier = Modifier
+                    .widthIn(max = maxW)
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
                 OutlinedTextField(
-                    value = chipOptions.find { it.first == uiState.chipModel }?.second ?: uiState.chipModel,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("芯片型号") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = chipExpanded) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                    value = uiState.name,
+                    onValueChange = viewModel::updateName,
+                    label = { Text("项目名称") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
-                ExposedDropdownMenu(
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                var chipExpanded by remember { mutableStateOf(false) }
+                val chipOptions = listOf("gh3036" to "GH3036", "gh3300" to "GH3300", "gh3220" to "GH3220")
+                ExposedDropdownMenuBox(
                     expanded = chipExpanded,
-                    onDismissRequest = { chipExpanded = false }
+                    onExpandedChange = { chipExpanded = it }
                 ) {
-                    chipOptions.forEach { (value, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                viewModel.updateChipModel(value)
-                                chipExpanded = false
-                            }
-                        )
+                    OutlinedTextField(
+                        value = chipOptions.find { it.first == uiState.chipModel }?.second ?: uiState.chipModel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("芯片型号") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = chipExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = chipExpanded,
+                        onDismissRequest = { chipExpanded = false }
+                    ) {
+                        chipOptions.forEach { (value, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    viewModel.updateChipModel(value)
+                                    chipExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            OutlinedTextField(
-                value = uiState.hardwareVersion,
-                onValueChange = viewModel::updateHardwareVersion,
-                label = { Text("硬件版本") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                OutlinedTextField(
+                    value = uiState.hardwareVersion,
+                    onValueChange = viewModel::updateHardwareVersion,
+                    label = { Text("硬件版本") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            OutlinedTextField(
-                value = uiState.testFrequency,
-                onValueChange = viewModel::updateTestFrequency,
-                label = { Text("测试频率") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("如: 100Hz") }
-            )
+                OutlinedTextField(
+                    value = uiState.testFrequency,
+                    onValueChange = viewModel::updateTestFrequency,
+                    label = { Text("测试频率") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("如: 100Hz") }
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            OutlinedTextField(
-                value = uiState.description,
-                onValueChange = viewModel::updateDescription,
-                label = { Text("项目描述") },
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 3
-            )
+                OutlinedTextField(
+                    value = uiState.description,
+                    onValueChange = viewModel::updateDescription,
+                    label = { Text("项目描述") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3
+                )
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Button(
-                shape = ButtonShape,
-                onClick = { viewModel.saveProject(onSaved) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !uiState.isSaving
-            ) {
-                if (uiState.isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("保存修改")
+                Button(
+                    shape = ButtonShape,
+                    onClick = { viewModel.saveProject(onSaved) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isSaving
+                ) {
+                    if (uiState.isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("保存修改")
+                    }
                 }
-            }
+                }
         }
     }
 }

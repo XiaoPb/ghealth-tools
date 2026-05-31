@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -44,7 +45,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ghealth.tools.core.ui.adaptive.CONTENT_MAX_WIDTH
+import com.ghealth.tools.core.ui.adaptive.isWide
 import com.ghealth.tools.core.network.model.ProjectResponse
 import com.ghealth.tools.core.ui.component.ErrorEffect
 
@@ -59,6 +63,8 @@ fun ProjectSelectionScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val windowSizeClass = calculateWindowSizeClass(context as Activity)
+    val maxW = if (windowSizeClass.widthSizeClass.isWide) CONTENT_MAX_WIDTH else Dp.Infinity
 
     ErrorEffect(
         errorMessage = uiState.errorMessage,
@@ -81,12 +87,16 @@ fun ProjectSelectionScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
+        Box(
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = maxW)
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
             Text(
                 text = "在线模式",
                 style = MaterialTheme.typography.headlineMedium
@@ -192,6 +202,7 @@ fun ProjectSelectionScreen(
                         }
             }
         }
+    }
     }
 }
 }

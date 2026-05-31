@@ -1,5 +1,6 @@
 package com.ghealth.tools.feature.ota
 
+import android.app.Activity
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -47,6 +49,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,9 +63,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ghealth.tools.core.ui.theme.ButtonShape
+import com.ghealth.tools.core.ui.adaptive.CONTENT_MAX_WIDTH
+import com.ghealth.tools.core.ui.adaptive.isWide
 import com.ghealth.tools.feature.ota.engine.DebugResult
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
 import com.ghealth.tools.feature.ota.engine.OtaEngine
@@ -70,13 +78,17 @@ import com.ghealth.tools.feature.ota.model.DebugMenuAction
 import com.ghealth.tools.feature.ota.model.StorageType
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun OtaScreen(
     onNavigateBack: () -> Unit,
     viewModel: OtaViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
+
+    val context = LocalContext.current
+    val windowSizeClass = calculateWindowSizeClass(context as Activity)
+    val maxW = if (windowSizeClass.widthSizeClass.isWide) CONTENT_MAX_WIDTH else Dp.Infinity
 
     val firmwareFilePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -199,13 +211,18 @@ fun OtaScreen(
         viewModel.cancelUpgrade()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
     ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = maxW)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             DeviceInfoBar(selectedDevice = state.selectedDevice)
 
             FirmwareInfoCard(
@@ -270,6 +287,7 @@ fun OtaScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
 }
 
 @Composable
