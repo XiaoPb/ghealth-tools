@@ -1,5 +1,6 @@
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,6 +11,12 @@ plugins {
 }
 
 val buildTimestamp: String = SimpleDateFormat("yyyyMMdd-HHmm").format(Date())
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
+}
 
 android {
     namespace = "com.ghealth.tools"
@@ -25,10 +32,10 @@ android {
 
     signingConfigs {
         create("ghealth") {
-            storeFile = rootProject.file("ghealth-release.keystore")
-            storePassword = project.findProperty("RELEASE_STORE_PASSWORD") as? String ?: ""
-            keyAlias = "ghealth"
-            keyPassword = project.findProperty("RELEASE_KEY_PASSWORD") as? String ?: ""
+            storeFile = rootProject.file(keystoreProperties.getProperty("storeFile", "ghealth-release.keystore"))
+            storePassword = keystoreProperties.getProperty("storePassword", "")
+            keyAlias = keystoreProperties.getProperty("keyAlias", "ghealth")
+            keyPassword = keystoreProperties.getProperty("keyPassword", "")
         }
     }
 
