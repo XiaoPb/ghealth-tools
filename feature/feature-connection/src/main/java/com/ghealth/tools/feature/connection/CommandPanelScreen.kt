@@ -44,7 +44,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import com.ghealth.tools.core.ui.component.CompactOutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -443,14 +444,13 @@ private fun ParamInput(
                 expanded = expanded,
                 onExpandedChange = { expanded = !expanded }
             ) {
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = selectedLabel,
                     onValueChange = {},
                     readOnly = true,
                     placeholder = { Text(param.label) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                     modifier = modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).height(40.dp),
-                    textStyle = MaterialTheme.typography.labelSmall
                 )
                 ExposedDropdownMenu(
                     expanded = expanded,
@@ -474,7 +474,7 @@ private fun ParamInput(
         param.type == ParamType.TIMESTAMP -> {
             val currentTime = System.currentTimeMillis() / 1000
             var tsValue by remember { mutableStateOf(currentTime.toString()) }
-            OutlinedTextField(
+            CompactOutlinedTextField(
                 value = tsValue,
                 onValueChange = {
                     tsValue = it
@@ -483,14 +483,12 @@ private fun ParamInput(
                 placeholder = { Text(param.label) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = modifier.then(fieldModifier),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.labelSmall
             )
         }
 
         // Array input
         param.type == ParamType.U16_ARRAY || param.type == ParamType.U8_ARRAY -> {
-            OutlinedTextField(
+            CompactOutlinedTextField(
                 value = textValue,
                 onValueChange = {
                     textValue = it
@@ -498,15 +496,13 @@ private fun ParamInput(
                 },
                 placeholder = { Text(param.label) },
                 modifier = modifier.then(fieldModifier),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.labelSmall
             )
         }
 
         // Scalar hex/number input
         else -> {
             val isHexInput = param.type in listOf(ParamType.U16, ParamType.U32, ParamType.I16, ParamType.I32)
-            OutlinedTextField(
+            CompactOutlinedTextField(
                 value = textValue,
                 onValueChange = {
                     textValue = it
@@ -517,8 +513,6 @@ private fun ParamInput(
                     keyboardType = if (isHexInput) KeyboardType.Ascii else KeyboardType.Number
                 ),
                 modifier = modifier.then(fieldModifier),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.labelSmall
             )
         }
     }
@@ -599,21 +593,17 @@ private fun SingleRegWriteInput(onChange: (addr: String, value: String) -> Unit)
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        OutlinedTextField(
+        CompactOutlinedTextField(
             value = addr,
             onValueChange = { addr = it; onChange(addr, value) },
             placeholder = { Text("地址(hex)") },
             modifier = Modifier.weight(1f).height(40.dp),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.labelSmall
         )
-        OutlinedTextField(
+        CompactOutlinedTextField(
             value = value,
             onValueChange = { value = it; onChange(addr, value) },
             placeholder = { Text("写入值(hex)") },
             modifier = Modifier.weight(1f).height(40.dp),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.labelSmall
         )
     }
 }
@@ -630,7 +620,7 @@ private fun MultiRegWriteInput(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = addr,
                     onValueChange = { newAddr ->
                         val newList = pairs.toMutableList()
@@ -639,10 +629,8 @@ private fun MultiRegWriteInput(
                     },
                     placeholder = { Text("地址") },
                     modifier = Modifier.weight(1f).height(40.dp),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.labelSmall
                 )
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = value,
                     onValueChange = { newVal ->
                         val newList = pairs.toMutableList()
@@ -651,8 +639,6 @@ private fun MultiRegWriteInput(
                     },
                     placeholder = { Text("值") },
                     modifier = Modifier.weight(1f).height(40.dp),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.labelSmall
                 )
                 if (pairs.size > 1) {
                     IconButton(onClick = {
@@ -684,22 +670,18 @@ private fun SingleRegReadInput(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        OutlinedTextField(
+        CompactOutlinedTextField(
             value = addr,
             onValueChange = { addr = it; onChange(addr) },
             placeholder = { Text("地址(hex)") },
             modifier = Modifier.weight(1f).height(40.dp),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.labelSmall
         )
-        OutlinedTextField(
+        CompactOutlinedTextField(
             value = readResult ?: "",
             onValueChange = {},
             readOnly = true,
             placeholder = { Text("读取结果") },
             modifier = Modifier.weight(1f).height(40.dp),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.labelSmall
         )
     }
 }
@@ -715,21 +697,17 @@ private fun MultiRegReadInput(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        OutlinedTextField(
+        CompactOutlinedTextField(
             value = addr,
             onValueChange = onAddrChange,
             placeholder = { Text("起始地址(hex)") },
             modifier = Modifier.weight(1f).height(40.dp),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.labelSmall
         )
-        OutlinedTextField(
+        CompactOutlinedTextField(
             value = count,
             onValueChange = onCountChange,
             placeholder = { Text("读取个数") },
             modifier = Modifier.weight(1f).height(40.dp),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.labelSmall
         )
     }
 }
@@ -841,7 +819,7 @@ private fun RegisterConfigDownloadCard(
                                 }
                             }
                         ) {
-                            OutlinedTextField(
+                            CompactOutlinedTextField(
                                 value = selectedLabel,
                                 onValueChange = {},
                                 readOnly = true,

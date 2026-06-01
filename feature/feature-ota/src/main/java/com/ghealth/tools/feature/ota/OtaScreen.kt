@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,7 +52,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import com.ghealth.tools.core.ui.component.CompactOutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -142,7 +143,7 @@ fun OtaScreen(
             onDismissRequest = { viewModel.dismissControlPointDialog() },
             title = { Text("写控制点") },
             text = {
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = hexText,
                     onValueChange = { hexText = it; viewModel.updateControlPointHex(it) },
                     label = { Text("Hex数据") },
@@ -169,12 +170,11 @@ fun OtaScreen(
             title = { Text("保存读取数据") },
             text = {
                 Column {
-                    OutlinedTextField(
+                    CompactOutlinedTextField(
                         value = fileName,
                         onValueChange = { fileName = it; viewModel.updateDownloadFileName(it) },
                         label = { Text("文件名") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -753,7 +753,7 @@ private fun FirmwareUpgradeCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    OutlinedTextField(
+                    CompactOutlinedTextField(
                         value = if (copyAddress == 0L) "" else "0x${copyAddress.toString(16).uppercase()}",
                         onValueChange = { text ->
                             val parsed = text.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0L
@@ -763,8 +763,8 @@ private fun FirmwareUpgradeCard(
                         enabled = enabled,
                         modifier = Modifier.weight(1f).height(48.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                        singleLine = true,
                         textStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }
             }
@@ -879,7 +879,7 @@ private fun ResourceUpgradeCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            OutlinedTextField(
+            CompactOutlinedTextField(
                 value = if (startAddress == 0L) "" else "0x${startAddress.toString(16).uppercase()}",
                 onValueChange = { text ->
                     val parsed = text.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0L
@@ -890,7 +890,6 @@ private fun ResourceUpgradeCard(
                 enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                singleLine = true,
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -973,13 +972,12 @@ private fun RamReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("起始地址:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = address,
                     onValueChange = onAddressChange,
                     placeholder = { Text("Hex") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
@@ -991,13 +989,12 @@ private fun RamReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("数据长度:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = length,
                     onValueChange = onLengthChange,
                     placeholder = { Text("Dec") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
@@ -1018,13 +1015,12 @@ private fun RamReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("写入数据:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = data,
                     onValueChange = onDataChange,
                     placeholder = { Text("AA BB CC DD") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
@@ -1077,13 +1073,12 @@ private fun FlashReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("起始地址:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = address,
                     onValueChange = onAddressChange,
                     placeholder = { Text("Hex") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
@@ -1095,13 +1090,12 @@ private fun FlashReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("数据长度:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = length,
                     onValueChange = onLengthChange,
                     placeholder = { Text("Dec") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
@@ -1122,13 +1116,12 @@ private fun FlashReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("写入数据:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = data,
                     onValueChange = onDataChange,
                     placeholder = { Text("AA BB CC DD") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
@@ -1175,13 +1168,12 @@ private fun RegisterReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("起始地址:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = address,
                     onValueChange = onAddressChange,
                     placeholder = { Text("Hex") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
@@ -1193,13 +1185,12 @@ private fun RegisterReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("写入数据:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = data,
                     onValueChange = onDataChange,
                     placeholder = { Text("AA BB CC DD") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
@@ -1247,13 +1238,12 @@ private fun NvdsReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("标签:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = tag,
                     onValueChange = onTagChange,
                     placeholder = { Text("Hex") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
@@ -1268,13 +1258,12 @@ private fun NvdsReadWriteCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("写入数据:", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
+                CompactOutlinedTextField(
                     value = data,
                     onValueChange = onDataChange,
                     placeholder = { Text("AA BB CC DD") },
                     modifier = fieldModifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                    singleLine = true,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
