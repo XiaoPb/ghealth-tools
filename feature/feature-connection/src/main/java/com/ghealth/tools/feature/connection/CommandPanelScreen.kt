@@ -440,7 +440,8 @@ private fun ParamInput(
             var selectedLabel by remember { mutableStateOf("请选择") }
             ExposedDropdownMenuBox(
                 expanded = expanded,
-                onExpandedChange = { expanded = !expanded }
+                onExpandedChange = { expanded = !expanded },
+                modifier = modifier
             ) {
                 CompactOutlinedTextField(
                     value = selectedLabel,
@@ -448,7 +449,7 @@ private fun ParamInput(
                     readOnly = true,
                     placeholder = { Text(param.label) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).height(40.dp),
+                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).height(40.dp),
                 )
                 ExposedDropdownMenu(
                     expanded = expanded,
@@ -815,7 +816,8 @@ private fun RegisterConfigDownloadCard(
                                 if (downloadState.status != DownloadStatus.DOWNLOADING) {
                                     configExpanded = !configExpanded
                                 }
-                            }
+                            },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             CompactOutlinedTextField(
                                 value = selectedLabel,
