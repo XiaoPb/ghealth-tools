@@ -358,25 +358,29 @@ fun SettingsScreen(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Column {
-                    Text("版本更新", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "当前版本: ${state.appVersion}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(
+                    text = ctx.applicationInfo.loadLabel(ctx.packageManager).toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "当前版本: ${state.appVersion}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
                 if (state.isCheckingUpdate) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
-                    OutlinedButton(onClick = { viewModel.checkForUpdate() }) {
+                    OutlinedButton(
+                        onClick = { viewModel.checkForUpdate() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Text("检查更新")
                     }
                 }
