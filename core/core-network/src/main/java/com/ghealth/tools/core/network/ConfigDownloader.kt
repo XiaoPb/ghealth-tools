@@ -64,9 +64,10 @@ class ConfigDownloader @Inject constructor(
             }
 
             val configs = response.body()!!.data!!
-            if (!targetDir.exists()) {
-                targetDir.mkdirs()
+            if (targetDir.exists()) {
+                targetDir.deleteRecursively()
             }
+            targetDir.mkdirs()
 
             for (config in configs) {
                 val filename = config.filename
@@ -125,9 +126,10 @@ class ConfigDownloader @Inject constructor(
         val body = zipResponse.body()
             ?: throw Exception("响应体为空")
 
-        if (!targetDir.exists()) {
-            targetDir.mkdirs()
+        if (targetDir.exists()) {
+            targetDir.deleteRecursively()
         }
+        targetDir.mkdirs()
 
         val tempZipFile = File(targetDir.parentFile, "temp_${config.id}_config.zip")
         body.byteStream().use { input ->
