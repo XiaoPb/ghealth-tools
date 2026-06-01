@@ -309,7 +309,8 @@ private fun CommandCard(
                                         chipName = chipName,
                                         onValueChange = { value ->
                                             paramValues[param.name] = value
-                                        }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                 }
