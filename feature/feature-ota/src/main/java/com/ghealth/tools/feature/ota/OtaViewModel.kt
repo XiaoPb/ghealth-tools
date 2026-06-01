@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -292,17 +293,6 @@ class OtaViewModel @Inject constructor(
     fun dismissControlPointDialog() { _uiState.update { it.copy(showControlPointDialog = false) } }
     fun updateControlPointHex(hex: String) { _uiState.update { it.copy(controlPointHex = hex) } }
 
-    fun toggleDebugAction(action: DebugMenuAction) {
-        _uiState.update { state ->
-            val current = state.activeDebugActions
-            if (current.contains(action)) {
-                state.copy(activeDebugActions = current - action)
-            } else {
-                state.copy(activeDebugActions = current + action)
-            }
-        }
-    }
-
     fun writeControlPoint() {
         viewModelScope.launch {
             _uiState.update { it.copy(showControlPointDialog = false) }
@@ -316,7 +306,212 @@ class OtaViewModel @Inject constructor(
         }
     }
 
-    fun executeDebugCommand(
+    fun updateRamAddress(v: String) { _uiState.update { it.copy(ramAddress = v) } }
+    fun updateRamLength(v: String) { _uiState.update { it.copy(ramLength = v) } }
+    fun updateRamData(v: String) { _uiState.update { it.copy(ramData = v) } }
+
+    fun readRam() {
+        val addr = _uiState.value.ramAddress.trim().removePrefix("0x").removePrefix("0X")
+            .toLongOrNull(16)?.toInt() ?: return
+        val len = _uiState.value.ramLength.trim().toIntOrNull() ?: return
+        executeDebugRead(DebugMenuAction.RAM_READ_WRITE) { e ->
+            val result = e.readRam(addr, len)
+            if (result.success && result.data != null) {
+                _uiState.update { it.copy(ramReadData = result.data) }
+            }
+            result
+        }
+    }
+
+    fun writeRam() {
+        val addr = _uiState.value.ramAddress.trim().removePrefix("0x").removePrefix("0X")
+            .toLongOrNull(16)?.toInt() ?: return
+        val data = parseHexString(_uiState.value.ramData) ?: return
+        executeDebugWrite(DebugMenuAction.RAM_READ_WRITE) { it.writeRam(addr, data) }
+    }
+
+    fun showRamDownloadDialog() {
+        val data = _uiState.value.ramReadData ?: return
+        val addr = _uiState.value.ramAddress.trim().removePrefix("0x").removePrefix("0X")
+        val defaultName = "0x${addr.uppercase()}-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.getDefault()).format(java.util.Date())}.bin"
+        val savePath = getApplication<android.app.Application>().getExternalFilesDir(null)?.absolutePath + "/ota_dump/"
+        _uiState.update { it.copy(showDownloadDialog = true, downloadDefaultName = defaultName, downloadData = data, downloadSavePath = savePath) }
+    }
+
+    fun updateFlashAddress(v: String) { _uiState.update { it.copy(flashAddress = v) } }
+    fun updateFlashLength(v: String) { _uiState.update { it.copy(flashLength = v) } }
+    fun updateFlashData(v: String) { _uiState.update { it.copy(flashData = v) } }
+
+    fun readFlash() {
+        val addr = _uiState.value.flashAddress.trim().removePrefix("0x").removePrefix("0X")
+            .toLongOrNull(16)?.toInt() ?: return
+        val len = _uiState.value.flashLength.trim().toIntOrNull() ?: return
+        executeDebugRead(DebugMenuAction.FLASH_READ_WRITE) { e ->
+            val result = e.readFlash(addr, len)
+            if (result.success && result.data != null) {
+                _uiState.update { it.copy(flashReadData = result.data) }
+            }
+            result
+        }
+    }
+
+    fun writeFlash() {
+        val addr = _uiState.value.flashAddress.trim().removePrefix("0x").removePrefix("0X")
+            .toLongOrNull(16)?.toInt() ?: return
+        val data = parseHexString(_uiState.value.flashData) ?: return
+        executeDebugWrite(DebugMenuAction.FLASH_READ_WRITE) { it.writeFlash(addr, data) }
+    }
+
+    fun showFlashDownloadDialog() {
+        val data = _uiState.value.flashReadData ?: return
+        val addr = _uiState.value.flashAddress.trim().removePrefix("0x").removePrefix("0X")
+        val defaultName = "0x${addr.uppercase()}-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.getDefault()).format(java.util.Date())}.bin"
+        val savePath = getApplication<android.app.Application>().getExternalFilesDir(null)?.absolutePath + "/ota_dump/"
+        _uiState.update { it.copy(showDownloadDialog = true, downloadDefaultName = defaultName, downloadData = data, downloadSavePath = savePath) }
+    }
+
+    fun updateRegisterAddress(v: String) { _uiState.update { it.copy(registerAddress = v) } }
+    fun updateRegisterData(v: String) { _uiState.update { it.copy(registerData = v) } }
+
+    fun readRegister() {
+        val addr = _uiState.value.registerAddress.trim().removePrefix("0x").removePrefix("0X")
+            .toLongOrNull(16)?.toInt() ?: return
+        executeDebugRead(DebugMenuAction.REGISTER_READ_WRITE) { it.readRegister(addr) }
+    }
+
+    fun writeRegister() {
+        val addr = _uiState.value.registerAddress.trim().removePrefix("0x").removePrefix("0X")
+            .toLongOrNull(16)?.toInt() ?: return
+        val data = parseHexString(_uiState.value.registerData) ?: return
+        executeDebugWrite(DebugMenuAction.REGISTER_READ_WRITE) { it.writeRegister(addr, data) }
+    }
+
+    fun updateNvdsTag(v: String) { _uiState.update { it.copy(nvdsTag = v) } }
+    fun updateNvdsData(v: String) { _uiState.update { it.copy(nvdsData = v) } }
+
+    fun readNvds() {
+        val tag = _uiState.value.nvdsTag.trim().removePrefix("0x").removePrefix("0X")
+            .toLongOrNull(16)?.toInt() ?: 0
+        executeDebugRead(DebugMenuAction.NVDS_READ_WRITE) { it.readNvds(tag) }
+    }
+
+    fun writeNvds() {
+        val tag = _uiState.value.nvdsTag.trim().removePrefix("0x").removePrefix("0X")
+            .toLongOrNull(16)?.toInt() ?: 0
+        val data = parseHexString(_uiState.value.nvdsData) ?: return
+        executeDebugWrite(DebugMenuAction.NVDS_READ_WRITE) { it.writeNvds(tag, data) }
+    }
+
+    fun deleteNvds() {
+        val tag = _uiState.value.nvdsTag.trim().removePrefix("0x").removePrefix("0X")
+            .toLongOrNull(16)?.toInt() ?: 0
+        executeDebugWrite(DebugMenuAction.NVDS_READ_WRITE) { it.writeNvds(tag, ByteArray(0)) }
+    }
+
+    fun readEfuse() {
+        executeDebugRead(DebugMenuAction.READ_EFUSE) { it.readEfuse() }
+    }
+
+    fun clearEfuseResult() {
+        _uiState.update { it.copy(efuseResult = "") }
+    }
+
+    fun readBootInfo() {
+        viewModelScope.launch {
+            if (!otaEngine.isDfuReady) {
+                _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
+                return@launch
+            }
+            try {
+                val result = otaEngine.readBootInfo()
+                if (result.success) {
+                    _uiState.update { it.copy(bootInfoData = parseBootInfoFromMessage(result.message)) }
+                } else {
+                    _uiState.update { it.copy(errorMessage = result.message) }
+                }
+            } catch (e: Throwable) {
+                _uiState.update { it.copy(errorMessage = "读取BootInfo失败: ${e.message}") }
+            }
+        }
+    }
+
+    fun rebootDevice() {
+        viewModelScope.launch {
+            if (!otaEngine.isDfuReady) {
+                _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
+                return@launch
+            }
+            val result = otaEngine.reboot()
+            if (!result.success) {
+                _uiState.update { it.copy(errorMessage = result.message) }
+            }
+        }
+    }
+
+    fun dismissDownloadDialog() {
+        _uiState.update { it.copy(showDownloadDialog = false, downloadData = null) }
+    }
+
+    fun updateDownloadFileName(name: String) {
+        _uiState.update { it.copy(downloadDefaultName = name) }
+    }
+
+    fun confirmDownload() {
+        val data = _uiState.value.downloadData ?: return
+        val fileName = _uiState.value.downloadDefaultName.ifBlank { "dump.bin" }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val dir = java.io.File(getApplication<android.app.Application>().getExternalFilesDir(null), "ota_dump")
+                if (!dir.exists()) dir.mkdirs()
+                val file = java.io.File(dir, fileName)
+                file.writeBytes(data)
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(showDownloadDialog = false, downloadData = null) }
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(errorMessage = "保存失败: ${e.message}") }
+                }
+            }
+        }
+    }
+
+    private fun parseHexString(hex: String): ByteArray? {
+        val clean = hex.trim().replace(" ", "").replace("\n", "").replace("\r", "")
+        if (clean.isEmpty() || clean.length % 2 != 0) return null
+        return ByteArray(clean.length / 2) { i ->
+            ((Character.digit(clean[i * 2], 16) shl 4) + Character.digit(clean[i * 2 + 1], 16)).toByte()
+        }
+    }
+
+    private fun parseBootInfoFromMessage(message: String): BootInfoData? {
+        try {
+            val lines = message.lines()
+            var bi = BootInfoData()
+            for (line in lines) {
+                val trimmed = line.trim()
+                when {
+                    trimmed.startsWith("binSize=") -> bi = bi.copy(binSize = trimmed.substringAfter("=").split(",")[0].toIntOrNull() ?: 0)
+                    trimmed.startsWith("checksum=") -> bi = bi.copy(checksum = trimmed.substringAfter("0x").split(",")[0].toIntOrNull(16) ?: 0)
+                    trimmed.startsWith("loadAddr=") -> bi = bi.copy(loadAddr = trimmed.substringAfter("0x").split(",")[0].toIntOrNull(16) ?: 0)
+                    trimmed.startsWith("runAddr=") -> bi = bi.copy(runAddr = trimmed.substringAfter("0x").split(",")[0].toIntOrNull(16) ?: 0)
+                    trimmed.startsWith("xqspiXipCmd=") -> bi = bi.copy(xqspiXipCmd = trimmed.substringAfter("0x").split(",")[0].toIntOrNull(16) ?: 0)
+                    trimmed.startsWith("xqspiSpeed=") -> bi = bi.copy(xqspiSpeed = trimmed.substringAfter("=").toIntOrNull() ?: 0)
+                    trimmed.startsWith("codeCopyMode=") -> bi = bi.copy(codeCopyMode = trimmed.substringAfter("=").toIntOrNull() ?: 0)
+                    trimmed.startsWith("systemClk=") -> bi = bi.copy(systemClk = trimmed.substringAfter("=").toIntOrNull() ?: 0)
+                    trimmed.startsWith("checkImage=") -> bi = bi.copy(checkImage = trimmed.substringAfter("=").toIntOrNull() ?: 0)
+                    trimmed.startsWith("bootDelay=") -> bi = bi.copy(bootDelay = trimmed.substringAfter("=").toIntOrNull() ?: 0)
+                    trimmed.startsWith("isDapBoot=") -> bi = bi.copy(isDapBoot = trimmed.substringAfter("=").toIntOrNull() ?: 0)
+                    trimmed.startsWith("isEncrypted=") -> bi = bi.copy(isEncrypted = trimmed.substringAfter("=").toBoolean())
+                }
+            }
+            return bi
+        } catch (e: Throwable) {
+            return null
+        }
+    }
+
+    private fun executeDebugRead(
         action: DebugMenuAction,
         operation: suspend (OtaEngine) -> DebugResult,
     ) {
@@ -341,7 +536,7 @@ class OtaViewModel @Inject constructor(
         }
     }
 
-    fun executeDebugWrite(
+    private fun executeDebugWrite(
         action: DebugMenuAction,
         operation: suspend (OtaEngine) -> DebugResult,
     ) {

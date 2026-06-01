@@ -27,9 +27,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.SdStorage
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -155,6 +161,38 @@ fun OtaScreen(
         )
     }
 
+    if (state.showDownloadDialog) {
+        var fileName by remember { mutableStateOf(state.downloadDefaultName) }
+        LaunchedEffect(state.downloadDefaultName) { fileName = state.downloadDefaultName }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDownloadDialog() },
+            title = { Text("保存读取数据") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = fileName,
+                        onValueChange = { fileName = it; viewModel.updateDownloadFileName(it) },
+                        label = { Text("文件名") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "保存路径: ${state.downloadSavePath}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmDownload() }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissDownloadDialog() }) { Text("取消") }
+            }
+        )
+    }
+
     if (state.isUpgrading) {
         AlertDialog(
             onDismissRequest = {},
@@ -252,14 +290,73 @@ fun OtaScreen(
                 enabled = !state.isUpgrading,
             )
 
-            state.activeDebugActions.forEach { action ->
-                DebugActionCard(
-                    action = action,
-                    debugResult = state.debugResults[action],
-                    onDebugRead = { engine -> viewModel.executeDebugCommand(action, engine) },
-                    onDebugWrite = { engine -> viewModel.executeDebugWrite(action, engine) },
-                )
-            }
+            RamReadWriteCard(
+                address = state.ramAddress,
+                length = state.ramLength,
+                data = state.ramData,
+                readData = state.ramReadData,
+                debugResult = state.debugResults[DebugMenuAction.RAM_READ_WRITE],
+                onAddressChange = viewModel::updateRamAddress,
+                onLengthChange = viewModel::updateRamLength,
+                onDataChange = viewModel::updateRamData,
+                onRead = viewModel::readRam,
+                onWrite = viewModel::writeRam,
+                onDownload = viewModel::showRamDownloadDialog,
+                enabled = !state.isUpgrading,
+            )
+
+            FlashReadWriteCard(
+                address = state.flashAddress,
+                length = state.flashLength,
+                data = state.flashData,
+                readData = state.flashReadData,
+                debugResult = state.debugResults[DebugMenuAction.FLASH_READ_WRITE],
+                onAddressChange = viewModel::updateFlashAddress,
+                onLengthChange = viewModel::updateFlashLength,
+                onDataChange = viewModel::updateFlashData,
+                onRead = viewModel::readFlash,
+                onWrite = viewModel::writeFlash,
+                onDownload = viewModel::showFlashDownloadDialog,
+                enabled = !state.isUpgrading,
+            )
+
+            RegisterReadWriteCard(
+                address = state.registerAddress,
+                data = state.registerData,
+                debugResult = state.debugResults[DebugMenuAction.REGISTER_READ_WRITE],
+                onAddressChange = viewModel::updateRegisterAddress,
+                onDataChange = viewModel::updateRegisterData,
+                onRead = viewModel::readRegister,
+                onWrite = viewModel::writeRegister,
+                enabled = !state.isUpgrading,
+            )
+
+            NvdsReadWriteCard(
+                tag = state.nvdsTag,
+                data = state.nvdsData,
+                debugResult = state.debugResults[DebugMenuAction.NVDS_READ_WRITE],
+                onTagChange = viewModel::updateNvdsTag,
+                onDataChange = viewModel::updateNvdsData,
+                onRead = viewModel::readNvds,
+                onWrite = viewModel::writeNvds,
+                onDelete = viewModel::deleteNvds,
+                enabled = !state.isUpgrading,
+            )
+
+            EfuseReadCard(
+                debugResult = state.debugResults[DebugMenuAction.READ_EFUSE] ?: state.efuseResult,
+                onRead = viewModel::readEfuse,
+                onClear = viewModel::clearEfuseResult,
+                enabled = !state.isUpgrading,
+            )
+
+            BootInfoCard(
+                bootInfo = state.bootInfoData,
+                debugResult = state.debugResults[DebugMenuAction.READ_BOOT_INFO],
+                onRead = viewModel::readBootInfo,
+                onReboot = viewModel::rebootDevice,
+                enabled = !state.isUpgrading,
+            )
 
             LogCard(
                 logLines = state.logLines,
@@ -323,18 +420,6 @@ fun OtaTopBarMenu(viewModel: OtaViewModel) {
                     )
                 },
             )
-            DebugMenuAction.entries.forEach { action ->
-                DropdownMenuItem(
-                    text = { Text(action.label) },
-                    onClick = { viewModel.toggleDebugAction(action) },
-                    leadingIcon = {
-                        Checkbox(
-                            checked = state.activeDebugActions.contains(action),
-                            onCheckedChange = null,
-                        )
-                    },
-                )
-            }
             DropdownMenuItem(
                 text = { Text("写控制点") },
                 onClick = {
@@ -616,12 +701,10 @@ private fun FirmwareUpgradeCard(
                     onClick = { if (enabled) onSelectFile() },
                     enabled = enabled,
                     shape = ButtonShape,
-                    contentPadding = ButtonDefaults.TextButtonContentPadding,
-                    modifier = Modifier.height(28.dp),
                 ) {
                     Text(
                         if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                     )
                 }
                 if (fileInfo.fileName.isNotEmpty() && fileInfo.isValid) {
@@ -630,10 +713,8 @@ private fun FirmwareUpgradeCard(
                         onClick = onStartUpgrade,
                         enabled = enabled,
                         shape = ButtonShape,
-                        contentPadding = ButtonDefaults.TextButtonContentPadding,
-                        modifier = Modifier.height(28.dp),
                     ) {
-                        Text("升级", style = MaterialTheme.typography.labelSmall)
+                        Text("升级", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -836,169 +917,83 @@ private fun ResourceUpgradeCard(
 }
 
 @Composable
-private fun DebugActionCard(
-    action: DebugMenuAction,
+private fun RamReadWriteCard(
+    address: String,
+    length: String,
+    data: String,
+    readData: ByteArray?,
     debugResult: String?,
-    onDebugRead: (suspend (OtaEngine) -> DebugResult) -> Unit,
-    onDebugWrite: (suspend (OtaEngine) -> DebugResult) -> Unit,
+    onAddressChange: (String) -> Unit,
+    onLengthChange: (String) -> Unit,
+    onDataChange: (String) -> Unit,
+    onRead: () -> Unit,
+    onWrite: () -> Unit,
+    onDownload: () -> Unit,
+    enabled: Boolean,
 ) {
-    var addressText by remember { mutableStateOf("") }
-    var lengthText by remember { mutableStateOf("") }
-    var dataText by remember { mutableStateOf("") }
-
-    fun parseAddress(): Int {
-        val raw = addressText.trim().removePrefix("0x").removePrefix("0X")
-        return raw.toLongOrNull(16)?.toInt() ?: 0
-    }
-
-    fun parseLength(): Int = lengthText.trim().toIntOrNull() ?: 64
-
-    fun parseHexData(): ByteArray? {
-        val raw = dataText.trim()
-        if (raw.isEmpty()) return null
-        val clean = raw.replace(" ", "").replace("\n", "").replace("\r", "")
-        if (clean.length % 2 != 0) return null
-        return ByteArray(clean.length / 2) { i ->
-            ((Character.digit(clean[i * 2], 16) shl 4) + Character.digit(clean[i * 2 + 1], 16)).toByte()
-        }
-    }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(action.label, style = MaterialTheme.typography.titleMedium)
-            Text(action.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Memory, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("读写RAM", style = MaterialTheme.typography.titleMedium)
+            }
             Spacer(modifier = Modifier.height(8.dp))
 
-            when (action) {
-                DebugMenuAction.RAM_READ_WRITE, DebugMenuAction.FLASH_READ_WRITE -> {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = addressText,
-                            onValueChange = { addressText = it },
-                            label = { Text("地址 (Hex)") },
-                            modifier = Modifier.weight(1f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                            singleLine = true,
-                        )
-                        OutlinedTextField(
-                            value = lengthText,
-                            onValueChange = { lengthText = it },
-                            label = { Text("长度") },
-                            modifier = Modifier.weight(0.5f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = dataText,
-                        onValueChange = { dataText = it },
-                        label = { Text("写入数据 (Hex)") },
-                        placeholder = { Text("AA BB CC DD") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                        singleLine = false,
-                        maxLines = 3,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                            val addr = parseAddress()
-                            val len = parseLength()
-                            val readOp: suspend (OtaEngine) -> DebugResult =
-                                if (action == DebugMenuAction.RAM_READ_WRITE)
-                                    { engine -> engine.readRam(addr, len) }
-                                else
-                                    { engine -> engine.readFlash(addr, len) }
-                            onDebugRead(readOp)
-                        }, shape = ButtonShape) { Text("读取") }
-                        OutlinedButton(
-                            onClick = {
-                            val addr = parseAddress()
-                            val data = parseHexData() ?: return@OutlinedButton
-                            val writeOp: suspend (OtaEngine) -> DebugResult =
-                                if (action == DebugMenuAction.RAM_READ_WRITE)
-                                    { engine -> engine.writeRam(addr, data) }
-                                else
-                                    { engine -> engine.writeFlash(addr, data) }
-                            onDebugWrite(writeOp)
-                        }, shape = ButtonShape) { Text("写入") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = onAddressChange,
+                    label = { Text("起始地址 (Hex)") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    singleLine = true,
+                    enabled = enabled,
+                )
+                Button(onClick = onRead, enabled = enabled, shape = ButtonShape) {
+                    Text("读取")
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = length,
+                    onValueChange = onLengthChange,
+                    label = { Text("数据长度") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    enabled = enabled,
+                )
+                Text("Byte", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (readData != null) {
+                    Button(onClick = onDownload, enabled = enabled, shape = ButtonShape) {
+                        Text("下载")
                     }
                 }
-                DebugMenuAction.REGISTER_READ_WRITE -> {
-                    OutlinedTextField(
-                        value = addressText,
-                        onValueChange = { addressText = it },
-                        label = { Text("寄存器地址 (Hex)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                        singleLine = true,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = dataText,
-                        onValueChange = { dataText = it },
-                        label = { Text("写入数据 (Hex)") },
-                        placeholder = { Text("AA BB CC DD") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                        singleLine = false,
-                        maxLines = 2,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                            val addr = parseAddress()
-                            onDebugRead { engine -> engine.readRegister(addr) }
-                        }, shape = ButtonShape) { Text("读取") }
-                        OutlinedButton(
-                            onClick = {
-                            val addr = parseAddress()
-                            val data = parseHexData() ?: return@OutlinedButton
-                            onDebugWrite { engine -> engine.writeRegister(addr, data) }
-                        }, shape = ButtonShape) { Text("写入") }
-                    }
-                }
-                DebugMenuAction.READ_EFUSE -> {
-                    Button(
-                        onClick = { onDebugRead { engine -> engine.readEfuse() } },
-                        shape = ButtonShape,
-                    ) { Text("读取eFuse") }
-                }
-                DebugMenuAction.NVDS_READ_WRITE -> {
-                    OutlinedTextField(
-                        value = dataText,
-                        onValueChange = { dataText = it },
-                        label = { Text("写入数据 (Hex)") },
-                        placeholder = { Text("AA BB CC DD") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                        singleLine = false,
-                        maxLines = 3,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { onDebugRead { engine -> engine.readNvds() } },
-                            shape = ButtonShape,
-                        ) { Text("读取NVDS") }
-                        OutlinedButton(
-                            onClick = {
-                            val data = parseHexData() ?: return@OutlinedButton
-                            onDebugWrite { engine -> engine.writeNvds(data) }
-                        }, shape = ButtonShape) { Text("写入NVDS") }
-                    }
-                }
-                DebugMenuAction.READ_BOOT_INFO -> {
-                    Button(
-                        onClick = { onDebugRead { engine -> engine.readBootInfo() } },
-                        shape = ButtonShape,
-                    ) { Text("读取BootInfo") }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = data,
+                onValueChange = onDataChange,
+                label = { Text("写入数据 (Hex)") },
+                placeholder = { Text("AA BB CC DD") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                singleLine = false,
+                maxLines = 3,
+                enabled = enabled,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.End) {
+                OutlinedButton(onClick = onWrite, enabled = enabled, shape = ButtonShape) {
+                    Text("写入")
                 }
             }
 
@@ -1009,6 +1004,372 @@ private fun DebugActionCard(
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FlashReadWriteCard(
+    address: String,
+    length: String,
+    data: String,
+    readData: ByteArray?,
+    debugResult: String?,
+    onAddressChange: (String) -> Unit,
+    onLengthChange: (String) -> Unit,
+    onDataChange: (String) -> Unit,
+    onRead: () -> Unit,
+    onWrite: () -> Unit,
+    onDownload: () -> Unit,
+    enabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.SdStorage, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("读写Flash", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = onAddressChange,
+                    label = { Text("起始地址 (Hex)") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    singleLine = true,
+                    enabled = enabled,
+                )
+                Button(onClick = onRead, enabled = enabled, shape = ButtonShape) {
+                    Text("读取")
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = length,
+                    onValueChange = onLengthChange,
+                    label = { Text("数据长度") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    enabled = enabled,
+                )
+                Text("Byte", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (readData != null) {
+                    Button(onClick = onDownload, enabled = enabled, shape = ButtonShape) {
+                        Text("下载")
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = data,
+                onValueChange = onDataChange,
+                label = { Text("写入数据 (Hex)") },
+                placeholder = { Text("AA BB CC DD") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                singleLine = false,
+                maxLines = 3,
+                enabled = enabled,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.End) {
+                OutlinedButton(onClick = onWrite, enabled = enabled, shape = ButtonShape) {
+                    Text("写入")
+                }
+            }
+
+            debugResult?.let { result ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = result,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RegisterReadWriteCard(
+    address: String,
+    data: String,
+    debugResult: String?,
+    onAddressChange: (String) -> Unit,
+    onDataChange: (String) -> Unit,
+    onRead: () -> Unit,
+    onWrite: () -> Unit,
+    enabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("读写寄存器", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = onAddressChange,
+                    label = { Text("起始地址 (Hex)") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    singleLine = true,
+                    enabled = enabled,
+                )
+                Button(onClick = onRead, enabled = enabled, shape = ButtonShape) {
+                    Text("读取")
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = data,
+                onValueChange = onDataChange,
+                label = { Text("写入数据 (Hex)") },
+                placeholder = { Text("AA BB CC DD") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                singleLine = false,
+                maxLines = 2,
+                enabled = enabled,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.End) {
+                OutlinedButton(onClick = onWrite, enabled = enabled, shape = ButtonShape) {
+                    Text("写入")
+                }
+            }
+
+            debugResult?.let { result ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = result,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NvdsReadWriteCard(
+    tag: String,
+    data: String,
+    debugResult: String?,
+    onTagChange: (String) -> Unit,
+    onDataChange: (String) -> Unit,
+    onRead: () -> Unit,
+    onWrite: () -> Unit,
+    onDelete: () -> Unit,
+    enabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("读写NVDS", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = tag,
+                    onValueChange = onTagChange,
+                    label = { Text("标签 (Hex)") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    singleLine = true,
+                    enabled = enabled,
+                )
+                OutlinedButton(onClick = onDelete, enabled = enabled, shape = ButtonShape) {
+                    Text("删除")
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = data,
+                onValueChange = onDataChange,
+                label = { Text("写入数据 (Hex)") },
+                placeholder = { Text("AA BB CC DD") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                singleLine = false,
+                maxLines = 3,
+                enabled = enabled,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onRead, enabled = enabled, shape = ButtonShape) {
+                    Text("读取")
+                }
+                OutlinedButton(onClick = onWrite, enabled = enabled, shape = ButtonShape) {
+                    Text("写入")
+                }
+            }
+
+            debugResult?.let { result ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = result,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EfuseReadCard(
+    debugResult: String,
+    onRead: () -> Unit,
+    onClear: () -> Unit,
+    enabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("读取Efuse", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onClear, enabled = enabled, shape = ButtonShape) {
+                    Text("清空显示")
+                }
+                Button(onClick = onRead, enabled = enabled, shape = ButtonShape) {
+                    Text("读取")
+                }
+            }
+
+            if (debugResult.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = debugResult,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BootInfoCard(
+    bootInfo: BootInfoData?,
+    debugResult: String?,
+    onRead: () -> Unit,
+    onReboot: () -> Unit,
+    enabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("读取BootInfo", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (bootInfo != null) {
+                BootInfoGrid(bootInfo = bootInfo)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onReboot, enabled = enabled, shape = ButtonShape) {
+                    Text("重启")
+                }
+                Button(onClick = onRead, enabled = enabled, shape = ButtonShape) {
+                    Text("读取")
+                }
+            }
+
+            debugResult?.let { result ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = result,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BootInfoGrid(bootInfo: BootInfoData) {
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontFamily = FontFamily.Monospace,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val valueStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
+
+    val items = listOf(
+        "binSize" to "${bootInfo.binSize}",
+        "checksum" to "0x${bootInfo.checksum.toString(16).uppercase()}",
+        "loadAddr" to "0x${bootInfo.loadAddr.toString(16).uppercase()}",
+        "runAddr" to "0x${bootInfo.runAddr.toString(16).uppercase()}",
+        "xqspiXipCmd" to "0x${bootInfo.xqspiXipCmd.toString(16).uppercase()}",
+        "xqspiSpeed" to "${bootInfo.xqspiSpeed}",
+        "codeCopyMode" to "${bootInfo.codeCopyMode}",
+        "systemClk" to "${bootInfo.systemClk}",
+        "checkImage" to "${bootInfo.checkImage}",
+        "bootDelay" to "${bootInfo.bootDelay}",
+        "isDapBoot" to "${bootInfo.isDapBoot}",
+        "isEncrypted" to "${bootInfo.isEncrypted}",
+    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        items.chunked(2).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                rowItems.forEach { (label, value) ->
+                    Row(modifier = Modifier.weight(1f)) {
+                        Text(text = "$label: ", style = labelStyle, maxLines = 1)
+                        Text(text = value, style = valueStyle, maxLines = 1)
+                    }
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }

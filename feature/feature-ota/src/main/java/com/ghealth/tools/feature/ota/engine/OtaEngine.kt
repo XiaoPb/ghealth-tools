@@ -364,12 +364,13 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         }
     }
 
-    suspend fun readNvds(): DebugResult = withContext(Dispatchers.IO) {
-        _logEvents.tryEmit("读取NVDS")
+    suspend fun readNvds(tag: Int = 0): DebugResult = withContext(Dispatchers.IO) {
+        _logEvents.tryEmit("读取NVDS tag=0x${tag.toString(16)}")
         try {
             val profile = requireProfile()
-            val param = HexSerializer(1)
+            val param = HexSerializer(1 + 1)
             param.put(1, 0)
+            param.put(1, tag)
             profile.sendCmd(CmdOpcode.OPERATION_NVDS, param.buffer)
             val rcv = profile.rcvCmd(CmdOpcode.OPERATION_NVDS)
             val data = ByteArray(rcv.rangeSize)
@@ -383,12 +384,13 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         }
     }
 
-    suspend fun writeNvds(data: ByteArray): DebugResult = withContext(Dispatchers.IO) {
-        _logEvents.tryEmit("写入NVDS 数据长度=${data.size}")
+    suspend fun writeNvds(tag: Int = 0, data: ByteArray): DebugResult = withContext(Dispatchers.IO) {
+        _logEvents.tryEmit("写入NVDS tag=0x${tag.toString(16)} 数据长度=${data.size}")
         try {
             val profile = requireProfile()
-            val param = HexSerializer(1 + data.size)
+            val param = HexSerializer(1 + 1 + data.size)
             param.put(1, 1)
+            param.put(1, tag)
             param.put(data)
             profile.sendCmd(CmdOpcode.OPERATION_NVDS, param.buffer)
             profile.rcvCmd(CmdOpcode.OPERATION_NVDS)
@@ -414,6 +416,21 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         } catch (e: Throwable) {
             Timber.e(e, "写控制点失败")
             DebugResult(success = false, message = "写入失败: ${e.message}")
+        }
+    }
+
+    suspend fun reboot(): DebugResult = withContext(Dispatchers.IO) {
+        _logEvents.tryEmit("发送重启命令")
+        try {
+            val profile = requireProfile()
+            val param = HexSerializer(1)
+            param.put(1, 0)
+            profile.sendCmd(CmdOpcode.RESET, param.buffer)
+            _logEvents.tryEmit("重启命令已发送")
+            DebugResult(success = true, message = "重启命令已发送")
+        } catch (e: Throwable) {
+            Timber.e(e, "重启命令发送失败")
+            DebugResult(success = false, message = "重启失败: ${e.message}")
         }
     }
 
