@@ -38,9 +38,11 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -285,22 +287,52 @@ private fun CommandCard(
                                     onCountChange = { readCount = it }
                                 )
                             } else {
-                                SingleRegReadInput { addr ->
+                                val readResult = executionState.result?.let { bytesToHexString(it) }
+                                SingleRegReadInput(
+                                    readResult = readResult
+                                ) { addr ->
                                     paramValues["regAddr"] = addr.toInt(16).toShort().toUShort()
                                     paramValues["readLen"] = 1
                                 }
                             }
                         }
                     } else {
-                        command.params.forEach { param ->
-                            ParamInput(
-                                param = param,
-                                chipName = chipName,
-                                onValueChange = { value ->
-                                    paramValues[param.name] = value
+                        command.params.chunked(2).forEach { rowParams ->
+                            val hasSpecialParam = rowParams.any {
+                                it.type == ParamType.FUNC_MODE_BITS || it.options != null
+                            }
+                            if (hasSpecialParam) {
+                                rowParams.forEach { param ->
+                                    ParamInput(
+                                        param = param,
+                                        chipName = chipName,
+                                        onValueChange = { value ->
+                                            paramValues[param.name] = value
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
                                 }
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    rowParams.forEach { param ->
+                                        ParamInput(
+                                            param = param,
+                                            chipName = chipName,
+                                            onValueChange = { value ->
+                                                paramValues[param.name] = value
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    if (rowParams.size == 1) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
                         }
                     }
 
@@ -353,10 +385,12 @@ private fun CommandCard(
 private fun ParamInput(
     param: CommandParamDef,
     onValueChange: (Any) -> Unit,
-    chipName: String = "gh3036"
+    chipName: String = "gh3036",
+    modifier: Modifier = Modifier
 ) {
     var textValue by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
+    val fieldModifier = Modifier.height(40.dp)
 
     when {
         // Multi-select func mode bits
@@ -413,9 +447,10 @@ private fun ParamInput(
                     value = selectedLabel,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text(param.label) },
+                    placeholder = { Text(param.label) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
+                    modifier = modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).height(40.dp),
+                    textStyle = MaterialTheme.typography.labelSmall
                 )
                 ExposedDropdownMenu(
                     expanded = expanded,
@@ -445,47 +480,45 @@ private fun ParamInput(
                     tsValue = it
                     it.toLongOrNull()?.let { ts -> onValueChange(ts.toInt()) }
                 },
-                label = { Text(param.label) },
-                supportingText = {
-                    Text(formatTimestamp(tsValue.toLongOrNull() ?: 0))
-                },
+                placeholder = { Text(param.label) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth()
+                modifier = modifier.then(fieldModifier),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.labelSmall
             )
         }
 
         // Array input
         param.type == ParamType.U16_ARRAY || param.type == ParamType.U8_ARRAY -> {
-            val desc = param.description
             OutlinedTextField(
                 value = textValue,
                 onValueChange = {
                     textValue = it
                     parseArrayValue(it, param.type)?.let { arr -> onValueChange(arr) }
                 },
-                label = { Text(param.label) },
-                supportingText = { Text(desc ?: "十六进制值，空格分隔") },
-                minLines = 2,
-                modifier = Modifier.fillMaxWidth()
+                placeholder = { Text(param.label) },
+                modifier = modifier.then(fieldModifier),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.labelSmall
             )
         }
 
         // Scalar hex/number input
         else -> {
             val isHexInput = param.type in listOf(ParamType.U16, ParamType.U32, ParamType.I16, ParamType.I32)
-            val desc = param.description
             OutlinedTextField(
                 value = textValue,
                 onValueChange = {
                     textValue = it
                     parseScalarValue(it, param.type)?.let { v -> onValueChange(v) }
                 },
-                label = { Text(param.label) },
-                supportingText = { Text(desc ?: if (isHexInput) "十六进制输入" else "") },
+                placeholder = { Text(param.label) },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = if (isHexInput) KeyboardType.Ascii else KeyboardType.Number
                 ),
-                modifier = Modifier.fillMaxWidth()
+                modifier = modifier.then(fieldModifier),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.labelSmall
             )
         }
     }
@@ -562,22 +595,25 @@ private fun SingleRegWriteInput(onChange: (addr: String, value: String) -> Unit)
     var addr by remember { mutableStateOf("") }
     var value by remember { mutableStateOf("") }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         OutlinedTextField(
             value = addr,
             onValueChange = { addr = it; onChange(addr, value) },
-            label = { Text("寄存器地址 (十六进制)") },
-            placeholder = { Text("如: 10") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            placeholder = { Text("地址(hex)") },
+            modifier = Modifier.weight(1f).height(40.dp),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.labelSmall
         )
         OutlinedTextField(
             value = value,
             onValueChange = { value = it; onChange(addr, value) },
-            label = { Text("写入值 (十六进制)") },
-            placeholder = { Text("如: 1234") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            placeholder = { Text("写入值(hex)") },
+            modifier = Modifier.weight(1f).height(40.dp),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.labelSmall
         )
     }
 }
@@ -601,9 +637,10 @@ private fun MultiRegWriteInput(
                         newList[index] = Pair(newAddr, value)
                         onChange(newList)
                     },
-                    label = { Text("地址") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
+                    placeholder = { Text("地址") },
+                    modifier = Modifier.weight(1f).height(40.dp),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.labelSmall
                 )
                 OutlinedTextField(
                     value = value,
@@ -612,9 +649,10 @@ private fun MultiRegWriteInput(
                         newList[index] = Pair(addr, newVal)
                         onChange(newList)
                     },
-                    label = { Text("值") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
+                    placeholder = { Text("值") },
+                    modifier = Modifier.weight(1f).height(40.dp),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.labelSmall
                 )
                 if (pairs.size > 1) {
                     IconButton(onClick = {
@@ -636,17 +674,34 @@ private fun MultiRegWriteInput(
 }
 
 @Composable
-private fun SingleRegReadInput(onChange: (String) -> Unit) {
+private fun SingleRegReadInput(
+    readResult: String?,
+    onChange: (String) -> Unit
+) {
     var addr by remember { mutableStateOf("") }
 
-    OutlinedTextField(
-        value = addr,
-        onValueChange = { addr = it; onChange(addr) },
-        label = { Text("寄存器地址 (十六进制)") },
-        placeholder = { Text("如: 10") },
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        singleLine = true
-    )
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(
+            value = addr,
+            onValueChange = { addr = it; onChange(addr) },
+            placeholder = { Text("地址(hex)") },
+            modifier = Modifier.weight(1f).height(40.dp),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.labelSmall
+        )
+        OutlinedTextField(
+            value = readResult ?: "",
+            onValueChange = {},
+            readOnly = true,
+            placeholder = { Text("读取结果") },
+            modifier = Modifier.weight(1f).height(40.dp),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.labelSmall
+        )
+    }
 }
 
 @Composable
@@ -656,22 +711,25 @@ private fun MultiRegReadInput(
     onAddrChange: (String) -> Unit,
     onCountChange: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         OutlinedTextField(
             value = addr,
             onValueChange = onAddrChange,
-            label = { Text("起始地址 (十六进制)") },
-            placeholder = { Text("如: 10") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            placeholder = { Text("起始地址(hex)") },
+            modifier = Modifier.weight(1f).height(40.dp),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.labelSmall
         )
         OutlinedTextField(
             value = count,
             onValueChange = onCountChange,
-            label = { Text("读取个数") },
-            placeholder = { Text("1-200") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            placeholder = { Text("读取个数") },
+            modifier = Modifier.weight(1f).height(40.dp),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.labelSmall
         )
     }
 }
@@ -789,7 +847,7 @@ private fun RegisterConfigDownloadCard(
                                 readOnly = true,
                                 label = { Text("选择配置") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = configExpanded) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                             )
                             ExposedDropdownMenu(
                                 expanded = configExpanded,
@@ -909,7 +967,7 @@ private fun RegisterConfigDownloadCard(
 }
 
 @Composable
-private fun StepIndicator(
+internal fun StepIndicator(
     label: String,
     isActive: Boolean,
     isCompleted: Boolean,
@@ -960,4 +1018,8 @@ private fun groupIcon(group: CommandGroup): ImageVector = when (group) {
     CommandGroup.TIME -> Icons.Default.Timer
     CommandGroup.FACTORY -> Icons.Default.Verified
     CommandGroup.OTHER -> Icons.Default.Settings
+}
+
+private fun bytesToHexString(bytes: ByteArray): String {
+    return bytes.joinToString(" ") { "%02X".format(it) }
 }

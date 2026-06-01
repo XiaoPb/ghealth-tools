@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,7 +26,9 @@ import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Cable
 import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Sort
@@ -35,6 +39,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -117,6 +122,7 @@ private fun ConnectionScreenLandscape(
                 onDisconnectAll = viewModel::disconnectAll,
                 onDisconnectDevice = viewModel::disconnectDevice,
                 onWorkMode = viewModel::showWorkModeDialog,
+                onAppConfig = viewModel::showAppConfigDialog,
                 onCommand = { showCommandPanel = true },
                 onFactoryTest = onFactoryTest,
                 onOtaUpgrade = onOtaUpgrade,
@@ -209,6 +215,15 @@ private fun ConnectionScreenLandscape(
             }
         )
     }
+    if (state.showAppConfigDialog) {
+        AppConfigDialog(
+            downloadState = state.registerConfigDownloadState,
+            chipName = state.selectedChip,
+            onReloadConfigs = { viewModel.loadRegisterConfigFiles(state.selectedChip) },
+            onSelectAndDownload = viewModel::selectAndDownloadConfig,
+            onDismiss = viewModel::dismissAppConfigDialog
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -246,6 +261,7 @@ private fun ConnectionScreenCompact(
                         onDisconnectAll = viewModel::disconnectAll,
                         onDisconnectDevice = viewModel::disconnectDevice,
                         onWorkMode = viewModel::showWorkModeDialog,
+                        onAppConfig = viewModel::showAppConfigDialog,
                         onCommand = { navController.navigate(CommandRoutes.COMMAND_PANEL) },
                         onFactoryTest = onFactoryTest,
                         onOtaUpgrade = onOtaUpgrade,
@@ -299,6 +315,15 @@ private fun ConnectionScreenCompact(
                     }
                 )
             }
+            if (state.showAppConfigDialog) {
+                AppConfigDialog(
+                    downloadState = state.registerConfigDownloadState,
+                    chipName = state.selectedChip,
+                    onReloadConfigs = { viewModel.loadRegisterConfigFiles(state.selectedChip) },
+                    onSelectAndDownload = viewModel::selectAndDownloadConfig,
+                    onDismiss = viewModel::dismissAppConfigDialog
+                )
+            }
         }
         composable(CommandRoutes.COMMAND_PANEL) {
             CommandPanelScreen(
@@ -325,6 +350,7 @@ private fun MainMenuContent(
     onDisconnectAll: () -> Unit,
     onDisconnectDevice: (String) -> Unit,
     onWorkMode: () -> Unit,
+    onAppConfig: () -> Unit,
     onCommand: () -> Unit,
     onFactoryTest: () -> Unit = {},
     onOtaUpgrade: () -> Unit = {},
@@ -378,6 +404,16 @@ private fun MainMenuContent(
             subtitle = state.currentWorkMode?.name ?: "未设置",
             onClick = onWorkMode
         )
+        if (state.currentWorkMode == com.ghealth.tools.core.model.WorkMode.MCU_ONLINE) {
+            val configSubtitle = state.registerConfigDownloadState.selectedConfig?.fileName
+                ?: "选择并下载寄存器配置到设备"
+            MenuItemCard(
+                icon = Icons.Default.Memory,
+                title = "应用配置",
+                subtitle = configSubtitle,
+                onClick = onAppConfig
+            )
+        }
         MenuItemCard(
             icon = Icons.Default.Terminal,
             title = "命令操作",
@@ -713,4 +749,227 @@ private fun ConnectionState.toUiStatus(): ConnectionStatus = when (this) {
     ConnectionState.CONNECTED -> ConnectionStatus.Connected
     ConnectionState.CONNECTING -> ConnectionStatus.Connecting
     ConnectionState.DISCONNECTED, ConnectionState.DISCONNECTING -> ConnectionStatus.Disconnected
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppConfigDialog(
+    downloadState: RegisterConfigDownloadState,
+    chipName: String,
+    onReloadConfigs: () -> Unit,
+    onSelectAndDownload: (ConfigFileInfo) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val configs = downloadState.availableConfigs
+    val isLoading = downloadState.status == DownloadStatus.LOADING_CONFIGS
+    val isDownloading = downloadState.status == DownloadStatus.DOWNLOADING
+    val isCompleted = downloadState.status == DownloadStatus.COMPLETED
+    val isError = downloadState.status == DownloadStatus.ERROR
+    val selectedConfig = downloadState.selectedConfig
+
+    val groupedConfigs = remember(configs) {
+        configs.groupBy { it.displayPath.substringBefore("/") }
+    }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!isDownloading) onDismiss()
+        },
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("应用配置")
+                Text(
+                    text = chipName.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("加载配置文件中...")
+                    }
+                }
+            } else if (configs.isEmpty() && !isDownloading && !isCompleted) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "未找到配置文件",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(onClick = onReloadConfigs) {
+                            Text("重新加载")
+                        }
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 240.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        groupedConfigs.forEach { (projectName, projectConfigs) ->
+                            item(key = "header_$projectName") {
+                                Text(
+                                    text = projectName,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
+                                )
+                            }
+                            items(projectConfigs, key = { it.displayPath }) { info ->
+                                val isSelected = info == selectedConfig
+                                val fileName = info.fileName
+                                Card(
+                                    onClick = {
+                                        if (!isDownloading && !isCompleted) {
+                                            onSelectAndDownload(info)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = when {
+                                            isSelected && isDownloading -> MaterialTheme.colorScheme.primaryContainer
+                                            isSelected && isError -> MaterialTheme.colorScheme.errorContainer
+                                            isSelected -> MaterialTheme.colorScheme.secondaryContainer
+                                            else -> MaterialTheme.colorScheme.surfaceContainerLow
+                                        }
+                                    ),
+                                    enabled = !isDownloading && !isCompleted
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = fileName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (isSelected && isDownloading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else if (isSelected && isCompleted) {
+                                            Icon(
+                                                Icons.Default.Done,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (isDownloading) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "正在下载配置到设备...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    if (isCompleted) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Done,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        "配置下载完成",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        selectedConfig?.displayPath ?: "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    downloadState.error?.let { error ->
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (isCompleted || isError) {
+                TextButton(onClick = onDismiss) {
+                    Text("关闭")
+                }
+            }
+        },
+        dismissButton = {
+            if (!isDownloading && !isCompleted) {
+                TextButton(onClick = onDismiss) {
+                    Text("关闭")
+                }
+            }
+        }
+    )
 }

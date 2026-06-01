@@ -63,6 +63,7 @@ data class ConnectionUiState(
     val showWorkModeDialog: Boolean = false,
     val showFunctionDialog: Boolean = false,
     val showCommandSheet: Boolean = false,
+    val showAppConfigDialog: Boolean = false,
     val minRssi: Int = -80,
     val scanError: String? = null,
     val connectionError: String? = null,
@@ -286,6 +287,29 @@ class ConnectionViewModel @Inject constructor(
 
     fun dismissCommandSheet() {
         _uiState.update { it.copy(showCommandSheet = false) }
+    }
+
+    fun showAppConfigDialog() {
+        val chip = _uiState.value.selectedChip
+        _uiState.update {
+            it.copy(
+                showAppConfigDialog = true,
+                registerConfigDownloadState = it.registerConfigDownloadState.copy(
+                    status = DownloadStatus.IDLE,
+                    error = null
+                )
+            )
+        }
+        loadRegisterConfigFiles(chip)
+    }
+
+    fun dismissAppConfigDialog() {
+        _uiState.update { it.copy(showAppConfigDialog = false) }
+    }
+
+    fun selectAndDownloadConfig(info: ConfigFileInfo) {
+        selectRegisterConfigFile(info)
+        executeRegisterConfigDownload()
     }
 
     fun sendCommand(key: String, param: ByteArray = ByteArray(0)) {

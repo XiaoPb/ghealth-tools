@@ -225,7 +225,6 @@ fun OtaScreen(
                             OtaState.COMPLETED -> "升级完成 \u2713"
                             OtaState.CANCELLED -> "已取消"
                             OtaState.ERROR -> "升级失败 \u2717"
-                            else -> ""
                         },
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -982,6 +981,7 @@ private fun RamReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
                 Button(onClick = onRead, enabled = enabled, shape = ButtonShape) {
                     Text("读取")
@@ -999,6 +999,7 @@ private fun RamReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
                 Box {
                     OutlinedButton(onClick = { unitExpanded = true }, enabled = enabled, shape = ButtonShape) {
@@ -1025,6 +1026,7 @@ private fun RamReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
                 OutlinedButton(onClick = onWrite, enabled = enabled, shape = ButtonShape) {
                     Text("写入")
@@ -1083,6 +1085,7 @@ private fun FlashReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
                 Button(onClick = onRead, enabled = enabled, shape = ButtonShape) {
                     Text("读取")
@@ -1100,6 +1103,7 @@ private fun FlashReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
                 Box {
                     OutlinedButton(onClick = { unitExpanded = true }, enabled = enabled, shape = ButtonShape) {
@@ -1126,6 +1130,7 @@ private fun FlashReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
                 OutlinedButton(onClick = onWrite, enabled = enabled, shape = ButtonShape) {
                     Text("写入")
@@ -1178,6 +1183,7 @@ private fun RegisterReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
                 Button(onClick = onRead, enabled = enabled, shape = ButtonShape) {
                     Text("读取")
@@ -1195,6 +1201,7 @@ private fun RegisterReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
                 OutlinedButton(onClick = onWrite, enabled = enabled, shape = ButtonShape) {
                     Text("写入")
@@ -1248,6 +1255,7 @@ private fun NvdsReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
                 OutlinedButton(onClick = { }, enabled = enabled, shape = ButtonShape) {
                     Text("选择")
@@ -1268,6 +1276,7 @@ private fun NvdsReadWriteCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     singleLine = true,
                     enabled = enabled,
+                    textStyle = MaterialTheme.typography.labelSmall,
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
