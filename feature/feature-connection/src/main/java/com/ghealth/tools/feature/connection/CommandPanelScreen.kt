@@ -449,7 +449,10 @@ private fun ParamInput(
                     readOnly = true,
                     placeholder = { Text(param.label) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).height(40.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .height(40.dp),
                 )
                 ExposedDropdownMenu(
                     expanded = expanded,
