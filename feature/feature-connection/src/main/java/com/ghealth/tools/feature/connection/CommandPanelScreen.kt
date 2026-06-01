@@ -328,9 +328,6 @@ private fun CommandCard(
                                             modifier = Modifier.weight(1f)
                                         )
                                     }
-                                    if (rowParams.size == 1) {
-                                        Spacer(modifier = Modifier.weight(1f))
-                                    }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
