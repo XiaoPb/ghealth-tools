@@ -293,6 +293,17 @@ class OtaViewModel @Inject constructor(
     fun dismissControlPointDialog() { _uiState.update { it.copy(showControlPointDialog = false) } }
     fun updateControlPointHex(hex: String) { _uiState.update { it.copy(controlPointHex = hex) } }
 
+    fun toggleDebugAction(action: DebugMenuAction) {
+        _uiState.update { state ->
+            val current = state.activeDebugActions
+            if (current.contains(action)) {
+                state.copy(activeDebugActions = current - action)
+            } else {
+                state.copy(activeDebugActions = current + action)
+            }
+        }
+    }
+
     fun writeControlPoint() {
         viewModelScope.launch {
             _uiState.update { it.copy(showControlPointDialog = false) }
