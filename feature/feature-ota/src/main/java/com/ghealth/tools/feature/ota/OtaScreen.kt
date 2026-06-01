@@ -294,15 +294,16 @@ fun OtaScreen(
                 RamReadWriteCard(
                     address = state.ramAddress,
                     length = state.ramLength,
+                    lengthUnit = state.ramLengthUnit,
                     data = state.ramData,
-                    readData = state.ramReadData,
                     debugResult = state.debugResults[DebugMenuAction.RAM_READ_WRITE],
                     onAddressChange = viewModel::updateRamAddress,
                     onLengthChange = viewModel::updateRamLength,
+                    onLengthUnitChange = viewModel::updateRamLengthUnit,
                     onDataChange = viewModel::updateRamData,
                     onRead = viewModel::readRam,
                     onWrite = viewModel::writeRam,
-                    onDownload = viewModel::showRamDownloadDialog,
+                    onDownload = viewModel::downloadRam,
                     enabled = !state.isUpgrading,
                 )
             }
@@ -311,15 +312,16 @@ fun OtaScreen(
                 FlashReadWriteCard(
                     address = state.flashAddress,
                     length = state.flashLength,
+                    lengthUnit = state.flashLengthUnit,
                     data = state.flashData,
-                    readData = state.flashReadData,
                     debugResult = state.debugResults[DebugMenuAction.FLASH_READ_WRITE],
                     onAddressChange = viewModel::updateFlashAddress,
                     onLengthChange = viewModel::updateFlashLength,
+                    onLengthUnitChange = viewModel::updateFlashLengthUnit,
                     onDataChange = viewModel::updateFlashData,
                     onRead = viewModel::readFlash,
                     onWrite = viewModel::writeFlash,
-                    onDownload = viewModel::showFlashDownloadDialog,
+                    onDownload = viewModel::downloadFlash,
                     enabled = !state.isUpgrading,
                 )
             }
@@ -944,18 +946,20 @@ private fun ResourceUpgradeCard(
 private fun RamReadWriteCard(
     address: String,
     length: String,
+    lengthUnit: String,
     data: String,
-    readData: ByteArray?,
     debugResult: String?,
     onAddressChange: (String) -> Unit,
     onLengthChange: (String) -> Unit,
+    onLengthUnitChange: (String) -> Unit,
     onDataChange: (String) -> Unit,
     onRead: () -> Unit,
     onWrite: () -> Unit,
     onDownload: () -> Unit,
     enabled: Boolean,
 ) {
-    val fieldModifier = Modifier.height(ButtonDefaults.MinHeight)
+    val fieldModifier = Modifier.height(40.dp)
+    var unitExpanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
@@ -996,10 +1000,17 @@ private fun RamReadWriteCard(
                     singleLine = true,
                     enabled = enabled,
                 )
-                if (readData != null) {
-                    Button(onClick = onDownload, enabled = enabled, shape = ButtonShape) {
-                        Text("下载")
+                Box {
+                    OutlinedButton(onClick = { unitExpanded = true }, enabled = enabled, shape = ButtonShape) {
+                        Text(lengthUnit)
                     }
+                    DropdownMenu(expanded = unitExpanded, onDismissRequest = { unitExpanded = false }) {
+                        DropdownMenuItem(text = { Text("Byte") }, onClick = { onLengthUnitChange("Byte"); unitExpanded = false })
+                        DropdownMenuItem(text = { Text("KB") }, onClick = { onLengthUnitChange("KB"); unitExpanded = false })
+                    }
+                }
+                Button(onClick = onDownload, enabled = enabled, shape = ButtonShape) {
+                    Text("下载")
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -1036,18 +1047,20 @@ private fun RamReadWriteCard(
 private fun FlashReadWriteCard(
     address: String,
     length: String,
+    lengthUnit: String,
     data: String,
-    readData: ByteArray?,
     debugResult: String?,
     onAddressChange: (String) -> Unit,
     onLengthChange: (String) -> Unit,
+    onLengthUnitChange: (String) -> Unit,
     onDataChange: (String) -> Unit,
     onRead: () -> Unit,
     onWrite: () -> Unit,
     onDownload: () -> Unit,
     enabled: Boolean,
 ) {
-    val fieldModifier = Modifier.height(ButtonDefaults.MinHeight)
+    val fieldModifier = Modifier.height(40.dp)
+    var unitExpanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
@@ -1088,10 +1101,17 @@ private fun FlashReadWriteCard(
                     singleLine = true,
                     enabled = enabled,
                 )
-                if (readData != null) {
-                    Button(onClick = onDownload, enabled = enabled, shape = ButtonShape) {
-                        Text("下载")
+                Box {
+                    OutlinedButton(onClick = { unitExpanded = true }, enabled = enabled, shape = ButtonShape) {
+                        Text(lengthUnit)
                     }
+                    DropdownMenu(expanded = unitExpanded, onDismissRequest = { unitExpanded = false }) {
+                        DropdownMenuItem(text = { Text("Byte") }, onClick = { onLengthUnitChange("Byte"); unitExpanded = false })
+                        DropdownMenuItem(text = { Text("KB") }, onClick = { onLengthUnitChange("KB"); unitExpanded = false })
+                    }
+                }
+                Button(onClick = onDownload, enabled = enabled, shape = ButtonShape) {
+                    Text("下载")
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -1135,7 +1155,7 @@ private fun RegisterReadWriteCard(
     onWrite: () -> Unit,
     enabled: Boolean,
 ) {
-    val fieldModifier = Modifier.height(ButtonDefaults.MinHeight)
+    val fieldModifier = Modifier.height(40.dp)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
@@ -1205,7 +1225,7 @@ private fun NvdsReadWriteCard(
     onDelete: () -> Unit,
     enabled: Boolean,
 ) {
-    val fieldModifier = Modifier.height(ButtonDefaults.MinHeight)
+    val fieldModifier = Modifier.height(40.dp)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)

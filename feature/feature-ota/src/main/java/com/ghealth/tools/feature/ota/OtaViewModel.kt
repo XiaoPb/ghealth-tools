@@ -319,12 +319,14 @@ class OtaViewModel @Inject constructor(
 
     fun updateRamAddress(v: String) { _uiState.update { it.copy(ramAddress = v) } }
     fun updateRamLength(v: String) { _uiState.update { it.copy(ramLength = v) } }
+    fun updateRamLengthUnit(v: String) { _uiState.update { it.copy(ramLengthUnit = v) } }
     fun updateRamData(v: String) { _uiState.update { it.copy(ramData = v) } }
 
     fun readRam() {
         val addr = _uiState.value.ramAddress.trim().removePrefix("0x").removePrefix("0X")
             .toLongOrNull(16)?.toInt() ?: return
-        val len = _uiState.value.ramLength.trim().toIntOrNull() ?: return
+        var len = _uiState.value.ramLength.trim().toIntOrNull() ?: return
+        if (_uiState.value.ramLengthUnit == "KB") len *= 1024
         executeDebugRead(DebugMenuAction.RAM_READ_WRITE) { e ->
             val result = e.readRam(addr, len)
             if (result.success && result.data != null) {
@@ -341,22 +343,38 @@ class OtaViewModel @Inject constructor(
         executeDebugWrite(DebugMenuAction.RAM_READ_WRITE) { it.writeRam(addr, data) }
     }
 
-    fun showRamDownloadDialog() {
-        val data = _uiState.value.ramReadData ?: return
+    fun downloadRam() {
         val addr = _uiState.value.ramAddress.trim().removePrefix("0x").removePrefix("0X")
-        val defaultName = "0x${addr.uppercase()}-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.getDefault()).format(java.util.Date())}.bin"
-        val savePath = getApplication<android.app.Application>().getExternalFilesDir(null)?.absolutePath + "/ota_dump/"
-        _uiState.update { it.copy(showDownloadDialog = true, downloadDefaultName = defaultName, downloadData = data, downloadSavePath = savePath) }
+            .toLongOrNull(16)?.toInt() ?: return
+        var len = _uiState.value.ramLength.trim().toIntOrNull() ?: return
+        if (_uiState.value.ramLengthUnit == "KB") len *= 1024
+        viewModelScope.launch {
+            if (!otaEngine.isDfuReady) {
+                _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
+                return@launch
+            }
+            val result = otaEngine.readRam(addr, len)
+            if (result.success && result.data != null) {
+                _uiState.update { it.copy(ramReadData = result.data, debugResults = it.debugResults + (DebugMenuAction.RAM_READ_WRITE to result.message)) }
+                val defaultName = "0x${addr.toString(16).uppercase()}-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.getDefault()).format(java.util.Date())}.bin"
+                val savePath = getApplication<android.app.Application>().getExternalFilesDir(null)?.absolutePath + "/ota_dump/"
+                _uiState.update { it.copy(showDownloadDialog = true, downloadDefaultName = defaultName, downloadData = result.data, downloadSavePath = savePath) }
+            } else {
+                _uiState.update { it.copy(errorMessage = result.message, debugResults = it.debugResults + (DebugMenuAction.RAM_READ_WRITE to "错误: ${result.message}")) }
+            }
+        }
     }
 
     fun updateFlashAddress(v: String) { _uiState.update { it.copy(flashAddress = v) } }
     fun updateFlashLength(v: String) { _uiState.update { it.copy(flashLength = v) } }
+    fun updateFlashLengthUnit(v: String) { _uiState.update { it.copy(flashLengthUnit = v) } }
     fun updateFlashData(v: String) { _uiState.update { it.copy(flashData = v) } }
 
     fun readFlash() {
         val addr = _uiState.value.flashAddress.trim().removePrefix("0x").removePrefix("0X")
             .toLongOrNull(16)?.toInt() ?: return
-        val len = _uiState.value.flashLength.trim().toIntOrNull() ?: return
+        var len = _uiState.value.flashLength.trim().toIntOrNull() ?: return
+        if (_uiState.value.flashLengthUnit == "KB") len *= 1024
         executeDebugRead(DebugMenuAction.FLASH_READ_WRITE) { e ->
             val result = e.readFlash(addr, len)
             if (result.success && result.data != null) {
@@ -373,12 +391,26 @@ class OtaViewModel @Inject constructor(
         executeDebugWrite(DebugMenuAction.FLASH_READ_WRITE) { it.writeFlash(addr, data) }
     }
 
-    fun showFlashDownloadDialog() {
-        val data = _uiState.value.flashReadData ?: return
+    fun downloadFlash() {
         val addr = _uiState.value.flashAddress.trim().removePrefix("0x").removePrefix("0X")
-        val defaultName = "0x${addr.uppercase()}-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.getDefault()).format(java.util.Date())}.bin"
-        val savePath = getApplication<android.app.Application>().getExternalFilesDir(null)?.absolutePath + "/ota_dump/"
-        _uiState.update { it.copy(showDownloadDialog = true, downloadDefaultName = defaultName, downloadData = data, downloadSavePath = savePath) }
+            .toLongOrNull(16)?.toInt() ?: return
+        var len = _uiState.value.flashLength.trim().toIntOrNull() ?: return
+        if (_uiState.value.flashLengthUnit == "KB") len *= 1024
+        viewModelScope.launch {
+            if (!otaEngine.isDfuReady) {
+                _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
+                return@launch
+            }
+            val result = otaEngine.readFlash(addr, len)
+            if (result.success && result.data != null) {
+                _uiState.update { it.copy(flashReadData = result.data, debugResults = it.debugResults + (DebugMenuAction.FLASH_READ_WRITE to result.message)) }
+                val defaultName = "0x${addr.toString(16).uppercase()}-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.getDefault()).format(java.util.Date())}.bin"
+                val savePath = getApplication<android.app.Application>().getExternalFilesDir(null)?.absolutePath + "/ota_dump/"
+                _uiState.update { it.copy(showDownloadDialog = true, downloadDefaultName = defaultName, downloadData = result.data, downloadSavePath = savePath) }
+            } else {
+                _uiState.update { it.copy(errorMessage = result.message, debugResults = it.debugResults + (DebugMenuAction.FLASH_READ_WRITE to "错误: ${result.message}")) }
+            }
+        }
     }
 
     fun updateRegisterAddress(v: String) { _uiState.update { it.copy(registerAddress = v) } }

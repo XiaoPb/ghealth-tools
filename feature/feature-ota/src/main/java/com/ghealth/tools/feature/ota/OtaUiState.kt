@@ -47,11 +47,13 @@ data class OtaUiState(
 
     val ramAddress: String = "",
     val ramLength: String = "",
+    val ramLengthUnit: String = "Byte",
     val ramData: String = "",
     val ramReadData: ByteArray? = null,
 
     val flashAddress: String = "",
     val flashLength: String = "",
+    val flashLengthUnit: String = "Byte",
     val flashData: String = "",
     val flashReadData: ByteArray? = null,
 
