@@ -25,6 +25,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
@@ -1218,6 +1222,16 @@ private fun NvdsReadWriteCard(
     enabled: Boolean,
 ) {
     val fieldModifier = Modifier.height(40.dp)
+    var menuExpanded by remember { mutableStateOf(false) }
+    val nvdsTagOptions = remember {
+        listOf(
+            "0xC001" to "BD_ADDRESS",
+            "0xC002" to "DEVICE_NAME",
+            "0xC003" to "LPCLK_DRIFT",
+            "0xC015" to "CODED_PHY_500",
+            "0xC016" to "RF_XO_OFFSET",
+        )
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
@@ -1241,8 +1255,33 @@ private fun NvdsReadWriteCard(
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.labelSmall,
                 )
-                OutlinedButton(onClick = { }, enabled = enabled, shape = ButtonShape) {
-                    Text("选择")
+                Box {
+                    OutlinedButton(
+                        onClick = { menuExpanded = true },
+                        enabled = enabled,
+                        shape = ButtonShape,
+                    ) {
+                        Text("选择")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        nvdsTagOptions.forEach { (hexValue, name) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(hexValue, style = MaterialTheme.typography.bodySmall)
+                                        Text(name, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onTagChange(hexValue)
+                                },
+                            )
+                        }
+                    }
                 }
                 OutlinedButton(onClick = onDelete, enabled = enabled, shape = ButtonShape) {
                     Text("删除")
