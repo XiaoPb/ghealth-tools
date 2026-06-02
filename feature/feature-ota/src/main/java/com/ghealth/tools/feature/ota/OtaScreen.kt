@@ -706,7 +706,7 @@ private fun FirmwareUpgradeCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
                 RadioButton(
                     selected = upgradeRegion == UpgradeRegion.SINGLE,
                     onClick = { if (enabled) onSelectRegion(UpgradeRegion.SINGLE) },
@@ -716,7 +716,7 @@ private fun FirmwareUpgradeCard(
                 Text("单区升级", style = MaterialTheme.typography.labelMedium)
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
                 RadioButton(
                     selected = upgradeRegion == UpgradeRegion.DUAL,
                     onClick = { if (enabled) onSelectRegion(UpgradeRegion.DUAL) },
@@ -724,25 +724,18 @@ private fun FirmwareUpgradeCard(
                     modifier = Modifier.size(20.dp),
                 )
                 Text("双区升级", style = MaterialTheme.typography.labelMedium)
-            }
-
-            if (fileInfo.fileName.isNotEmpty() && fileInfo.isValid) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
+                Spacer(modifier = Modifier.weight(1f))
+                OutlinedButton(
+                    onClick = { if (enabled) onSelectFile() },
+                    enabled = enabled,
+                    shape = ButtonShape,
                 ) {
-                    OutlinedButton(
-                        onClick = { if (enabled) onSelectFile() },
-                        enabled = enabled,
-                        shape = ButtonShape,
-                    ) {
-                        Text(
-                            if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
+                    Text(
+                        if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+                if (fileInfo.fileName.isNotEmpty() && fileInfo.isValid) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = onStartUpgrade,
@@ -750,23 +743,6 @@ private fun FirmwareUpgradeCard(
                         shape = ButtonShape,
                     ) {
                         Text("升级", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            } else {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    OutlinedButton(
-                        onClick = { if (enabled) onSelectFile() },
-                        enabled = enabled,
-                        shape = ButtonShape,
-                    ) {
-                        Text(
-                            if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
                     }
                 }
             }
