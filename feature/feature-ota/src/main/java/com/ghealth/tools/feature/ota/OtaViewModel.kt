@@ -88,7 +88,7 @@ class OtaViewModel @Inject constructor(
     }
 
     fun readFirmwareInfo() {
-        _uiState.update { it.copy(isReadingFirmwareInfo = true, errorMessage = null) }
+        _uiState.update { it.copy(isReadingFirmwareInfo = true, firmwareInfo = null, errorMessage = null) }
         viewModelScope.launch {
             try {
                 val firmwareInfo = otaEngine.readFirmwareInfo()
@@ -104,6 +104,7 @@ class OtaViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isReadingFirmwareInfo = false,
+                        firmwareInfo = null,
                         errorMessage = e.message ?: "读取固件信息失败",
                     )
                 }
@@ -465,6 +466,7 @@ class OtaViewModel @Inject constructor(
                 _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
                 return@launch
             }
+            _uiState.update { it.copy(bootInfoData = null, errorMessage = null) }
             try {
                 val result = otaEngine.readBootInfo()
                 if (result.success) {

@@ -116,18 +116,21 @@ fun OtaScreen(
     }
 
     if (state.showResultDialog) {
+        val isSuccess = state.successMessage != null
         AlertDialog(
             onDismissRequest = { viewModel.dismissResultDialog() },
-            title = { Text(if (state.successMessage != null) "升级完成" else "升级失败") },
+            title = { Text(if (isSuccess) "升级完成" else "升级失败") },
             text = { Text(state.successMessage ?: state.errorMessage ?: "") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.dismissResultDialog()
-                    onNavigateBack()
-                }) { Text("返回") }
+                    if (isSuccess) {
+                        onNavigateBack()
+                    }
+                }) { Text(if (isSuccess) "返回" else "关闭") }
             },
             dismissButton = {
-                if (state.successMessage == null) {
+                if (!isSuccess) {
                     TextButton(onClick = {
                         viewModel.dismissResultDialog()
                         viewModel.resetState()
@@ -423,6 +426,16 @@ fun OtaTopBarMenu(viewModel: OtaViewModel) {
                     )
                 },
             )
+            DropdownMenuItem(
+                text = { Text("自定义拷贝地址") },
+                onClick = { viewModel.toggleCopyAddressEnabled() },
+                leadingIcon = {
+                    Checkbox(
+                        checked = state.otaConfig.copyAddressEnabled,
+                        onCheckedChange = null,
+                    )
+                },
+            )
             DebugMenuAction.entries.forEach { action ->
                 DropdownMenuItem(
                     text = { Text(action.label) },
@@ -435,16 +448,6 @@ fun OtaTopBarMenu(viewModel: OtaViewModel) {
                     },
                 )
             }
-            DropdownMenuItem(
-                text = { Text("自定义拷贝地址") },
-                onClick = { viewModel.toggleCopyAddressEnabled() },
-                leadingIcon = {
-                    Checkbox(
-                        checked = state.otaConfig.copyAddressEnabled,
-                        onCheckedChange = null,
-                    )
-                },
-            )
             DropdownMenuItem(
                 text = { Text("写控制点") },
                 onClick = {
@@ -576,7 +579,7 @@ private fun InfoGrid(info: FirmwareInfo, indent: Boolean) {
                 add("version" to "v${info.version}")
                 add("pattern" to "0x${info.pattern.toString(16).uppercase()}")
             }
-            add("binSize" to "${info.binSize} (${formatFileSize(info.binSize.toLong())})")
+            add("binSize" to "${info.binSize}")
             add("checksum" to "0x${info.checksum.toString(16).uppercase()}")
             add("loadAddr" to "0x${info.loadAddr.toString(16).uppercase()}")
             add("runAddr" to "0x${info.runAddr.toString(16).uppercase()}")
@@ -721,18 +724,25 @@ private fun FirmwareUpgradeCard(
                     modifier = Modifier.size(20.dp),
                 )
                 Text("双区升级", style = MaterialTheme.typography.labelMedium)
-                Spacer(modifier = Modifier.width(8.dp))
-                OutlinedButton(
-                    onClick = { if (enabled) onSelectFile() },
-                    enabled = enabled,
-                    shape = ButtonShape,
+            }
+
+            if (fileInfo.fileName.isNotEmpty() && fileInfo.isValid) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件",
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-                if (fileInfo.fileName.isNotEmpty() && fileInfo.isValid) {
+                    OutlinedButton(
+                        onClick = { if (enabled) onSelectFile() },
+                        enabled = enabled,
+                        shape = ButtonShape,
+                    ) {
+                        Text(
+                            if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = onStartUpgrade,
@@ -740,6 +750,23 @@ private fun FirmwareUpgradeCard(
                         shape = ButtonShape,
                     ) {
                         Text("升级", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    OutlinedButton(
+                        onClick = { if (enabled) onSelectFile() },
+                        enabled = enabled,
+                        shape = ButtonShape,
+                    ) {
+                        Text(
+                            if (fileInfo.fileName.isNotEmpty()) "更换文件" else "选择文件",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
                     }
                 }
             }
@@ -754,12 +781,12 @@ private fun FirmwareUpgradeCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     CompactOutlinedTextField(
-                        value = if (copyAddress == 0L) "" else "0x${copyAddress.toString(16).uppercase()}",
+                        value = if (copyAddress == 0L) "0" else copyAddress.toString(16).uppercase(),
                         onValueChange = { text ->
-                            val parsed = text.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0L
+                            val parsed = text.toLongOrNull(16) ?: 0L
                             onCopyAddressChange(parsed)
                         },
-                        placeholder = { Text("0x00000000", style = MaterialTheme.typography.labelSmall) },
+                        placeholder = { Text("0", style = MaterialTheme.typography.labelSmall) },
                         enabled = enabled,
                         modifier = Modifier.weight(1f).height(48.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
@@ -796,7 +823,7 @@ private fun FwInfoGrid(info: FirmwareInfo) {
         val items = buildList {
             add("version" to "v${info.version}")
             add("pattern" to "0x${info.pattern.toString(16).uppercase()}")
-            add("binSize" to "${info.binSize} (${formatFileSize(info.binSize.toLong())})")
+            add("binSize" to "${info.binSize}")
             add("checksum" to "0x${info.checksum.toString(16).uppercase()}")
             add("loadAddr" to "0x${info.loadAddr.toString(16).uppercase()}")
             add("runAddr" to "0x${info.runAddr.toString(16).uppercase()}")
@@ -880,13 +907,13 @@ private fun ResourceUpgradeCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             CompactOutlinedTextField(
-                value = if (startAddress == 0L) "" else "0x${startAddress.toString(16).uppercase()}",
+                value = if (startAddress == 0L) "0" else startAddress.toString(16),
                 onValueChange = { text ->
-                    val parsed = text.removePrefix("0x").removePrefix("0X").toLongOrNull(16) ?: 0L
+                    val parsed = text.toLongOrNull(16) ?: 0L
                     onStartAddressChange(parsed)
                 },
-                label = { Text("起始地址(0x)") },
-                placeholder = { Text("0x00000000") },
+                label = { Text("起始地址") },
+                placeholder = { Text("0") },
                 enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
