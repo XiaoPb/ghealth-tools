@@ -749,27 +749,18 @@ private fun FirmwareUpgradeCard(
 
             if (upgradeRegion == UpgradeRegion.DUAL) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "拷贝地址",
-                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    CompactOutlinedTextField(
-                        value = if (copyAddress == 0L) "0" else copyAddress.toString(16).uppercase(),
-                        onValueChange = { text ->
-                            val parsed = text.toLongOrNull(16) ?: 0L
-                            onCopyAddressChange(parsed)
-                        },
-                        placeholder = { Text("0", style = MaterialTheme.typography.labelSmall) },
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                        textStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    )
-                }
+                CompactOutlinedTextField(
+                    value = if (copyAddress == 0L) "0" else copyAddress.toString(16).uppercase(),
+                    onValueChange = { text ->
+                        val parsed = text.toLongOrNull(16) ?: 0L
+                        onCopyAddressChange(parsed)
+                    },
+                    label = { Text("拷贝地址") },
+                    placeholder = { Text("0") },
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                )
             }
         }
     }
