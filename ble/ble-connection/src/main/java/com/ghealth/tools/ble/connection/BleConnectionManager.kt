@@ -55,14 +55,22 @@ sealed class ConnectionError {
     object WriteCharacteristicNotFound : ConnectionError()
     object NotifyCharacteristicNotFound : ConnectionError()
     object HeartRateServiceNotFound : ConnectionError()
-    data class ConnectionFailed(val errorMessage: String) : ConnectionError()
+    data class ConnectionFailed(
+        val errorMessage: String,
+        val disconnectStatus: String? = null
+    ) : ConnectionError()
 
     fun getMessage(): String = when (this) {
         is ServiceNotFound -> "未找到指定的服务UUID"
         is WriteCharacteristicNotFound -> "未找到写入特征UUID"
         is NotifyCharacteristicNotFound -> "未找到通知特征UUID"
         is HeartRateServiceNotFound -> "未找到心率服务"
-        is ConnectionFailed -> "连接失败: $errorMessage"
+        is ConnectionFailed -> buildString {
+            append("连接失败: $errorMessage")
+            if (!disconnectStatus.isNullOrBlank()) {
+                append(" [断链标志: $disconnectStatus]")
+            }
+        }
     }
 }
 
@@ -104,6 +112,11 @@ class BleConnectionManager @Inject constructor(
     private val scope: CoroutineScope,
     private val bleScanner: com.ghealth.tools.ble.scanner.BleScanner
 ) {
+
+    companion object {
+        private const val MAX_CONNECT_RETRIES = 3
+        private const val CONNECT_RETRY_DELAY_MS = 500L
+    }
     private val _devices = MutableStateFlow<Map<String, ConnectedDevice>>(emptyMap())
     val devices: StateFlow<Map<String, ConnectedDevice>> = _devices.asStateFlow()
 
@@ -233,45 +246,79 @@ class BleConnectionManager @Inject constructor(
 
         Timber.d("Connecting to $address as $role")
 
-        try {
-            peripheral.connect()
+        var lastException: Exception? = null
+        var disconnectStatus: String? = null
 
-            val (executor, deviceType) = when (role) {
-                DeviceRole.MASTER -> createExecutor(address)
-                DeviceRole.SLAVE -> createExecutor(address)
-                DeviceRole.COMPARE -> null to DeviceType.GH3036
-            }
-
-            val gHealthPeripheral = GHealthPeripheral(
-                peripheral = peripheral,
-                role = role,
-                executor = executor,
-                deviceType = deviceType
-            )
-            peripherals[address] = gHealthPeripheral
-            val currentDevice = _devices.value[address]
-            if (currentDevice != null) {
-                _devices.value = _devices.value + (address to currentDevice.copy(deviceType = deviceType))
-            }
-
-            peripheral.state.onEach { state ->
-                when (state) {
-                    is State.Connected -> {
-                        updateDeviceState(address, ConnectionState.CONNECTED)
-                        validateServices(peripheral, address, role)
-                    }
-                    is State.Disconnected -> {
-                        onDeviceDisconnected(address)
-                    }
-                    else -> {}
+        for (attempt in 1..MAX_CONNECT_RETRIES) {
+            try {
+                Timber.d("Connection attempt $attempt/$MAX_CONNECT_RETRIES for $address")
+                peripheral.connect()
+                lastException = null
+                disconnectStatus = null
+                break
+            } catch (e: Exception) {
+                lastException = e
+                Timber.w(e, "Connection attempt $attempt/$MAX_CONNECT_RETRIES failed for $address")
+                if (attempt < MAX_CONNECT_RETRIES) {
+                    kotlinx.coroutines.delay(CONNECT_RETRY_DELAY_MS)
                 }
-            }.launchIn(scope)
-
-        } catch (e: Exception) {
-            Timber.e(e, "Connection failed for $address")
-            emitConnectionError(address, ConnectionError.ConnectionFailed(e.message ?: "Unknown error"))
-            updateDeviceState(address, ConnectionState.DISCONNECTED)
+            }
         }
+
+        if (lastException != null) {
+            Timber.e(lastException, "All $MAX_CONNECT_RETRIES connection attempts failed for $address")
+            emitConnectionError(
+                address,
+                ConnectionError.ConnectionFailed(
+                    errorMessage = lastException.message ?: "Unknown error",
+                    disconnectStatus = disconnectStatus
+                )
+            )
+            updateDeviceState(address, ConnectionState.DISCONNECTED)
+            return
+        }
+
+        val (executor, deviceType) = when (role) {
+            DeviceRole.MASTER -> createExecutor(address)
+            DeviceRole.SLAVE -> createExecutor(address)
+            DeviceRole.COMPARE -> null to DeviceType.GH3036
+        }
+
+        val gHealthPeripheral = GHealthPeripheral(
+            peripheral = peripheral,
+            role = role,
+            executor = executor,
+            deviceType = deviceType
+        )
+        peripherals[address] = gHealthPeripheral
+        val currentDevice = _devices.value[address]
+        if (currentDevice != null) {
+            _devices.value = _devices.value + (address to currentDevice.copy(deviceType = deviceType))
+        }
+
+        peripheral.state.onEach { state ->
+            when (state) {
+                is State.Connected -> {
+                    updateDeviceState(address, ConnectionState.CONNECTED)
+                    validateServices(peripheral, address, role)
+                }
+                is State.Disconnected -> {
+                    val status = state.status
+                    if (status != null) {
+                        Timber.w("Device $address disconnected with status: $status")
+                    }
+                    emitConnectionError(
+                        address,
+                        ConnectionError.ConnectionFailed(
+                            errorMessage = "设备断开连接",
+                            disconnectStatus = status?.toString()
+                        )
+                    )
+                    onDeviceDisconnected(address)
+                }
+                else -> {}
+            }
+        }.launchIn(scope)
     }
 
     fun setPrimaryCompareDevice(address: String) {
