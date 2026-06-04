@@ -84,6 +84,7 @@ class ConnectionViewModel @Inject constructor(
     private val connectionManager: BleConnectionManager,
     private val recordingManager: com.ghealth.tools.core.storage.RecordingManager,
     private val blePreferences: com.ghealth.tools.core.datastore.BlePreferences,
+    private val userPreferences: com.ghealth.tools.core.datastore.UserPreferences,
     private val registerConfigParser: RegisterConfigParser,
     @Named("storageBaseDir") private val baseDir: File,
     private val configPathProvider: com.ghealth.tools.core.network.ConfigPathProvider
@@ -404,18 +405,26 @@ class ConnectionViewModel @Inject constructor(
             it.role == DeviceRole.SLAVE && it.state == ConnectionState.CONNECTED
         }
         if (masterDevice != null) {
-            recordingManager.startSession(
-                config = config,
-                masterDeviceName = masterDevice.name ?: "Unknown",
-                masterDeviceAddress = masterDevice.address,
-                slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },
-                compareDeviceNames = devices.values
-                    .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
-                    .map { it.name ?: it.address },
-                compareDeviceAddresses = devices.values
-                    .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
-                    .map { it.address }
-            )
+            viewModelScope.launch {
+                val projectId = userPreferences.selectedProjectId.first() ?: 0
+                val projectName = userPreferences.selectedProjectName.first() ?: ""
+                val userInfo = userPreferences.userInfo.first()
+                recordingManager.startSession(
+                    config = config,
+                    masterDeviceName = masterDevice.name ?: "Unknown",
+                    masterDeviceAddress = masterDevice.address,
+                    slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },
+                    compareDeviceNames = devices.values
+                        .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
+                        .map { it.name ?: it.address },
+                    compareDeviceAddresses = devices.values
+                        .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
+                        .map { it.address },
+                    projectName = projectName,
+                    projectId = projectId,
+                    username = userInfo.username
+                )
+            }
         }
         _uiState.update {
             it.copy(

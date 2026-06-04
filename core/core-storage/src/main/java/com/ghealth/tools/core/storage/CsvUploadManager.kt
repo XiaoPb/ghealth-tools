@@ -23,11 +23,13 @@ import java.io.File
 import java.util.Collections
 import java.util.LinkedHashSet
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
 class CsvUploadManager @Inject constructor(
     @ApplicationContext private val context: Context,
+    @Named("storageBaseDir") private val baseDir: File,
     private val uploadApi: UploadApi,
     private val tokenManager: TokenManager,
     private val userPreferences: UserPreferences,
@@ -100,11 +102,15 @@ class CsvUploadManager @Inject constructor(
 
             val response = uploadApi.uploadCsvFile(projectId, part, filenameBody)
 
-            if (response.isSuccessful && response.body()?.code == 200) {
+            if (response.isSuccessful && (response.body()?.code ?: 0) in 200..299) {
                 Timber.i("CSV uploaded successfully: ${file.name}")
                 pendingUploads.remove(file)
+
+                val renamedFile = renameToUploaded(file)
+                val displayName = renamedFile?.name ?: file.name
+
                 withContext(Dispatchers.Main) {
-                    showToast("CSV已上传: ${file.name}")
+                    showToast("CSV已上传: $displayName")
                 }
             } else {
                 val errorMsg = response.body()?.message ?: "上传失败: ${response.code()}"
@@ -158,7 +164,60 @@ class CsvUploadManager @Inject constructor(
         }
     }
 
+    private fun renameToUploaded(file: File): File? {
+        val name = file.name
+        if (!name.startsWith("extra_")) return file
+        val newName = name.replaceFirst("extra_", "uploaded_")
+        val newFile = File(file.parentFile, newName)
+        return if (file.renameTo(newFile)) {
+            Timber.d("Renamed: ${file.name} -> ${newFile.name}")
+            newFile
+        } else {
+            Timber.w("Failed to rename: ${file.name}")
+            null
+        }
+    }
+
     private fun showToast(message: String) {
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    }
+
+    fun scanAndUploadPending(currentProjectId: Int) {
+        scope.launch {
+            try {
+                val serverDir = File(baseDir, "server")
+                if (!serverDir.exists()) return@launch
+
+                val extraFiles = serverDir.walkTopDown()
+                    .filter { it.isFile && it.name.startsWith("extra_") && it.extension == "csv" }
+                    .toList()
+
+                Timber.i("Scan found ${extraFiles.size} pending CSV files")
+
+                for (file in extraFiles) {
+                    val fileProjectId = parseProjectIdFromCsv(file)
+                    if (fileProjectId == currentProjectId) {
+                        Timber.d("Matched project file: ${file.name}")
+                        uploadCsvFile(file)
+                    } else {
+                        Timber.d("Skipped (project_id=$fileProjectId != $currentProjectId): ${file.name}")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "scanAndUploadPending failed")
+            }
+        }
+    }
+
+    private fun parseProjectIdFromCsv(file: File): Int {
+        return try {
+            val firstLine = file.bufferedReader().use { it.readLine() } ?: return -1
+            if (!firstLine.startsWith("{")) return -1
+            val regex = """"project_id"\s*:\s*(\d+)""".toRegex()
+            regex.find(firstLine)?.groupValues?.get(1)?.toIntOrNull() ?: -1
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to parse info from: ${file.name}")
+            -1
+        }
     }
 }

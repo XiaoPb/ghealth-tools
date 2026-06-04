@@ -30,6 +30,7 @@ data class StoragePath(
     val hrvVersion: String = "1.0.0",
     val projectName: String = "",
     val projectId: Int = 0,
+    val username: String = "",
     val date: Date = Date()
 ) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US)
@@ -70,6 +71,7 @@ data class StoragePath(
             append("{\"MAC\":\"$deviceAddress\",")
             append("\"NAME\":\"$deviceName\",")
             append("\"App-version\":\"$appVersion\",")
+            append("\"username\":\"$username\",")
             append("\"name\":\"$tester\",")
             append("\"scenario\":\"$scenario\",")
             append("\"chip\":\"$chip\",")

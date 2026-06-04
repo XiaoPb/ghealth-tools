@@ -33,7 +33,8 @@ data class WriteTask(
 @Singleton
 class RecordingManager @Inject constructor(
     @Named("storageBaseDir") private val baseDir: File,
-    @Named("app_version") private val appVersion: String
+    @Named("app_version") private val appVersion: String,
+    private val csvUploadManager: CsvUploadManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val modeStates = ConcurrentHashMap<String, ModeState>()
@@ -44,6 +45,7 @@ class RecordingManager @Inject constructor(
     private var currentConfig: SessionConfig? = null
     private var currentProjectName: String = ""
     private var currentProjectId: Int = 0
+    private var currentUsername: String = ""
 
     private data class SessionConfig(
         val scenario: String,
@@ -90,7 +92,8 @@ class RecordingManager @Inject constructor(
         compareDeviceNames: List<String> = emptyList(),
         compareDeviceAddresses: List<String> = emptyList(),
         projectName: String = "",
-        projectId: Int = 0
+        projectId: Int = 0,
+        username: String = ""
     ) {
         runBlocking { endSession() }
 
@@ -107,6 +110,7 @@ class RecordingManager @Inject constructor(
         )
         currentProjectName = projectName
         currentProjectId = projectId
+        currentUsername = username
         _isSessionActive.value = true
 
         val numCompare = compareDeviceAddresses.size
@@ -202,11 +206,13 @@ class RecordingManager @Inject constructor(
             Timber.d("Consumer drained for mode=$mode")
         }
 
-        // 3. Flush and close all writers
+        // 3. Flush and close all writers, collect server files
+        val filesToUpload = mutableListOf<File>()
         for ((mode, state) in modeStates) {
             for ((key, writer) in state.serverWriters) {
                 writer.flush()
                 writer.close()
+                filesToUpload.add(writer.outputFile)
                 Timber.d("Server writer closed: mode=$mode key=$key")
             }
             state.recordsWriter?.let {
@@ -216,11 +222,16 @@ class RecordingManager @Inject constructor(
             }
         }
 
-        // 4. Clean up
+        // 4. Trigger upload for all completed server CSV files
+        for (file in filesToUpload) {
+            csvUploadManager.uploadCsvFile(file)
+        }
+
+        // 5. Clean up
         modeStates.clear()
         currentConfig = null
         _isSessionActive.value = false
-        Timber.i("Recording session ended")
+        Timber.i("Recording session ended, ${filesToUpload.size} files queued for upload")
     }
 
     private suspend fun consumeModeChannel(
@@ -343,6 +354,7 @@ class RecordingManager @Inject constructor(
             appVersion = appVersion,
             projectName = currentProjectName,
             projectId = currentProjectId,
+            username = currentUsername,
             date = now
         )
 

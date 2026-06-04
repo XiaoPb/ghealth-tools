@@ -3,6 +3,7 @@ package com.ghealth.tools.core.network.di
 import android.content.Context
 import com.ghealth.tools.core.network.AuthAuthenticator
 import com.ghealth.tools.core.network.AuthInterceptor
+import com.ghealth.tools.core.network.RetryInterceptor
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
 import com.ghealth.tools.core.network.api.DownloadApi
@@ -38,9 +39,9 @@ object NetworkModule {
 
     private const val DEFAULT_BASE_URL = "https://api.health.xiaopb.cn:8861/api/"
     private const val GITHUB_BASE_URL = "https://api.github.com/"
-    private const val CONNECT_TIMEOUT = 30L
-    private const val READ_TIMEOUT = 30L
-    private const val WRITE_TIMEOUT = 60L
+    private const val CONNECT_TIMEOUT = 3L
+    private const val READ_TIMEOUT = 3L
+    private const val WRITE_TIMEOUT = 30L
     private const val GITHUB_CONNECT_TIMEOUT = 15L
     private const val GITHUB_READ_TIMEOUT = 15L
 
@@ -125,7 +126,11 @@ object NetworkModule {
         val loggingInterceptor = HttpLoggingInterceptor(
             object : HttpLoggingInterceptor.Logger {
                 override fun log(message: String) {
-                    Timber.tag("API").d(message)
+                    if (message.length > 512) {
+                        Timber.tag("API").d("${message.take(256)}... [${message.length} chars truncated]")
+                    } else {
+                        Timber.tag("API").d(message)
+                    }
                 }
             }
         ).apply {
@@ -134,6 +139,7 @@ object NetworkModule {
 
         return OkHttpClient.Builder()
             .dns(dns)
+            .addInterceptor(RetryInterceptor(maxRetries = 3))
             .addInterceptor(authInterceptor)
             .authenticator(authAuthenticator)
             .addInterceptor(loggingInterceptor)

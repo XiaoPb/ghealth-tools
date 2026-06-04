@@ -7,6 +7,7 @@ import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.network.ConfigSyncManager
 import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.network.model.ProjectResponse
+import com.ghealth.tools.core.storage.CsvUploadManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +30,8 @@ class ProjectSelectionViewModel @Inject constructor(
     private val projectApi: ProjectApi,
     private val userPreferences: UserPreferences,
     private val blePreferences: BlePreferences,
-    private val configSyncManager: ConfigSyncManager
+    private val configSyncManager: ConfigSyncManager,
+    private val csvUploadManager: CsvUploadManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProjectSelectionUiState())
@@ -77,6 +79,7 @@ class ProjectSelectionViewModel @Inject constructor(
                 blePreferences.setSelectedProjectChip(project.chipModel)
                 configSyncManager.fullSync(project.id, project.name)
                 _uiState.update { it.copy(isConfirming = false) }
+                csvUploadManager.scanAndUploadPending(project.id)
                 onSuccess()
             } catch (e: Exception) {
                 Timber.e(e, "Sync failed")
@@ -86,6 +89,7 @@ class ProjectSelectionViewModel @Inject constructor(
                         errorMessage = "配置同步失败: ${e.message}，可稍后在设置中刷新"
                     )
                 }
+                csvUploadManager.scanAndUploadPending(project.id)
                 onSuccess()
             }
         }
