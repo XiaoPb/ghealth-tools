@@ -5,8 +5,6 @@ import com.ghealth.tools.feature.ota.engine.FirmwareInfo
 import com.ghealth.tools.feature.ota.engine.OtaState
 import com.ghealth.tools.feature.ota.model.DebugMenuAction
 import com.ghealth.tools.feature.ota.model.OtaConfig
-import com.ghealth.tools.feature.ota.model.StorageType
-import com.ghealth.tools.feature.ota.model.UpgradeRegion
 
 data class ConnectedDeviceInfo(
     val address: String,
@@ -31,11 +29,8 @@ data class OtaUiState(
     val isReadingFirmwareInfo: Boolean = false,
 
     val firmwareFile: FirmwareFileInfo = FirmwareFileInfo(),
-    val upgradeRegion: UpgradeRegion = UpgradeRegion.SINGLE,
 
     val resourceFile: FirmwareFileInfo = FirmwareFileInfo(),
-    val resourceStartAddress: Long = 0,
-    val resourceStorageType: StorageType = StorageType.INTERNAL,
 
     val otaConfig: OtaConfig = OtaConfig(),
 

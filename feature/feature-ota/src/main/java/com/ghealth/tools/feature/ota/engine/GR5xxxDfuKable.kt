@@ -14,6 +14,9 @@ class GR5xxxDfuKable(
         reconnectHandler?.let { setReconnectHandler(it) }
     }
 
+    val isAppBootloader: Boolean get() = isAppBootloaderSolution
+    val dfuProtocolVer: Int get() = dfuProtocolVersion
+
     fun getCurrentMac(): String = ble?.getTargetAddress() ?: ""
 
     suspend fun bind(bleConnection: BleConnection) {

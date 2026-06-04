@@ -78,6 +78,8 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
     private var dfuProfile: GR5xxxDfuKable? = null
     @Volatile
     private var isCancelled = false
+    @Volatile
+    private var upgradeThread: Thread? = null
 
     val isDfuReady: Boolean get() = dfuProfile != null
 
@@ -111,9 +113,14 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         _logEvents.tryEmit("读取固件信息...")
         try {
             val chipInfo = profile.getChipInfo()
+            val chipType = mapChipType(chipInfo.stackSVN)
             val scaAddress = profile.getAddressOfSCA(chipInfo)
             val startupBootInfo = profile.getStartupBootInfo(scaAddress)
-            val info = FirmwareInfo.fromBootInfo(startupBootInfo.bootInfo)
+            val info = FirmwareInfo.fromBootInfo(startupBootInfo.bootInfo).copy(
+                chipType = chipType,
+                dfuVersion = profile.dfuProtocolVer,
+                isAppBootloaderSolution = profile.isAppBootloader,
+            )
             val imgInfoList = try {
                 profile.getImgList(scaAddress)
             } catch (e: Throwable) {
@@ -123,7 +130,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
             val result = info.copy(
                 imgList = imgInfoList?.imgList?.map { FirmwareInfo.fromImgInfo(it) } ?: emptyList()
             )
-            _logEvents.tryEmit("固件信息读取完成")
+            _logEvents.tryEmit("固件信息读取完成 [$chipType, DFU v${profile.dfuProtocolVer}]")
             result
         } catch (e: Throwable) {
             Timber.e(e, "读取固件信息失败, 设备可能不支持DFU命令")
@@ -132,12 +139,21 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         }
     }
 
+    private fun mapChipType(stackSVN: Int): String = when (stackSVN) {
+        0x00001EA8, 0x00000B88 -> "GR5515"
+        0xCA0F33C7.toInt() -> "GR5525"
+        0xF83A64D9.toInt() -> "GR5526"
+        0x00354083 -> "GR5332"
+        else -> "Unknown(0x${stackSVN.toString(16)})"
+    }
+
     suspend fun startFirmwareUpgrade(
         context: Context,
         firmwareStream: InputStream,
         config: OtaConfig,
     ) = withContext(Dispatchers.IO) {
         isCancelled = false
+        upgradeThread = Thread.currentThread()
         _progress.value = OtaProgress(state = OtaState.PREPARING)
 
         stringLogger.clearBuffer()
@@ -174,6 +190,7 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         config: OtaConfig,
     ) = withContext(Dispatchers.IO) {
         isCancelled = false
+        upgradeThread = Thread.currentThread()
         _progress.value = OtaProgress(state = OtaState.PREPARING)
 
         stringLogger.clearBuffer()
@@ -258,12 +275,18 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         _logEvents.tryEmit("写入RAM 地址=0x${address.toString(16)} 数据长度=${data.size}")
         try {
             val profile = requireProfile()
-            val param = HexSerializer(6 + data.size)
-            param.put(4, address)
-            param.put(2, data.size)
-            param.put(data)
-            profile.sendCmd(CmdOpcode.WRITE_RAM, param.buffer)
-            profile.rcvCmd(CmdOpcode.WRITE_RAM)
+            val maxSegment = 1024
+            var offset = 0
+            while (offset < data.size) {
+                val segSize = minOf(maxSegment, data.size - offset)
+                val param = HexSerializer(6 + segSize)
+                param.put(4, address + offset)
+                param.put(2, segSize)
+                param.put(segSize, data, offset)
+                profile.sendCmd(CmdOpcode.WRITE_RAM, param.buffer)
+                profile.rcvCmd(CmdOpcode.WRITE_RAM)
+                offset += segSize
+            }
             _logEvents.tryEmit("RAM写入完成")
             DebugResult(success = true, message = "RAM写入成功: ${data.size} bytes")
         } catch (e: Throwable) {
@@ -295,12 +318,18 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         _logEvents.tryEmit("写入Flash 地址=0x${address.toString(16)} 数据长度=${data.size}")
         try {
             val profile = requireProfile()
-            val param = HexSerializer(6 + data.size)
-            param.put(4, address)
-            param.put(2, data.size)
-            param.put(data)
-            profile.sendCmd(CmdOpcode.UPDATE_FLASH, param.buffer)
-            profile.rcvCmd(CmdOpcode.UPDATE_FLASH)
+            val maxSegment = 1024
+            var offset = 0
+            while (offset < data.size) {
+                val segSize = minOf(maxSegment, data.size - offset)
+                val param = HexSerializer(6 + segSize)
+                param.put(4, address + offset)
+                param.put(2, segSize)
+                param.put(segSize, data, offset)
+                profile.sendCmd(CmdOpcode.UPDATE_FLASH, param.buffer)
+                profile.rcvCmd(CmdOpcode.UPDATE_FLASH)
+                offset += segSize
+            }
             _logEvents.tryEmit("Flash写入完成")
             DebugResult(success = true, message = "Flash写入成功: ${data.size} bytes")
         } catch (e: Throwable) {
@@ -368,9 +397,9 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         _logEvents.tryEmit("读取NVDS tag=0x${tag.toString(16)}")
         try {
             val profile = requireProfile()
-            val param = HexSerializer(1 + 1)
+            val param = HexSerializer(1 + 2)
             param.put(1, 0)
-            param.put(1, tag)
+            param.put(2, tag)
             profile.sendCmd(CmdOpcode.OPERATION_NVDS, param.buffer)
             val rcv = profile.rcvCmd(CmdOpcode.OPERATION_NVDS)
             val data = ByteArray(rcv.rangeSize)
@@ -388,9 +417,9 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
         _logEvents.tryEmit("写入NVDS tag=0x${tag.toString(16)} 数据长度=${data.size}")
         try {
             val profile = requireProfile()
-            val param = HexSerializer(1 + 1 + data.size)
+            val param = HexSerializer(1 + 2 + data.size)
             param.put(1, 1)
-            param.put(1, tag)
+            param.put(2, tag)
             param.put(data)
             profile.sendCmd(CmdOpcode.OPERATION_NVDS, param.buffer)
             profile.rcvCmd(CmdOpcode.OPERATION_NVDS)
@@ -436,6 +465,8 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
 
     fun cancel() {
         isCancelled = true
+        upgradeThread?.interrupt()
+        upgradeThread = null
     }
 
     fun reset() {
@@ -530,6 +561,9 @@ data class FirmwareInfo(
     val pattern: Int = 0,
     val comments: String = "",
     val imgList: List<FirmwareInfo> = emptyList(),
+    val chipType: String = "",
+    val dfuVersion: Int = 0,
+    val isAppBootloaderSolution: Boolean = false,
 ) {
     companion object {
         fun fromBootInfo(bootInfo: com.goodix.ble.gr.lib.dfu.v2.pojo.BootInfo): FirmwareInfo {

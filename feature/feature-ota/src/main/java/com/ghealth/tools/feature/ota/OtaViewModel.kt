@@ -16,6 +16,7 @@ import com.ghealth.tools.feature.ota.model.UpgradeRegion
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,6 +38,7 @@ class OtaViewModel @Inject constructor(
     val uiState: StateFlow<OtaUiState> = _uiState.asStateFlow()
 
     private val context get() = getApplication<Application>()
+    private var upgradeJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -80,6 +82,7 @@ class OtaViewModel @Inject constructor(
             try {
                 otaEngine.bindDfuProfile(context, device.address)
                 _uiState.update { it.copy(errorMessage = null) }
+                readFirmwareInfo()
             } catch (e: Throwable) {
                 Timber.e(e, "Failed to bind DFU profile")
                 _uiState.update { it.copy(errorMessage = "DFU服务绑定失败: ${e.message}") }
@@ -96,6 +99,7 @@ class OtaViewModel @Inject constructor(
                     it.copy(
                         isReadingFirmwareInfo = false,
                         firmwareInfo = firmwareInfo,
+                        flashAddress = "0x${firmwareInfo.loadAddr.toString(16).uppercase()}",
                         errorMessage = null,
                     )
                 }
@@ -131,6 +135,10 @@ class OtaViewModel @Inject constructor(
                 Timber.e(e, "Failed to parse firmware file")
                 Triple(false, "文件解析失败: ${e.message}", null)
             }
+            val defaultCopyAddress = if (imgInfo != null) {
+                val rawAddr = (imgInfo.loadAddr + imgInfo.binSize).toLong()
+                (rawAddr + 0xFFF) and 0xFFFFF000L
+            } else 0L
             _uiState.update {
                 it.copy(
                     firmwareFile = FirmwareFileInfo(
@@ -140,7 +148,8 @@ class OtaViewModel @Inject constructor(
                         isValid = isValid,
                         parseError = parseError,
                         imgInfo = imgInfo,
-                    )
+                    ),
+                    otaConfig = it.otaConfig.copy(copyAddress = defaultCopyAddress),
                 )
             }
         }
@@ -155,12 +164,7 @@ class OtaViewModel @Inject constructor(
     }
 
     fun selectUpgradeRegion(region: UpgradeRegion) {
-        _uiState.update {
-            it.copy(
-                upgradeRegion = region,
-                otaConfig = it.otaConfig.copy(upgradeRegion = region),
-            )
-        }
+        _uiState.update { it.copy(otaConfig = it.otaConfig.copy(upgradeRegion = region)) }
     }
 
     fun updateCopyAddress(address: Long) {
@@ -168,19 +172,39 @@ class OtaViewModel @Inject constructor(
     }
 
     fun updateResourceStartAddress(address: Long) {
-        _uiState.update { it.copy(resourceStartAddress = address) }
+        _uiState.update { it.copy(otaConfig = it.otaConfig.copy(resourceStartAddress = address)) }
     }
 
     fun updateResourceStorageType(type: StorageType) {
-        _uiState.update { it.copy(resourceStorageType = type) }
+        _uiState.update { it.copy(otaConfig = it.otaConfig.copy(resourceStorageType = type)) }
     }
 
     fun updateFastMode(fastMode: Boolean) {
+        if (fastMode) {
+            val info = _uiState.value.firmwareInfo
+            if (info != null && !info.isAppBootloaderSolution) {
+                _uiState.update { it.copy(errorMessage = "当前设备不支持快速模式 (需要AppBootloader方案)") }
+                return
+            }
+        }
         _uiState.update { it.copy(otaConfig = it.otaConfig.copy(fastMode = fastMode)) }
     }
 
     fun toggleCopyAddressEnabled() {
-        _uiState.update { it.copy(otaConfig = it.otaConfig.copy(copyAddressEnabled = !it.otaConfig.copyAddressEnabled)) }
+        _uiState.update { state ->
+            val newEnabled = !state.otaConfig.copyAddressEnabled
+            val newConfig = if (!newEnabled) {
+                val imgInfo = state.firmwareFile.imgInfo
+                val defaultAddr = if (imgInfo != null) {
+                    val rawAddr = (imgInfo.loadAddr + imgInfo.binSize).toLong()
+                    (rawAddr + 0xFFF) and 0xFFFFF000L
+                } else state.otaConfig.copyAddress
+                state.otaConfig.copy(copyAddressEnabled = false, copyAddress = defaultAddr)
+            } else {
+                state.otaConfig.copy(copyAddressEnabled = true)
+            }
+            state.copy(otaConfig = newConfig)
+        }
     }
 
     fun startFirmwareUpgrade() {
@@ -209,14 +233,6 @@ class OtaViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = "DFU服务未就绪，请先选择设备") }
             return
         }
-        _uiState.update {
-            it.copy(
-                otaConfig = it.otaConfig.copy(
-                    resourceStartAddress = state.resourceStartAddress,
-                    resourceStorageType = state.resourceStorageType,
-                )
-            )
-        }
         prepareAndExecuteUpgrade(uriStr, state.resourceFile.fileName) { stream ->
             otaEngine.startResourceUpgrade(context, stream, _uiState.value.otaConfig)
         }
@@ -243,7 +259,7 @@ class OtaViewModel @Inject constructor(
             )
         }
 
-        viewModelScope.launch {
+        upgradeJob = viewModelScope.launch {
             try {
                 val tempFile = File(context.cacheDir, fileName)
                 context.contentResolver.openInputStream(Uri.parse(uriStr))?.use { input ->
@@ -268,6 +284,8 @@ class OtaViewModel @Inject constructor(
     }
 
     fun cancelUpgrade() {
+        upgradeJob?.cancel()
+        upgradeJob = null
         otaEngine.cancel()
         _uiState.update { it.copy(isUpgrading = false, otaState = OtaState.CANCELLED) }
     }

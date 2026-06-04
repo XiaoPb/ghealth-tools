@@ -276,8 +276,9 @@ fun OtaScreen(
 
             FirmwareUpgradeCard(
                 fileInfo = state.firmwareFile,
-                upgradeRegion = state.upgradeRegion,
+                upgradeRegion = state.otaConfig.upgradeRegion,
                 copyAddress = state.otaConfig.copyAddress,
+                copyAddressEnabled = state.otaConfig.copyAddressEnabled,
                 onSelectFile = { firmwareFilePicker.launch(arrayOf("*/*")) },
                 onSelectRegion = viewModel::selectUpgradeRegion,
                 onCopyAddressChange = viewModel::updateCopyAddress,
@@ -287,8 +288,8 @@ fun OtaScreen(
 
             ResourceUpgradeCard(
                 fileInfo = state.resourceFile,
-                startAddress = state.resourceStartAddress,
-                storageType = state.resourceStorageType,
+                startAddress = state.otaConfig.resourceStartAddress,
+                storageType = state.otaConfig.resourceStorageType,
                 onSelectFile = { resourceFilePicker.launch(arrayOf("*/*")) },
                 onStartAddressChange = viewModel::updateResourceStartAddress,
                 onStorageTypeChange = viewModel::updateResourceStorageType,
@@ -411,6 +412,7 @@ fun OtaScreen(
 fun OtaTopBarMenu(viewModel: OtaViewModel) {
     val state by viewModel.uiState.collectAsState()
     var menuExpanded by remember { mutableStateOf(false) }
+    val fastModeSupported = state.firmwareInfo?.isAppBootloaderSolution != false
 
     Box {
         IconButton(onClick = { menuExpanded = true }) {
@@ -421,12 +423,19 @@ fun OtaTopBarMenu(viewModel: OtaViewModel) {
             onDismissRequest = { menuExpanded = false },
         ) {
             DropdownMenuItem(
-                text = { Text("快速模式") },
+                text = {
+                    Text(
+                        if (fastModeSupported) "快速模式"
+                        else "快速模式 (不支持)"
+                    )
+                },
                 onClick = { viewModel.updateFastMode(!state.otaConfig.fastMode) },
+                enabled = fastModeSupported,
                 leadingIcon = {
                     Checkbox(
                         checked = state.otaConfig.fastMode,
                         onCheckedChange = null,
+                        enabled = fastModeSupported,
                     )
                 },
             )
@@ -654,6 +663,7 @@ private fun FirmwareUpgradeCard(
     fileInfo: FirmwareFileInfo,
     upgradeRegion: UpgradeRegion,
     copyAddress: Long,
+    copyAddressEnabled: Boolean,
     onSelectFile: () -> Unit,
     onSelectRegion: (UpgradeRegion) -> Unit,
     onCopyAddressChange: (Long) -> Unit,
@@ -761,7 +771,7 @@ private fun FirmwareUpgradeCard(
                     },
                     label = { Text("拷贝地址") },
                     placeholder = { Text("0") },
-                    enabled = enabled,
+                    enabled = enabled && copyAddressEnabled,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                 )
