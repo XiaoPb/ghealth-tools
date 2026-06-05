@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.connection
 
 import android.app.Activity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
@@ -360,81 +362,84 @@ private fun MainMenuContent(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         DeviceStatusCard(state.connectedDevices.values.toList(), onDisconnectDevice)
 
         if (state.dataMonitorState.isMonitoring || state.dataMonitorState.testConfig != null) {
-            DataMonitorCard(
-                state = state.dataMonitorState
-            )
+            DataMonitorCard(state = state.dataMonitorState)
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        MenuItemCard(
-            icon = Icons.Default.Bluetooth,
-            title = "连接主设备",
-            subtitle = "扫描并连接主 BLE 设备",
-            onClick = onScanMaster
-        )
-        MenuItemCard(
-            icon = Icons.Default.Cable,
-            title = "连接从设备",
-            subtitle = "扫描并连接从 BLE 设备",
-            onClick = onScanSlave
-        )
-        MenuItemCard(
-            icon = Icons.Default.CompareArrows,
-            title = "连接对比设备",
-            subtitle = "扫描并连接对比 BLE 设备",
-            onClick = onScanCompare
-        )
-        if (state.connectedDevices.isNotEmpty()) {
-            MenuItemCard(
-                icon = Icons.Default.LinkOff,
-                title = "断开全部",
-                subtitle = "断开所有已连接设备",
-                onClick = onDisconnectAll
+        MenuGroupCard {
+            MenuItem(
+                icon = Icons.Default.Bluetooth,
+                title = "连接主设备",
+                subtitle = "扫描并连接主 BLE 设备",
+                onClick = onScanMaster
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            MenuItem(
+                icon = Icons.Default.Cable,
+                title = "连接从设备",
+                subtitle = "扫描并连接从 BLE 设备",
+                onClick = onScanSlave
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            MenuItem(
+                icon = Icons.Default.CompareArrows,
+                title = "连接对比设备",
+                subtitle = "扫描并连接对比 BLE 设备",
+                onClick = onScanCompare
+            )
+            if (state.connectedDevices.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                MenuItem(
+                    icon = Icons.Default.LinkOff,
+                    title = "断开全部",
+                    subtitle = "断开所有已连接设备",
+                    onClick = onDisconnectAll
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            MenuItem(
+                icon = Icons.Default.Tune,
+                title = "工作模式",
+                subtitle = state.currentWorkMode?.name ?: "未设置",
+                onClick = onWorkMode
+            )
+            if (state.currentWorkMode == com.ghealth.tools.core.model.WorkMode.MCU_ONLINE) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                val configSubtitle = state.registerConfigDownloadState.selectedConfig?.fileName
+                    ?: "选择并下载寄存器配置到设备"
+                MenuItem(
+                    icon = Icons.Default.Memory,
+                    title = "应用配置",
+                    subtitle = configSubtitle,
+                    onClick = onAppConfig
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            MenuItem(
+                icon = Icons.Default.Terminal,
+                title = "命令操作",
+                subtitle = "发送 RPC 命令到设备",
+                onClick = onCommand
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            MenuItem(
+                icon = Icons.Default.Science,
+                title = "产测",
+                subtitle = "自动化产测流程",
+                onClick = onFactoryTest
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            MenuItem(
+                icon = Icons.Default.SystemUpdate,
+                title = "OTA固件升级",
+                subtitle = "选择固件进行OTA升级",
+                onClick = onOtaUpgrade
             )
         }
-        MenuItemCard(
-            icon = Icons.Default.Tune,
-            title = "工作模式",
-            subtitle = state.currentWorkMode?.name ?: "未设置",
-            onClick = onWorkMode
-        )
-        if (state.currentWorkMode == com.ghealth.tools.core.model.WorkMode.MCU_ONLINE) {
-            val configSubtitle = state.registerConfigDownloadState.selectedConfig?.fileName
-                ?: "选择并下载寄存器配置到设备"
-            MenuItemCard(
-                icon = Icons.Default.Memory,
-                title = "应用配置",
-                subtitle = configSubtitle,
-                onClick = onAppConfig
-            )
-        }
-        MenuItemCard(
-            icon = Icons.Default.Terminal,
-            title = "命令操作",
-            subtitle = "发送 RPC 命令到设备",
-            onClick = onCommand
-        )
-        MenuItemCard(
-            icon = Icons.Default.Science,
-            title = "产测",
-            subtitle = "自动化产测流程",
-            onClick = onFactoryTest
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        MenuItemCard(
-            icon = Icons.Default.SystemUpdate,
-            title = "OTA固件升级",
-            subtitle = "选择固件进行OTA升级",
-            onClick = onOtaUpgrade
-        )
     }
 }
 
@@ -507,44 +512,53 @@ private fun DeviceStatusCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MenuItemCard(
+private fun MenuGroupCard(
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Column {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun MenuItem(
     icon: ImageVector,
     title: String,
     subtitle: String,
     onClick: () -> Unit
 ) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -776,17 +790,25 @@ private fun AppConfigDialog(
             if (!isDownloading) onDismiss()
         },
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("应用配置")
+            Column {
                 Text(
-                    text = chipName.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "应用配置",
+                    style = MaterialTheme.typography.titleLarge
                 )
+                if (groupedConfigs.size == 1) {
+                    val projectName = groupedConfigs.keys.first()
+                    Text(
+                        text = "$projectName - ${chipName.uppercase()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (chipName.isNotBlank()) {
+                    Text(
+                        text = chipName.uppercase(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         },
         text = {
@@ -826,90 +848,74 @@ private fun AppConfigDialog(
             } else {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    LazyColumn(
-                        modifier = Modifier.heightIn(max = 240.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        groupedConfigs.forEach { (projectName, projectConfigs) ->
-                            item(key = "header_$projectName") {
-                                Text(
-                                    text = projectName,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
-                                )
-                            }
-                            items(projectConfigs, key = { it.displayPath }) { info ->
-                                val isSelected = info == selectedConfig
-                                val fileName = info.fileName
-                                Card(
-                                    onClick = {
-                                        if (!isDownloading && !isCompleted) {
-                                            onSelectAndDownload(info)
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = when {
-                                            isSelected && isDownloading -> MaterialTheme.colorScheme.primaryContainer
-                                            isSelected && isError -> MaterialTheme.colorScheme.errorContainer
-                                            isSelected -> MaterialTheme.colorScheme.secondaryContainer
-                                            else -> MaterialTheme.colorScheme.surfaceContainerLow
-                                        }
-                                    ),
-                                    enabled = !isDownloading && !isCompleted
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
+                    Text(
+                        text = "共 ${configs.size} 个配置文件",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Box(modifier = Modifier.heightIn(max = 320.dp)) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            groupedConfigs.forEach { (projectName, projectConfigs) ->
+                                if (groupedConfigs.size > 1) {
+                                    item(key = "header_$projectName") {
                                         Text(
-                                            text = fileName,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            modifier = Modifier.weight(1f)
+                                            text = projectName,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(
+                                                start = 4.dp,
+                                                top = 8.dp,
+                                                bottom = 4.dp
+                                            )
                                         )
-                                        if (isSelected && isDownloading) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(18.dp),
-                                                strokeWidth = 2.dp
-                                            )
-                                        } else if (isSelected && isCompleted) {
-                                            Icon(
-                                                Icons.Default.Done,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
                                     }
+                                }
+                                items(projectConfigs, key = { it.displayPath }) { info ->
+                                    val isSelected = info == selectedConfig
+                                    ConfigFileItem(
+                                        fileName = info.fileName,
+                                        isSelected = isSelected,
+                                        isDownloading = isDownloading,
+                                        isCompleted = isCompleted,
+                                        isError = isError,
+                                        onClick = {
+                                            if (!isDownloading && !isCompleted) {
+                                                onSelectAndDownload(info)
+                                            }
+                                        }
+                                    )
                                 }
                             }
                         }
                     }
 
                     if (isDownloading) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "正在下载配置到设备...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    "正在下载配置到设备...",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
 
@@ -921,15 +927,16 @@ private fun AppConfigDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(10.dp),
+                                modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     Icons.Default.Done,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
                                         "配置下载完成",
@@ -937,7 +944,7 @@ private fun AppConfigDialog(
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Text(
-                                        selectedConfig?.displayPath ?: "",
+                                        selectedConfig?.fileName ?: "",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -950,8 +957,7 @@ private fun AppConfigDialog(
                         Text(
                             text = error,
                             color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 4.dp)
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -972,4 +978,56 @@ private fun AppConfigDialog(
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConfigFileItem(
+    fileName: String,
+    isSelected: Boolean,
+    isDownloading: Boolean,
+    isCompleted: Boolean,
+    isError: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                isSelected && isDownloading -> MaterialTheme.colorScheme.primaryContainer
+                isSelected && isError -> MaterialTheme.colorScheme.errorContainer
+                isSelected && isCompleted -> MaterialTheme.colorScheme.primaryContainer
+                isSelected -> MaterialTheme.colorScheme.secondaryContainer
+                else -> MaterialTheme.colorScheme.surfaceContainerLow
+            }
+        ),
+        enabled = !isDownloading && !isCompleted
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = fileName,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            if (isSelected && isDownloading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp
+                )
+            } else if (isSelected && isCompleted) {
+                Icon(
+                    Icons.Default.Done,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
 }

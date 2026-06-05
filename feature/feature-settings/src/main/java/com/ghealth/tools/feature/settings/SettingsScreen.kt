@@ -21,14 +21,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -42,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
@@ -58,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -104,171 +110,167 @@ fun SettingsScreen(
                 .widthIn(max = maxW)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-        var bleExpanded by remember { mutableStateOf(false) }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { bleExpanded = !bleExpanded }
-                .padding(bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SectionHeader("BLE UUID 配置", modifier = Modifier.weight(1f))
-            Icon(
-                imageVector = if (bleExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (bleExpanded) "收起" else "展开",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        AnimatedVisibility(visible = bleExpanded) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    OutlinedTextField(
-                        value = state.serviceUuid,
-                        onValueChange = viewModel::updateServiceUuid,
-                        label = { Text("Service UUID") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = state.writeUuid,
-                        onValueChange = viewModel::updateWriteUuid,
-                        label = { Text("Write Characteristic UUID") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = state.notifyUuid,
-                        onValueChange = viewModel::updateNotifyUuid,
-                        label = { Text("Notify Characteristic UUID") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
+            SectionHeader("连接与设备")
+            val listItemColors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            SettingsGroupCard {
+                ListItem(
+                    headlineContent = { Text("自动重连") },
+                    supportingContent = { Text("断开后自动尝试重新连接") },
+                    leadingContent = { Icon(Icons.Default.Replay, contentDescription = null) },
+                    trailingContent = {
+                        Switch(
+                            checked = state.autoReconnect,
+                            onCheckedChange = { viewModel.toggleAutoReconnect() }
+                        )
+                    },
+                    colors = listItemColors
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                ListItem(
+                    headlineContent = { Text("设备信息") },
+                    supportingContent = { Text("查看主设备版本信息") },
+                    leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+                    modifier = Modifier.clickable { onNavigateToDeviceinfo() },
+                    trailingContent = {
+                        TextButton(onClick = onNavigateToDeviceinfo) { Text("查看") }
+                    },
+                    colors = listItemColors
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                val chipInfo = chipCompatibility[state.selectedChip] ?: chipCompatibility["gh3036"]!!
+                ListItem(
+                    headlineContent = { Text(chipInfo.first) },
+                    supportingContent = { Text(chipInfo.second) },
+                    leadingContent = { Icon(Icons.Default.Memory, contentDescription = null) },
+                    colors = listItemColors
+                )
             }
-        }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        SectionHeader("连接设置")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            ListItem(
-                headlineContent = { Text("自动重连") },
-                supportingContent = { Text("断开后自动尝试重新连接") },
-                trailingContent = {
-                    Switch(
-                        checked = state.autoReconnect,
-                        onCheckedChange = { viewModel.toggleAutoReconnect() }
-                    )
-                }
-            )
-        }
+            SectionHeader("外观设置")
+            SettingsGroupCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    var expanded by remember { mutableStateOf(false) }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        SectionHeader("外观设置")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                var expanded by remember { mutableStateOf(false) }
-                
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = state.themeMode.displayName,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("配色主题") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                        },
-                        leadingIcon = {
-                            ThemeColorPreview(state.themeMode)
-                        },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                    )
-
-                    ExposedDropdownMenu(
+                    ExposedDropdownMenuBox(
                         expanded = expanded,
-                        onDismissRequest = { expanded = false }
+                        onExpandedChange = { expanded = it }
                     ) {
-                        state.availableThemes.forEach { theme ->
-                            DropdownMenuItem(
-                                text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        ThemeColorPreview(theme)
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(theme.displayName)
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.setThemeMode(theme)
-                                    expanded = false
-                                },
-                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
-                            )
+                        OutlinedTextField(
+                            value = state.themeMode.displayName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("配色主题") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                            },
+                            leadingIcon = {
+                                ThemeColorPreview(state.themeMode)
+                            },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            state.availableThemes.forEach { theme ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            ThemeColorPreview(theme)
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(theme.displayName)
+                                        }
+                                    },
+                                    onClick = {
+                                        viewModel.setThemeMode(theme)
+                                        expanded = false
+                                    },
+                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        SectionHeader("设备信息")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            ListItem(
-                headlineContent = { Text("设备信息") },
-                supportingContent = { Text("查看主设备版本信息") },
-                leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth(),
-                trailingContent = {
-                    TextButton(onClick = onNavigateToDeviceinfo) { Text("查看") }
+            SectionHeader("BLE UUID 配置")
+            var bleExpanded by remember { mutableStateOf(false) }
+            SettingsGroupCard {
+                ListItem(
+                    headlineContent = { Text("UUID 设置") },
+                    supportingContent = { Text("Service / Write / Notify") },
+                    leadingContent = { Icon(Icons.Default.Bluetooth, contentDescription = null) },
+                    trailingContent = {
+                        Icon(
+                            imageVector = if (bleExpanded) Icons.Default.KeyboardArrowUp
+                                else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (bleExpanded) "收起" else "展开",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    modifier = Modifier.clickable { bleExpanded = !bleExpanded },
+                    colors = listItemColors
+                )
+                AnimatedVisibility(visible = bleExpanded) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        OutlinedTextField(
+                            value = state.serviceUuid,
+                            onValueChange = viewModel::updateServiceUuid,
+                            label = { Text("Service UUID") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = state.writeUuid,
+                            onValueChange = viewModel::updateWriteUuid,
+                            label = { Text("Write Characteristic UUID") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = state.notifyUuid,
+                            onValueChange = viewModel::updateNotifyUuid,
+                            label = { Text("Notify Characteristic UUID") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
                 }
-            )
-        }
+            }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        SectionHeader("支持的芯片")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            val chipInfo = chipCompatibility[state.selectedChip] ?: chipCompatibility["gh3036"]!!
-            ListItem(
-                headlineContent = { Text(chipInfo.first) },
-                supportingContent = { Text(chipInfo.second) }
-            )
-        }
+            SectionHeader("数据与日志")
+            SettingsGroupCard {
+                ListItem(
+                    headlineContent = { Text("导出日志") },
+                    supportingContent = { Text("将日志打包为 ZIP 文件") },
+                    leadingContent = { Icon(Icons.Default.FileDownload, contentDescription = null) },
+                    trailingContent = {
+                        TextButton(onClick = viewModel::exportLogs) { Text("导出") }
+                    },
+                    colors = listItemColors
+                )
+            }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        SectionHeader("数据与日志")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            ListItem(
-                headlineContent = { Text("导出日志") },
-                supportingContent = { Text("将日志打包为 ZIP 文件") },
-                leadingContent = { Icon(Icons.Default.FileDownload, contentDescription = null) },
-                trailingContent = {
-                    TextButton(onClick = viewModel::exportLogs) { Text("导出") }
-                }
-            )
-        }
-
-        if (state.isOnlineMode) {
-            Spacer(modifier = Modifier.height(24.dp))
-            SectionHeader("项目管理")
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column {
+            if (state.isOnlineMode) {
+                SectionHeader("项目管理")
+                SettingsGroupCard {
                     ListItem(
                         headlineContent = {
                             Text(state.selectedProjectName ?: "未选择项目")
                         },
                         supportingContent = { Text("当前在线项目") },
-                        leadingContent = { Icon(Icons.Default.Info, contentDescription = null) }
+                        leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+                        colors = listItemColors
                     )
-                    HorizontalDivider()
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     ListItem(
                         headlineContent = {
                             Text(if (state.isSyncingConfig) "刷新中..." else "刷新配置")
@@ -280,27 +282,30 @@ fun SettingsScreen(
                                 onClick = viewModel::refreshConfig,
                                 enabled = !state.isSyncingConfig
                             ) { Text("刷新") }
-                        }
+                        },
+                        colors = listItemColors
                     )
-                    HorizontalDivider()
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     ListItem(
                         headlineContent = { Text("管理项目") },
                         supportingContent = { Text("编辑、删除项目，查看 CSV 文件") },
                         leadingContent = { Icon(Icons.Default.Settings, contentDescription = null) },
                         trailingContent = {
                             TextButton(onClick = onNavigateToProjectManage) { Text("管理") }
-                        }
+                        },
+                        colors = listItemColors
                     )
-                    HorizontalDivider()
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     ListItem(
                         headlineContent = { Text("切换项目") },
                         supportingContent = { Text("选择其他项目") },
                         leadingContent = { Icon(Icons.Default.SwapHoriz, contentDescription = null) },
                         trailingContent = {
                             TextButton(onClick = onSwitchProject) { Text("切换") }
-                        }
+                        },
+                        colors = listItemColors
                     )
-                    HorizontalDivider()
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     ListItem(
                         headlineContent = {
                             Text(
@@ -323,83 +328,75 @@ fun SettingsScreen(
                             ) {
                                 Text("删除", color = MaterialTheme.colorScheme.error)
                             }
-                        }
+                        },
+                        colors = listItemColors
                     )
                 }
             }
-        }
 
-        if (showDeleteDialog) {
-            AlertDialog(
-                onDismissRequest = { showDeleteDialog = false },
-                title = { Text("确认删除项目") },
-                text = { Text("确定要删除项目\"${state.selectedProjectName}\"吗？此操作不可恢复。") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showDeleteDialog = false
-                        viewModel.deleteProject()
-                    }) {
-                        Text("确认删除", color = MaterialTheme.colorScheme.error)
+            if (showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text("确认删除项目") },
+                    text = { Text("确定要删除项目\"${state.selectedProjectName}\"吗？此操作不可恢复。") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showDeleteDialog = false
+                            viewModel.deleteProject()
+                        }) {
+                            Text("确认删除", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text("取消")
+                        }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDeleteDialog = false }) {
-                        Text("取消")
-                    }
-                }
-            )
-        }
+                )
+            }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        SectionHeader("关于")
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                Text(
-                    text = ctx.applicationInfo.loadLabel(ctx.packageManager).toString(),
-                    style = MaterialTheme.typography.titleMedium,
+            SectionHeader("关于")
+            SettingsGroupCard {
+                ListItem(
+                    headlineContent = {
+                        Text(ctx.applicationInfo.loadLabel(ctx.packageManager).toString())
+                    },
+                    supportingContent = { Text("当前版本: ${state.appVersion}") },
+                    leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+                    colors = listItemColors
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "当前版本: ${state.appVersion}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                ListItem(
+                    headlineContent = { Text("检查更新") },
+                    supportingContent = { Text("检查是否有新版本可用") },
+                    leadingContent = { Icon(Icons.Default.SystemUpdate, contentDescription = null) },
+                    trailingContent = {
+                        if (state.isCheckingUpdate) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            TextButton(onClick = { viewModel.checkForUpdate() }) { Text("检查") }
+                        }
+                    },
+                    modifier = Modifier.clickable(enabled = !state.isCheckingUpdate) {
+                        viewModel.checkForUpdate()
+                    },
+                    colors = listItemColors
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                if (state.isCheckingUpdate) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    OutlinedButton(
-                        onClick = { viewModel.checkForUpdate() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("检查更新")
-                    }
-                }
+            }
+
+            if (state.showUpdateDialog) {
+                UpdateDialog(
+                    versionName = state.updateVersionName,
+                    changelog = state.updateChangelog,
+                    isForceUpdate = state.isForceUpdate,
+                    onDownload = {
+                        viewModel.openDownloadPage()
+                        viewModel.dismissUpdateDialog()
+                    },
+                    onDismiss = { viewModel.dismissUpdateDialog() },
+                )
             }
         }
-
-        if (state.showUpdateDialog) {
-            UpdateDialog(
-                versionName = state.updateVersionName,
-                changelog = state.updateChangelog,
-                isForceUpdate = state.isForceUpdate,
-                onDownload = {
-                    viewModel.openDownloadPage()
-                    viewModel.dismissUpdateDialog()
-                },
-                onDismiss = { viewModel.dismissUpdateDialog() },
-            )
-        }
-    }
     }
 }
 
@@ -423,8 +420,23 @@ private fun ThemeColorPreview(theme: ThemeMode) {
 private fun SectionHeader(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary,
         modifier = modifier.padding(bottom = 0.dp)
     )
+}
+
+@Composable
+private fun SettingsGroupCard(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Column {
+            content()
+        }
+    }
 }
