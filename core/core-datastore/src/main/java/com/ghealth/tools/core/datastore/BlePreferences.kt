@@ -24,6 +24,7 @@ class BlePreferences @Inject constructor(
         val WRITE_CHAR_UUID = stringPreferencesKey("write_char_uuid")
         val NOTIFY_CHAR_UUID = stringPreferencesKey("notify_char_uuid")
         val LAST_DEVICE_ADDRESS = stringPreferencesKey("last_device_address")
+        val LAST_DEVICE_NAME = stringPreferencesKey("last_device_name")
         val AUTO_RECONNECT = booleanPreferencesKey("auto_reconnect")
         val SELECTED_CHIP = stringPreferencesKey("selected_chip")
         val SELECTED_PROJECT_CHIP = stringPreferencesKey("selected_project_chip")
@@ -44,6 +45,10 @@ class BlePreferences @Inject constructor(
 
     val lastDeviceAddress: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[Keys.LAST_DEVICE_ADDRESS]
+    }
+
+    val lastDeviceName: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[Keys.LAST_DEVICE_NAME]
     }
 
     val autoReconnect: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -80,6 +85,10 @@ class BlePreferences @Inject constructor(
 
     suspend fun setLastDeviceAddress(address: String) {
         context.dataStore.edit { it[Keys.LAST_DEVICE_ADDRESS] = address }
+    }
+
+    suspend fun setLastDeviceName(name: String) {
+        context.dataStore.edit { it[Keys.LAST_DEVICE_NAME] = name }
     }
 
     suspend fun setAutoReconnect(enabled: Boolean) {

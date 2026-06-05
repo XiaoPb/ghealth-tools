@@ -158,6 +158,15 @@ class ConnectionViewModel @Inject constructor(
             }
         }
 
+        viewModelScope.launch {
+            val autoReconnect = blePreferences.autoReconnect.first()
+            val lastAddress = blePreferences.lastDeviceAddress.first()
+            val lastName = blePreferences.lastDeviceName.first()
+            if (autoReconnect && !lastAddress.isNullOrBlank()) {
+                connectionManager.autoConnect(lastAddress, lastName)
+            }
+        }
+
         checkBluetoothState()
     }
 

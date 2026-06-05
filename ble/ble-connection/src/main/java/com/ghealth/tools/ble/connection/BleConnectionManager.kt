@@ -225,6 +225,32 @@ class BleConnectionManager @Inject constructor(
         }
     }
 
+    fun autoConnect(address: String, name: String?) {
+        val targetAddress = address.uppercase()
+        Timber.d("Auto-connect: scanning for $targetAddress")
+        scope.launch {
+            val advertisement = withTimeoutOrNull(15_000L) {
+                Scanner {
+                    logging { level = Logging.Level.Warnings }
+                }.advertisements.first { it.address.equals(targetAddress, ignoreCase = true) }
+            }
+            if (advertisement == null) {
+                Timber.d("Auto-connect: device $targetAddress not found within timeout")
+                return@launch
+            }
+            Timber.d("Auto-connect: found $targetAddress, connecting...")
+            try {
+                val peripheral = Peripheral(advertisement) {
+                    logging { level = Logging.Level.Events }
+                    onServicesDiscovered { requestMtu(247) }
+                }
+                connect(peripheral, DeviceRole.MASTER)
+            } catch (e: Exception) {
+                Timber.w(e, "Auto-connect: failed to connect to $targetAddress")
+            }
+        }
+    }
+
     @OptIn(ExperimentalUuidApi::class)
     suspend fun connect(peripheral: Peripheral, role: DeviceRole) {
         val address = peripheral.identifier.toString()
@@ -301,6 +327,12 @@ class BleConnectionManager @Inject constructor(
                 is State.Connected -> {
                     updateDeviceState(address, ConnectionState.CONNECTED)
                     validateServices(peripheral, address, role)
+                    if (role == DeviceRole.MASTER) {
+                        scope.launch {
+                            blePreferences.setLastDeviceAddress(address)
+                            blePreferences.setLastDeviceName(peripheral.name ?: "")
+                        }
+                    }
                 }
                 is State.Disconnected -> {
                     val status = state.status
