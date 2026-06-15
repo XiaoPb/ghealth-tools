@@ -1,5 +1,6 @@
 package com.ghealth.tools.ble.connection
 
+import com.juul.kable.AndroidPeripheral
 import com.juul.kable.Peripheral
 import com.juul.kable.State
 import com.juul.kable.WriteType
@@ -26,6 +27,20 @@ internal class KableRawChannel(
 
     override val address: String get() = peripheral.identifier
     override val isConnected: Boolean get() = peripheral.state.value is State.Connected
+    override val mtu: Int
+        get() = (peripheral as? AndroidPeripheral)?.mtu?.value ?: 23
+
+    override suspend fun requestMtu(desiredMtu: Int): Int {
+        val androidPeripheral = peripheral as? AndroidPeripheral ?: return mtu
+        val currentMtu = androidPeripheral.mtu.value ?: 23
+        return try {
+            androidPeripheral.requestMtu(desiredMtu)
+            androidPeripheral.mtu.value ?: currentMtu
+        } catch (e: Exception) {
+            Timber.w("KableRaw: requestMtu($desiredMtu) failed: ${e.message}, current mtu=$currentMtu")
+            currentMtu
+        }
+    }
 
     override suspend fun connect() {
         peripheral.connect()

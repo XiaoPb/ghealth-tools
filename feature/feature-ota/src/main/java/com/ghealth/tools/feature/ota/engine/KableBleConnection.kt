@@ -26,6 +26,7 @@ class KableBleConnection(
     private var logger: ILogger? = null
     private val notifyChannels = mutableMapOf<UUID, Channel<ByteArray>>()
     private var cachedServices: List<KableBleService>? = null
+    private var negotiatedMtu: Int = 23
 
     override fun getTargetAddress(): String = channel.address
 
@@ -72,8 +73,16 @@ class KableBleConnection(
     }
 
     override fun setMtu(newMtu: Int) {
-        Timber.d("KableBle: setMtu($newMtu) - no-op with Kable")
+        runBlocking {
+            val currentMtu = channel.mtu
+            Timber.d("KableBle: current mtu=$currentMtu, attempting to negotiate mtu=512")
+            val result = channel.requestMtu(512)
+            negotiatedMtu = if (result > currentMtu) result else currentMtu
+            Timber.d("KableBle: using mtu=$negotiatedMtu (maxWriteSize=$maxWriteSize)")
+        }
     }
+
+    private val maxWriteSize: Int get() = negotiatedMtu - 3
 
     override fun queryServices(uuid: UUID): List<BleService> {
         return cachedServices?.filter { it.serviceUuid == uuid } ?: emptyList()
@@ -114,12 +123,19 @@ class KableBleConnection(
     ) {
         if (chr !is KableBleCharacteristic) return
         runBlocking {
-            val data = dat.copyOfRange(offsetInDat, offsetInDat + writeSize.coerceAtMost(dat.size - offsetInDat))
             val startTime = System.currentTimeMillis()
-            Timber.v("KableBle: writeWithResponse svcUUID=${chr.serviceUuid}, charUUID=${chr.charUuid}, size=$writeSize")
-            channel.write(chr.serviceUuid, chr.charUuid, data, withResponse = true)
+            val end = offsetInDat + writeSize.coerceAtMost(dat.size - offsetInDat)
+            var pos = offsetInDat
+            while (pos < end) {
+                val chunkSize = minOf(maxWriteSize, end - pos)
+                val chunk = dat.copyOfRange(pos, pos + chunkSize)
+                channel.write(chr.serviceUuid, chr.charUuid, chunk, withResponse = true)
+                pos += chunkSize
+            }
             val elapsed = System.currentTimeMillis() - startTime
-            listener?.onDataProcessed(null, data.size, data.size, elapsed, elapsed)
+            val totalWritten = end - offsetInDat
+            Timber.v("KableBle: writeWithResponse charUUID=${chr.charUuid}, size=$totalWritten, chunks=${(totalWritten + maxWriteSize - 1) / maxWriteSize}")
+            listener?.onDataProcessed(null, totalWritten, totalWritten, elapsed, elapsed)
         }
     }
 
@@ -133,12 +149,19 @@ class KableBleConnection(
     ) {
         if (chr !is KableBleCharacteristic) return
         runBlocking {
-            val data = dat.copyOfRange(offsetInDat, offsetInDat + writeSize.coerceAtMost(dat.size - offsetInDat))
             val startTime = System.currentTimeMillis()
-            Timber.v("KableBle: writeWithoutResponse svcUUID=${chr.serviceUuid}, charUUID=${chr.charUuid}, size=$writeSize")
-            channel.write(chr.serviceUuid, chr.charUuid, data, withResponse = false)
+            val end = offsetInDat + writeSize.coerceAtMost(dat.size - offsetInDat)
+            var pos = offsetInDat
+            while (pos < end) {
+                val chunkSize = minOf(maxWriteSize, end - pos)
+                val chunk = dat.copyOfRange(pos, pos + chunkSize)
+                channel.write(chr.serviceUuid, chr.charUuid, chunk, withResponse = false)
+                pos += chunkSize
+            }
             val elapsed = System.currentTimeMillis() - startTime
-            listener?.onDataProcessed(null, data.size, data.size, elapsed, elapsed)
+            val totalWritten = end - offsetInDat
+            Timber.v("KableBle: writeWithoutResponse charUUID=${chr.charUuid}, size=$totalWritten, chunks=${(totalWritten + maxWriteSize - 1) / maxWriteSize}")
+            listener?.onDataProcessed(null, totalWritten, totalWritten, elapsed, elapsed)
         }
     }
 
