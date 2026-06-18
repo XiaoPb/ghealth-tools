@@ -375,11 +375,12 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun onHeartRateReceived(address: String, data: ByteArray) {
-        if (data.isEmpty()) return
+        if (data.size < 2) return
         val flags = data[0].toInt() and 0xFF
         val heartRate = if (flags and 0x01 == 0) {
             data[1].toInt() and 0xFF
         } else {
+            if (data.size < 3) return
             ((data[2].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
         }
 
@@ -526,15 +527,19 @@ class BleConnectionManager @Inject constructor(
         logManager.logBle(address, "RX", data)
         val executor = peripherals[address]?.executor ?: return
 
-        val results = executor.process(data)
-        for (result in results) {
-            result.onSuccess { parsed ->
-                Timber.d("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
-                _dataFlow.emit(address to parsed)
+        try {
+            val results = executor.process(data)
+            for (result in results) {
+                result.onSuccess { parsed ->
+                    Timber.d("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
+                    _dataFlow.emit(address to parsed)
+                }
+                result.onFailure { error ->
+                    Timber.w("Parse error from $address: ${error.message}")
+                }
             }
-            result.onFailure { error ->
-                Timber.w("Parse error from $address: ${error.message}")
-            }
+        } catch (e: Exception) {
+            Timber.e(e, "Unexpected error processing BLE data from $address (${data.size} bytes)")
         }
     }
 
