@@ -101,11 +101,15 @@ class TokenManager @Inject constructor(
     fun clearTokensSync() {
         cachedAccessToken = null
         cachedRefreshToken = null
-        kotlinx.coroutines.runBlocking {
-            context.tokenDataStore.edit { prefs ->
-                prefs.remove(Keys.ACCESS_TOKEN)
-                prefs.remove(Keys.REFRESH_TOKEN)
+        try {
+            kotlinx.coroutines.runBlocking {
+                context.tokenDataStore.edit { prefs ->
+                    prefs.remove(Keys.ACCESS_TOKEN)
+                    prefs.remove(Keys.REFRESH_TOKEN)
+                }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("TokenManager", "Failed to clear tokens from DataStore", e)
         }
     }
 }

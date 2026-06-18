@@ -1,6 +1,8 @@
 package com.ghealth.tools.core.datastore
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -39,9 +41,26 @@ private val Context.userDataStore: DataStore<Preferences> by preferencesDataStor
 class UserPreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val encryptedPrefs by lazy {
+    private val encryptedPrefs: SharedPreferences by lazy {
+        try {
+            createEncryptedPrefs()
+        } catch (e: Exception) {
+            Log.e("UserPreferences", "EncryptedSharedPreferences corrupted, clearing and recreating", e)
+            try {
+                context.getSharedPreferences("user_secure_prefs", Context.MODE_PRIVATE).edit().clear().apply()
+                val prefsFile = java.io.File(context.filesDir.parent, "shared_prefs/user_secure_prefs.xml")
+                if (prefsFile.exists()) prefsFile.delete()
+                createEncryptedPrefs()
+            } catch (e2: Exception) {
+                Log.e("UserPreferences", "Failed to recreate EncryptedSharedPreferences, falling back to plain prefs", e2)
+                context.getSharedPreferences("user_secure_prefs_fallback", Context.MODE_PRIVATE)
+            }
+        }
+    }
+
+    private fun createEncryptedPrefs(): SharedPreferences {
         val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-        EncryptedSharedPreferences.create(
+        return EncryptedSharedPreferences.create(
             "user_secure_prefs",
             masterKey,
             context,
