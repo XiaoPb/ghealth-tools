@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.demo
 
 import android.os.Environment
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
@@ -101,12 +102,20 @@ class DemoViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             connectionManager.ghFrameFlow.collect { (address, frame) ->
-                onFrameReceived(address, frame)
+                try {
+                    onFrameReceived(address, frame)
+                } catch (e: Exception) {
+                    Log.e("DemoViewModel", "Error processing GH frame from $address", e)
+                }
             }
         }
         viewModelScope.launch {
             connectionManager.heartRateResults.collect { hrMap ->
-                onHeartRateResultsChanged(hrMap)
+                try {
+                    onHeartRateResultsChanged(hrMap)
+                } catch (e: Exception) {
+                    Log.e("DemoViewModel", "Error processing heart rate results", e)
+                }
             }
         }
         viewModelScope.launch {

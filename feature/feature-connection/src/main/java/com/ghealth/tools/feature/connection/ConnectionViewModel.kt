@@ -140,14 +140,22 @@ class ConnectionViewModel @Inject constructor(
 
         viewModelScope.launch {
             connectionManager.dataFlow.collect { (address, parseResult) ->
-                handleParsedData(address, parseResult)
+                try {
+                    handleParsedData(address, parseResult)
+                } catch (e: Exception) {
+                    Timber.e(e, "Error handling parsed BLE data from $address")
+                }
             }
         }
 
         viewModelScope.launch {
             connectionManager.recordingStoppedEvents.collect {
-                if (_uiState.value.dataMonitorState.isMonitoring) {
-                    stopMonitoring()
+                try {
+                    if (_uiState.value.dataMonitorState.isMonitoring) {
+                        stopMonitoring()
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "Error handling recording stopped event")
                 }
             }
         }
