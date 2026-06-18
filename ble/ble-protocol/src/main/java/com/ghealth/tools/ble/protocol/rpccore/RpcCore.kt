@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 
 typealias SendFunction = (ByteArray) -> Result<Unit>
@@ -94,7 +95,12 @@ class RpcCore(
             context.frameIdx = frameIdx
             context.invokeIdx = invokeIdx
 
-            handler(data, data.size, context)
+            try {
+                handler(data, data.size, context)
+            } catch (e: Exception) {
+                Timber.e(e, "Exception in secure handler for key=$key")
+                return
+            }
 
             val response = context.getResponse()
             if (response.isNotEmpty()) {
@@ -161,7 +167,12 @@ class RpcCore(
             context.isFin = isFin
             context.frameIdx = frameIdx
 
-            handler(allData, allData.size, context)
+            try {
+                handler(allData, allData.size, context)
+            } catch (e: Exception) {
+                Timber.e(e, "Exception in handler for key=$key")
+                return
+            }
 
             val response = context.getResponse()
             if (response.isNotEmpty()) {

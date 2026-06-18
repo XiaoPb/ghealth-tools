@@ -414,7 +414,7 @@ object Unpackage {
     }
 
     fun unpackWithFormat(data: ByteArray, format: String): Result<ByteArray> {
-        val info = FormatInfo.parse(format).getOrThrow()
+        val info = FormatInfo.parse(format).getOrElse { return Result.failure(it) }
         val result = mutableListOf<Byte>()
         var offset = 0
 

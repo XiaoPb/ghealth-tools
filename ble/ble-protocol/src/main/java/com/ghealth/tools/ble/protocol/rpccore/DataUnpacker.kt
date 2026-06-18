@@ -113,7 +113,7 @@ class DataUnpacker {
             return Result.success(UnpackValue.U8Array(ubyteArrayOf((data[1].toInt() and 0xFF).toUByte())))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrThrow()
+        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
         val end = start + arrayLen * elementSize
 
         if (end > data.size) {
@@ -141,7 +141,7 @@ class DataUnpacker {
             return Result.success(UnpackValue.I8Array(byteArrayOf(data[1])))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrThrow()
+        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
         val result = ByteArray(arrayLen) { i -> data[start + i] }
         return Result.success(UnpackValue.I8Array(result))
     }
@@ -164,7 +164,7 @@ class DataUnpacker {
             return Result.success(UnpackValue.U16Array(ushortArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrThrow()
+        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
         val result = UShortArray(arrayLen) { i ->
             val offset = start + i * 2
             if (offset + 2 > data.size) return Result.failure(UnpackError.InsufficientData)
@@ -191,7 +191,7 @@ class DataUnpacker {
             return Result.success(UnpackValue.I16Array(shortArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrThrow()
+        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
         val result = ShortArray(arrayLen) { i ->
             val offset = start + i * 2
             if (offset + 2 > data.size) return Result.failure(UnpackError.InsufficientData)
@@ -224,7 +224,7 @@ class DataUnpacker {
             return Result.success(UnpackValue.U32Array(uintArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrThrow()
+        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
         val result = UIntArray(arrayLen) { i ->
             val offset = start + i * 4
             if (offset + 4 > data.size) return Result.failure(UnpackError.InsufficientData)
@@ -260,7 +260,7 @@ class DataUnpacker {
             return Result.success(UnpackValue.I32Array(intArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrThrow()
+        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
         val result = IntArray(arrayLen) { i ->
             val offset = start + i * 4
             if (offset + 4 > data.size) return Result.failure(UnpackError.InsufficientData)
@@ -304,7 +304,7 @@ class DataUnpacker {
             return Result.success(UnpackValue.U64Array(ulongArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrThrow()
+        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
         val result = ULongArray(arrayLen) { i ->
             val offset = start + i * 8
             if (offset + 8 > data.size) return Result.failure(UnpackError.InsufficientData)
@@ -352,7 +352,7 @@ class DataUnpacker {
             return Result.success(UnpackValue.I64Array(longArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrThrow()
+        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
         val result = LongArray(arrayLen) { i ->
             val offset = start + i * 8
             if (offset + 8 > data.size) return Result.failure(UnpackError.InsufficientData)

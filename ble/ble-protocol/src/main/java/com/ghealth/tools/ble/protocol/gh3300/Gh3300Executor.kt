@@ -32,12 +32,16 @@ class Gh3300Executor(
     }
 
     private fun handleGData(data: ByteArray) {
-        val unpacked = unpackU8Array(data).toByteArray()
-        val frames = frameDecoder.decode(unpacked)
+        try {
+            val unpacked = unpackU8Array(data).toByteArray()
+            val frames = frameDecoder.decode(unpacked)
 
-        frames.forEach { frame ->
-            if (debugLogEnabled) Timber.v("GH3300 GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}")
-            frameCallback?.invoke(frame)
+            frames.forEach { frame ->
+                if (debugLogEnabled) Timber.v("GH3300 GhFuncFrame: funcId=${frame.funcId}, frameCnt=${frame.frameCnt}")
+                frameCallback?.invoke(frame)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "GH3300 handleGData error")
         }
     }
 
