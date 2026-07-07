@@ -7,6 +7,9 @@ import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.ConnectionError
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.protocol.gh3036.KEY_G
+import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
+import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import com.ghealth.tools.ble.scanner.BleScanException
 import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.model.BleDevice
@@ -654,6 +657,19 @@ class ConnectionViewModel @Inject constructor(
                     throw IllegalStateException("配置文件中没有有效的寄存器数据")
                 }
 
+                val interleaved = RegEntry.toInterleavedArray(registerConfig.registers)
+                val param = RegisterCommandPayloadBuilder.buildU16ArrayPayload(interleaved)
+                Timber.d(
+                    "Register config download: file=%s, registerPairs=%d, u16Length=%d, payloadBytes=%d, preview=%s",
+                    configInfo.fileName,
+                    registerConfig.registers.size,
+                    interleaved.size,
+                    param.size,
+                    registerConfig.registers.take(3).joinToString { entry ->
+                        "0x%04X=0x%04X".format(entry.addr, entry.value)
+                    }
+                )
+
                 // Step 1: download_config stage 0
                 withContext(Dispatchers.Main) {
                     _uiState.update {
@@ -665,7 +681,7 @@ class ConnectionViewModel @Inject constructor(
                     }
                 }
                 val step1 = connectionManager.sendCommand(
-                    masterAddress, "download_config", byteArrayOf(0)
+                    masterAddress, KEY_DOWNLOAD_CONFIG, byteArrayOf(0)
                 )
                 if (step1.isFailure) {
                     throw IllegalStateException("开始配置下载失败: ${step1.exceptionOrNull()?.message}")
@@ -682,10 +698,8 @@ class ConnectionViewModel @Inject constructor(
                 }
 
                 // Step 2: write register list
-                val interleaved = RegEntry.toInterleavedArray(registerConfig.registers)
-                val param = buildU16ArrayParam(interleaved)
                 val step2 = connectionManager.sendCommand(
-                    masterAddress, "GH3X_RegsListWriteCmd", param
+                    masterAddress, KEY_GH3X_REGS_LIST_WRITE_CMD, param
                 )
                 if (step2.isFailure) {
                     throw IllegalStateException("寄存器列表写入失败: ${step2.exceptionOrNull()?.message}")
@@ -703,7 +717,7 @@ class ConnectionViewModel @Inject constructor(
 
                 // Step 3: download_config stage 1
                 val step3 = connectionManager.sendCommand(
-                    masterAddress, "download_config", byteArrayOf(1)
+                    masterAddress, KEY_DOWNLOAD_CONFIG, byteArrayOf(1)
                 )
                 if (step3.isFailure) {
                     throw IllegalStateException("结束配置下载失败: ${step3.exceptionOrNull()?.message}")
@@ -745,15 +759,6 @@ class ConnectionViewModel @Inject constructor(
         _uiState.update {
             it.copy(registerConfigDownloadState = RegisterConfigDownloadState())
         }
-    }
-
-    private fun buildU16ArrayParam(values: IntArray): ByteArray {
-        val bytes = mutableListOf<Byte>()
-        values.forEach { v ->
-            bytes.add((v and 0xFF).toByte())
-            bytes.add((v shr 8 and 0xFF).toByte())
-        }
-        return bytes.toByteArray()
     }
 
     override fun onCleared() {

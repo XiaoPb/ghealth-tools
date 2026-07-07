@@ -8,6 +8,7 @@ import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_SW_FUNCTION_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH_SET_WORK_MODE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
+import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import com.ghealth.tools.ble.protocol.rpccore.Package
 import com.ghealth.tools.feature.factory.model.FactoryConfig
 import com.ghealth.tools.feature.factory.model.RegisterConfig
@@ -395,7 +396,7 @@ class FactoryTestEngine @Inject constructor(
         // Write register list if available
         if (registerConfig != null && registerConfig.registers.isNotEmpty()) {
             val interleaved = RegEntry.toInterleavedArray(registerConfig.registers)
-            val regsParam = buildU16ArrayParam(interleaved)
+            val regsParam = RegisterCommandPayloadBuilder.buildU16ArrayPayload(interleaved)
             val regResult = sendSimpleCommand(
                 deviceAddress, KEY_GH3X_REGS_LIST_WRITE_CMD, regsParam
             )
@@ -523,15 +524,4 @@ class FactoryTestEngine @Inject constructor(
         return 1 shl test1Bit.bit
     }
 
-    private fun buildU16ArrayParam(data: IntArray): ByteArray {
-        val result = ByteArray(data.size * 2 + 2)
-        result[0] = (data.size and 0xFF).toByte()
-        result[1] = ((data.size shr 8) and 0xFF).toByte()
-        for (i in data.indices) {
-            val offset = 2 + i * 2
-            result[offset] = (data[i] and 0xFF).toByte()
-            result[offset + 1] = ((data[i] shr 8) and 0xFF).toByte()
-        }
-        return result
-    }
 }
