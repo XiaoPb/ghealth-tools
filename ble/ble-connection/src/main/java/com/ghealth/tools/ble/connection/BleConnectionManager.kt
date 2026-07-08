@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onCompletion
@@ -40,6 +41,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -116,6 +118,7 @@ class BleConnectionManager @Inject constructor(
     companion object {
         private const val MAX_CONNECT_RETRIES = 3
         private const val CONNECT_RETRY_DELAY_MS = 500L
+        private const val DISCONNECT_TIMEOUT_MS = 5_000L
     }
     private val _devices = MutableStateFlow<Map<String, ConnectedDevice>>(emptyMap())
     val devices: StateFlow<Map<String, ConnectedDevice>> = _devices.asStateFlow()
@@ -157,6 +160,8 @@ class BleConnectionManager @Inject constructor(
     }
 
     private val peripherals = mutableMapOf<String, GHealthPeripheral>()
+    private val userDisconnectingAddresses = Collections.synchronizedSet(mutableSetOf<String>())
+    private val suppressDisconnectErrorAddresses = Collections.synchronizedSet(mutableSetOf<String>())
 
     fun getDeviceState(address: String): ConnectionState {
         return _devices.value[address]?.state ?: ConnectionState.DISCONNECTED
@@ -336,16 +341,22 @@ class BleConnectionManager @Inject constructor(
                 }
                 is State.Disconnected -> {
                     val status = state.status
-                    if (status != null) {
-                        Timber.w("Device $address disconnected with status: $status")
-                    }
-                    emitConnectionError(
-                        address,
-                        ConnectionError.ConnectionFailed(
-                            errorMessage = "设备断开连接",
-                            disconnectStatus = status?.toString()
+                    val userInitiated = userDisconnectingAddresses.remove(address) ||
+                            suppressDisconnectErrorAddresses.remove(address)
+                    if (userInitiated) {
+                        Timber.i("State disconnected received for user disconnect: $address, status=$status")
+                    } else {
+                        if (status != null) {
+                            Timber.w("Device $address disconnected with status: $status")
+                        }
+                        emitConnectionError(
+                            address,
+                            ConnectionError.ConnectionFailed(
+                                errorMessage = "设备断开连接",
+                                disconnectStatus = status?.toString()
+                            )
                         )
-                    )
+                    }
                     onDeviceDisconnected(address)
                 }
                 else -> {}
@@ -400,7 +411,7 @@ class BleConnectionManager @Inject constructor(
         val services = peripheral.services.first() ?: run {
             Timber.e("Service discovery failed for $address")
             emitConnectionError(address, ConnectionError.ServiceNotFound)
-            disconnect(address)
+            disconnectAfterFailure(address)
             return
         }
 
@@ -427,7 +438,7 @@ class BleConnectionManager @Inject constructor(
                 if (service == null) {
                     Timber.e("Service not found: $serviceUuidStr")
                     emitConnectionError(address, ConnectionError.ServiceNotFound)
-                    disconnect(address)
+                    disconnectAfterFailure(address)
                     return
                 }
 
@@ -436,7 +447,7 @@ class BleConnectionManager @Inject constructor(
                 if (writeCharacteristic == null) {
                     Timber.e("Write characteristic not found: $writeUuidStr")
                     emitConnectionError(address, ConnectionError.WriteCharacteristicNotFound)
-                    disconnect(address)
+                    disconnectAfterFailure(address)
                     return
                 }
 
@@ -445,7 +456,7 @@ class BleConnectionManager @Inject constructor(
                 if (notifyCharacteristic == null) {
                     Timber.e("Notify characteristic not found: $notifyUuidStr")
                     emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
-                    disconnect(address)
+                    disconnectAfterFailure(address)
                     return
                 }
 
@@ -474,12 +485,12 @@ class BleConnectionManager @Inject constructor(
                 } catch (e: NoSuchElementException) {
                     Timber.e(e, "Notify characteristic does not support notify/indicate: $notifyUuidStr")
                     emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
-                    disconnect(address)
+                    disconnectAfterFailure(address)
                     return
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to observe notify characteristic: $notifyUuidStr")
                     emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
-                    disconnect(address)
+                    disconnectAfterFailure(address)
                     return
                 }
 
@@ -491,7 +502,7 @@ class BleConnectionManager @Inject constructor(
                 if (heartRateService == null) {
                     Timber.e("Heart rate service not found")
                     emitConnectionError(address, ConnectionError.HeartRateServiceNotFound)
-                    disconnect(address)
+                    disconnectAfterFailure(address)
                     return
                 }
 
@@ -502,7 +513,7 @@ class BleConnectionManager @Inject constructor(
                 if (heartRateMeasurement == null) {
                     Timber.e("Heart rate measurement characteristic not found")
                     emitConnectionError(address, ConnectionError.HeartRateServiceNotFound)
-                    disconnect(address)
+                    disconnectAfterFailure(address)
                     return
                 }
 
@@ -544,20 +555,11 @@ class BleConnectionManager @Inject constructor(
     }
 
     suspend fun disconnect(address: String) {
-        Timber.d("Disconnecting from $address")
-        val gHealthPeripheral = peripherals[address] ?: return
-        gHealthPeripheral.executor?.reset()
-        updateDeviceState(address, ConnectionState.DISCONNECTING)
-        try {
-            gHealthPeripheral.peripheral.disconnect()
-            gHealthPeripheral.peripheral.close()
-        } catch (e: Exception) {
-            Timber.e(e, "Error disconnecting from $address")
-        }
+        disconnectInternal(address, userInitiated = true)
     }
 
     fun disconnectAll() {
-        peripherals.keys.forEach { address ->
+        peripherals.keys.toList().forEach { address ->
             scope.launch {
                 disconnect(address)
             }
@@ -646,6 +648,54 @@ class BleConnectionManager @Inject constructor(
     private fun updateDeviceState(address: String, state: ConnectionState) {
         val current = _devices.value[address] ?: return
         _devices.value = _devices.value + (address to current.copy(state = state))
+    }
+
+    private suspend fun disconnectAfterFailure(address: String) {
+        disconnectInternal(address, userInitiated = false)
+    }
+
+    private suspend fun disconnectInternal(address: String, userInitiated: Boolean) {
+        val gHealthPeripheral = peripherals[address] ?: return
+        if (userInitiated) {
+            Timber.i("User disconnect start: $address")
+            userDisconnectingAddresses.add(address)
+        } else {
+            Timber.d("Disconnecting after failure: $address")
+        }
+        gHealthPeripheral.executor?.reset()
+        updateDeviceState(address, ConnectionState.DISCONNECTING)
+
+        try {
+            gHealthPeripheral.peripheral.disconnect()
+            val disconnected = withTimeoutOrNull(DISCONNECT_TIMEOUT_MS) {
+                gHealthPeripheral.peripheral.state
+                    .filterIsInstance<State.Disconnected>()
+                    .first()
+            }
+            if (disconnected == null) {
+                Timber.w("Disconnect timeout fallback for $address after ${DISCONNECT_TIMEOUT_MS}ms")
+                if (userInitiated) {
+                    suppressDisconnectErrorAddresses.add(address)
+                }
+                onDeviceDisconnected(address)
+            } else {
+                Timber.i("State disconnected received for $address: status=${disconnected.status}")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error disconnecting from $address")
+            onDeviceDisconnected(address)
+        } finally {
+            try {
+                Timber.d("Close after disconnected for $address")
+                gHealthPeripheral.peripheral.close()
+            } catch (e: Exception) {
+                Timber.w(e, "Error closing peripheral for $address")
+            } finally {
+                if (userInitiated && _devices.value.containsKey(address)) {
+                    userDisconnectingAddresses.remove(address)
+                }
+            }
+        }
     }
 
     private fun onDeviceDisconnected(address: String) {
