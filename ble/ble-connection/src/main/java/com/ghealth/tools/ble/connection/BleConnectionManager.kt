@@ -119,8 +119,14 @@ class BleConnectionManager @Inject constructor(
         private const val MAX_CONNECT_RETRIES = 3
         private const val CONNECT_RETRY_DELAY_MS = 500L
         private const val DISCONNECT_TIMEOUT_MS = 5_000L
+        // BLE 特征值属性位掩码（与 BluetoothGattCharacteristic 定义一致）
+        private const val PROP_WRITE = 0x08
+        private const val PROP_WRITE_NO_RESPONSE = 0x04
     }
     private val _devices = MutableStateFlow<Map<String, ConnectedDevice>>(emptyMap())
+
+    // 缓存每个设备写入特征值所支持的 WriteType，自动适配 write / writeWithoutResponse
+    private val writeTypeByAddress = Collections.synchronizedMap(mutableMapOf<String, WriteType>())
     val devices: StateFlow<Map<String, ConnectedDevice>> = _devices.asStateFlow()
 
     private val _dataFlow = MutableSharedFlow<Pair<String, ParseResult>>(
@@ -451,6 +457,21 @@ class BleConnectionManager @Inject constructor(
                     return
                 }
 
+                // 根据写入特征值属性自动选择 WriteType：
+                // 优先 WithResponse（更可靠），回退 WithoutResponse（write no response）
+                val writeProps = writeCharacteristic.properties.value
+                val supportsWriteWithResponse = (writeProps and PROP_WRITE) != 0
+                val supportsWriteWithoutResponse = (writeProps and PROP_WRITE_NO_RESPONSE) != 0
+                if (!supportsWriteWithResponse && !supportsWriteWithoutResponse) {
+                    Timber.e("Write characteristic $writeUuidStr has no write property: props=0x${writeProps.toString(16)}")
+                    emitConnectionError(address, ConnectionError.WriteCharacteristicNotFound)
+                    disconnectAfterFailure(address)
+                    return
+                }
+                val writeType = if (supportsWriteWithResponse) WriteType.WithResponse else WriteType.WithoutResponse
+                writeTypeByAddress[address] = writeType
+                Timber.i("Write characteristic $writeUuidStr props=0x${writeProps.toString(16)} using writeType=$writeType")
+
                 val notifyCharacteristic = service.characteristics.find { it.characteristicUuid == notifyUuid }
 
                 if (notifyCharacteristic == null) {
@@ -598,9 +619,11 @@ class BleConnectionManager @Inject constructor(
             characteristic = writeUuid
         )
 
-        gHealthPeripheral.peripheral.write(writeChar, data, WriteType.WithResponse)
+        // 使用 validateServices 中按特征值属性缓存的 WriteType，兼容 write / writeWithoutResponse
+        val writeType = writeTypeByAddress[address] ?: WriteType.WithResponse
+        gHealthPeripheral.peripheral.write(writeChar, data, writeType)
         logManager.logBle(address, "TX", data)
-        Timber.d("Wrote ${data.size} bytes to $address: ${data.toHexString()}")
+        Timber.d("Wrote ${data.size} bytes to $address (writeType=$writeType): ${data.toHexString()}")
     }
 
     private suspend fun createExecutor(address: String): Pair<GHealthExecutor, DeviceType> {
@@ -701,6 +724,7 @@ class BleConnectionManager @Inject constructor(
     private fun onDeviceDisconnected(address: String) {
         val device = _devices.value[address]
         peripherals.remove(address)
+        writeTypeByAddress.remove(address)
         _devices.value = _devices.value - address
         
         if (device?.role == DeviceRole.COMPARE) {
@@ -755,6 +779,7 @@ class BleConnectionManager @Inject constructor(
         val newPeripheral = kableChannel.kablePeripheral
         Timber.i("DFU notifyDfuReconnect: $oldAddress -> $newAddress")
         peripherals.remove(oldAddress)
+        writeTypeByAddress.remove(oldAddress)
         val oldDevice = _devices.value[oldAddress]
         val role = oldDevice?.role ?: DeviceRole.MASTER
         val deviceType = oldDevice?.deviceType ?: DeviceType.GH3036
