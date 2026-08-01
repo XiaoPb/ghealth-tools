@@ -6,6 +6,12 @@ plugins {
 
 android {
     namespace = "com.ghealth.tools.feature.demo"
+
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+        }
+    }
 }
 
 dependencies {
@@ -25,4 +31,8 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.vico.compose)
+
+    testImplementation(libs.junit5)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.coroutines.test)
 }
