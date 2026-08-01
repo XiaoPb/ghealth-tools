@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.demo
 
 import android.app.Activity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -295,6 +297,7 @@ private fun FunctionDetailScreen(
     onStopEditCompareDevice: () -> Unit,
     onUpdateCompareSpo2: (Int, Float?) -> Unit,
     onRemoveCompareDevice: (Int) -> Unit,
+    onSelectDisplayWidth: (Int) -> Unit = {},
     isWide: Boolean = false
 ) {
     val function = state.selectedFunction ?: return
@@ -325,6 +328,10 @@ private fun FunctionDetailScreen(
                 text = function.displayName,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
+            )
+            DisplayWidthSelector(
+                currentWidth = state.currentDisplayWidth,
+                onSelect = onSelectDisplayWidth
             )
             if (function == FunctionMode.SPO2) {
                 Spo2CompareMenu(
@@ -403,6 +410,53 @@ private fun FunctionDetailScreen(
             },
             onDismiss = { showColumnDialog2 = false }
         )
+    }
+}
+
+@Composable
+private fun DisplayWidthSelector(
+    currentWidth: Int,
+    onSelect: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .padding(start = 4.dp)
+                .clickable { expanded = true }
+        ) {
+            Text(
+                text = "$currentWidth 点",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Icon(
+                Icons.Default.UnfoldMore,
+                contentDescription = "切换显示宽度",
+                modifier = Modifier
+                    .size(18.dp)
+                    .padding(start = 2.dp)
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DisplayWidthConfig.OPTIONS.forEach { w ->
+                DropdownMenuItem(
+                    text = { Text("$w 点") },
+                    trailingIcon = if (w == currentWidth) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else null,
+                    onClick = {
+                        onSelect(w)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 
