@@ -31,11 +31,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -121,8 +118,6 @@ private fun DemoScreenCompact(state: DemoUiState, viewModel: DemoViewModel) {
             testerName = state.testerName,
             scenario = state.scenario,
             testRound = state.testRound,
-            sinewaveActive = state.sinewaveActive,
-            onToggleSinewaveDemo = viewModel::toggleSinewaveDemo,
             onSelect = viewModel::selectFunction
         )
     } else {
@@ -191,12 +186,9 @@ private fun FunctionListScreen(
     testerName: String = "",
     scenario: String = "",
     testRound: Int = 0,
-    sinewaveActive: Boolean = false,
-    onToggleSinewaveDemo: () -> Unit = {},
     onSelect: (FunctionMode) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        SinewaveDemoButton(active = sinewaveActive, onToggle = onToggleSinewaveDemo)
         if (functionDataMap.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 EmptyStateView(
@@ -244,29 +236,6 @@ private fun FunctionListScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SinewaveDemoButton(active: Boolean, onToggle: () -> Unit) {
-    Button(
-        onClick = onToggle,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = if (active) {
-            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-        } else {
-            ButtonDefaults.buttonColors()
-        }
-    ) {
-        Icon(
-            if (active) Icons.Default.Stop else Icons.Default.PlayArrow,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(if (active) "停止正弦波 Demo" else "正弦波 Demo")
     }
 }
 
