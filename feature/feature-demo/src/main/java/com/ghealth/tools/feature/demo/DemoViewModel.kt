@@ -67,8 +67,16 @@ data class DemoUiState(
     val manualCompareDevices: List<ManualCompareDevice> = emptyList(),
     val showAddCompareDialog: Boolean = false,
     val editingCompareDeviceIndex: Int? = null,
-    val showRestartConfigDialog: Boolean = false
+    val showRestartConfigDialog: Boolean = false,
+    /** 每个功能模式当前选中的显示宽度(数据点数),首次使用时由 DisplayWidthConfig 填入默认值。 */
+    val displayWidths: Map<FunctionMode, Int> = emptyMap()
 )
+
+/** 当前选中功能模式的显示宽度;未选中或未初始化时返回 125 作为兜底。 */
+val DemoUiState.currentDisplayWidth: Int
+    get() = selectedFunction
+        ?.let { displayWidths[it] ?: DisplayWidthConfig.defaultFor(it) }
+        ?: 125
 
 @HiltViewModel
 class DemoViewModel @Inject constructor(
@@ -177,6 +185,7 @@ class DemoViewModel @Inject constructor(
         val w1Data = getColumnData(function, defaultCols.first)
         val w2Data = getColumnData(function, defaultCols.second)
         val roleResults = lastAlgoResultsByRole[function] ?: emptyMap()
+        val width = _uiState.value.displayWidths[function] ?: DisplayWidthConfig.defaultFor(function)
         _uiState.update {
             it.copy(
                 selectedFunction = function,
@@ -188,7 +197,8 @@ class DemoViewModel @Inject constructor(
                 waveform2Stats = computeStats(w2Data),
                 frameIds = getFrameIds(function),
                 masterAlgoResult = roleResults[DeviceRole.MASTER] ?: AlgorithmResult.None,
-                slaveAlgoResult = roleResults[DeviceRole.SLAVE]
+                slaveAlgoResult = roleResults[DeviceRole.SLAVE],
+                displayWidths = it.displayWidths + (function to width)
             )
         }
     }
@@ -214,6 +224,17 @@ class DemoViewModel @Inject constructor(
                 waveform2Data = data,
                 waveform2Stats = computeStats(data)
             )
+        }
+    }
+
+    /** 切换当前选中功能模式的显示宽度(数据点数)。 */
+    fun selectDisplayWidth(width: Int) {
+        require(DisplayWidthConfig.OPTIONS.contains(width)) {
+            "不支持的显示宽度: $width, 可选: ${DisplayWidthConfig.OPTIONS}"
+        }
+        val func = _uiState.value.selectedFunction ?: return
+        _uiState.update {
+            it.copy(displayWidths = it.displayWidths + (func to width))
         }
     }
 
