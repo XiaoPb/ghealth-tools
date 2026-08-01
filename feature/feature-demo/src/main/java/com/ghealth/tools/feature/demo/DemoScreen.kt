@@ -86,7 +86,6 @@ import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import java.text.DecimalFormat
 
-private const val MAX_DISPLAY_POINTS = 500
 private const val SPO2_MIN = 65f
 private const val SPO2_MAX = 100f
 
@@ -361,6 +360,7 @@ private fun FunctionDetailScreen(
             onColumnSelect = onSelectWaveform1Column,
             showDialog = showColumnDialog1,
             onShowDialogChange = { showColumnDialog1 = it },
+            displayWidth = state.currentDisplayWidth,
             chartHeight = chartHeight
         )
 
@@ -376,6 +376,7 @@ private fun FunctionDetailScreen(
             onColumnSelect = onSelectWaveform2Column,
             showDialog = showColumnDialog2,
             onShowDialogChange = { showColumnDialog2 = it },
+            displayWidth = state.currentDisplayWidth,
             chartHeight = chartHeight
         )
     }
@@ -416,6 +417,7 @@ private fun WaveformPanel(
     onColumnSelect: (String) -> Unit,
     showDialog: Boolean,
     onShowDialogChange: (Boolean) -> Unit,
+    displayWidth: Int,
     chartHeight: androidx.compose.ui.unit.Dp = 180.dp
 ) {
     val modelProducer = remember { CartesianChartModelProducer() }
@@ -435,12 +437,14 @@ private fun WaveformPanel(
     } else ""
 
     val dataRef = rememberUpdatedState(data)
+    val displayWidthRef = rememberUpdatedState(displayWidth)
 
     LaunchedEffect(Unit) {
         while (isActive) {
             val d = dataRef.value
+            val w = displayWidthRef.value
             if (d.isNotEmpty()) {
-                val windowed = if (d.size > MAX_DISPLAY_POINTS) d.takeLast(MAX_DISPLAY_POINTS) else d
+                val windowed = if (d.size > w) d.takeLast(w) else d
                 // Manual Y-axis: shift data to start from 0, label ticks with real values
                 val yMin = windowed.min()
                 val yMax = windowed.max()
