@@ -128,6 +128,7 @@ private fun DemoScreenCompact(state: DemoUiState, viewModel: DemoViewModel) {
             onStopEditCompareDevice = viewModel::stopEditCompareDevice,
             onUpdateCompareSpo2 = viewModel::updateManualCompareSpo2,
             onRemoveCompareDevice = viewModel::removeManualCompareDevice,
+            onSelectDisplayWidth = viewModel::selectDisplayWidth,
             isWide = false
         )
     }
@@ -161,6 +162,7 @@ private fun DemoScreenWide(state: DemoUiState, viewModel: DemoViewModel) {
                     onStopEditCompareDevice = viewModel::stopEditCompareDevice,
                     onUpdateCompareSpo2 = viewModel::updateManualCompareSpo2,
                     onRemoveCompareDevice = viewModel::removeManualCompareDevice,
+                    onSelectDisplayWidth = viewModel::selectDisplayWidth,
                     isWide = true
                 )
             } else {
@@ -297,7 +299,7 @@ private fun FunctionDetailScreen(
     onStopEditCompareDevice: () -> Unit,
     onUpdateCompareSpo2: (Int, Float?) -> Unit,
     onRemoveCompareDevice: (Int) -> Unit,
-    onSelectDisplayWidth: (Int) -> Unit = {},
+    onSelectDisplayWidth: (Int) -> Unit,
     isWide: Boolean = false
 ) {
     val function = state.selectedFunction ?: return
