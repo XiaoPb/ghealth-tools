@@ -16,16 +16,22 @@ import com.ghealth.tools.core.model.TestScenario
 import com.ghealth.tools.core.storage.RecordingManager
 import com.ghealth.tools.core.storage.DeviceRole as StorageDeviceRole
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Named
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 data class FunctionData(
     val function: FunctionMode,
@@ -69,7 +75,9 @@ data class DemoUiState(
     val editingCompareDeviceIndex: Int? = null,
     val showRestartConfigDialog: Boolean = false,
     /** 每个功能模式当前选中的显示宽度(数据点数),首次使用时由 DisplayWidthConfig 填入默认值。 */
-    val displayWidths: Map<FunctionMode, Int> = emptyMap()
+    val displayWidths: Map<FunctionMode, Int> = emptyMap(),
+    /** 正弦波 Demo 是否正在注入数据(仅测试用,模拟器验证显示宽度切换)。 */
+    val sinewaveActive: Boolean = false
 )
 
 /** 当前选中功能模式的显示宽度;未选中或未初始化时返回 125 作为兜底。 */
@@ -106,6 +114,10 @@ class DemoViewModel @Inject constructor(
     private val lastColumnValues = mutableMapOf<FunctionMode, MutableMap<String, Any?>>()
     private val algoNonZeroSeen = mutableMapOf<String, Boolean>()
     private val lastAlgoResultsByRole = mutableMapOf<FunctionMode, MutableMap<DeviceRole, AlgorithmResult>>()
+
+    // 正弦波 Demo:协程按各模式采样率注入模拟数据(仅测试用,验证显示宽度切换)
+    private val sinewaveJobs = mutableListOf<Job>()
+    private val sinewaveCounters = mutableMapOf<FunctionMode, Int>()
 
     init {
         viewModelScope.launch {
@@ -235,6 +247,97 @@ class DemoViewModel @Inject constructor(
         val func = _uiState.value.selectedFunction ?: return
         _uiState.update {
             it.copy(displayWidths = it.displayWidths + (func to width))
+        }
+    }
+
+    /**
+     * 正弦波 Demo 开关:启动时按各功能模式采样率(ADT 5Hz / HR 25Hz / TEST1 100Hz)
+     * 注入 1.5Hz 正弦波到 phyValue 缓冲区,自动填充模式列表并选中 HR,
+     * 用于在模拟器上验证显示宽度切换效果。再次调用则停止。
+     */
+    fun toggleSinewaveDemo() {
+        if (sinewaveJobs.any { it.isActive }) {
+            stopSinewaveDemo()
+        } else {
+            startSinewaveDemo()
+        }
+    }
+
+    private fun startSinewaveDemo() {
+        stopSinewaveDemo()
+        resetAllData()
+        sinewaveCounters.clear()
+        SINEWAVE_TARGETS.forEach { sinewaveCounters[it.function] = 0 }
+        _uiState.update { it.copy(sinewaveActive = true) }
+        // 自动选中 HR(25Hz,默认宽度 125),最具代表性
+        selectFunction(FunctionMode.HR)
+        for (target in SINEWAVE_TARGETS) {
+            val job = viewModelScope.launch {
+                val periodMs = 1000L / target.sampleRateHz
+                while (isActive) {
+                    injectSinewaveSample(target)
+                    delay(periodMs)
+                }
+            }
+            sinewaveJobs.add(job)
+        }
+    }
+
+    private fun stopSinewaveDemo() {
+        sinewaveJobs.forEach { it.cancel() }
+        sinewaveJobs.clear()
+        _uiState.update { it.copy(sinewaveActive = false) }
+    }
+
+    private fun injectSinewaveSample(target: SinewaveTarget) {
+        val counter = sinewaveCounters[target.function] ?: 0
+        val t = counter / target.sampleRateHz.toFloat()
+        val omega = (2.0 * PI * SINEWAVE_FREQ_HZ * t).toFloat()
+        // Ipd0=sin, Ipd1=cos(相位差 90°),其余通道递减幅度 + 相位偏移,便于区分
+        val channelCount = target.channels.coerceAtMost(32)
+        val phyValue = IntArray(channelCount) { ch ->
+            val phase = ch * (PI / 6.0).toFloat()
+            val amp = SINEWAVE_AMPLITUDE * (1f - ch * 0.08f)
+            when (ch) {
+                0 -> (sin(omega) * SINEWAVE_AMPLITUDE).toInt()
+                1 -> (cos(omega) * SINEWAVE_AMPLITUDE).toInt()
+                else -> (sin(omega + phase) * amp).toInt()
+            }
+        }
+
+        val phyBuffer = perFunctionPhyBuffers.getOrPut(target.function) {
+            MultiChannelRingBuffer(maxChannels = 32, capacity = BUFFER_CAPACITY)
+        }
+        phyBuffer.addFrame(phyValue)
+
+        val scalarBuffer = perFunctionScalarBuffers.getOrPut(target.function) {
+            MultiChannelRingBuffer(maxChannels = 4, capacity = BUFFER_CAPACITY)
+        }
+        scalarBuffer.addFrame(intArrayOf(0, 0, 0, counter))
+
+        sinewaveCounters[target.function] = counter + 1
+
+        _uiState.update { state ->
+            val current = state.functionDataMap[target.function] ?: FunctionData(target.function)
+            val updated = current.copy(frameCount = current.frameCount + 1)
+            state.copy(functionDataMap = state.functionDataMap + (target.function to updated))
+        }
+
+        // 同步刷新当前选中功能的波形显示
+        if (_uiState.value.selectedFunction == target.function) {
+            val w1Col = _uiState.value.waveform1Column
+            val w2Col = _uiState.value.waveform2Column
+            val w1Data = getColumnData(target.function, w1Col)
+            val w2Data = getColumnData(target.function, w2Col)
+            _uiState.update {
+                it.copy(
+                    waveform1Data = w1Data,
+                    waveform2Data = w2Data,
+                    waveform1Stats = computeStats(w1Data),
+                    waveform2Stats = computeStats(w2Data),
+                    frameIds = getFrameIds(target.function)
+                )
+            }
         }
     }
 
@@ -565,8 +668,23 @@ class DemoViewModel @Inject constructor(
         return WaveformStats(max = max, min = min, avg = avg, diff = diff)
     }
 
+    private data class SinewaveTarget(
+        val function: FunctionMode,
+        val sampleRateHz: Int,
+        val channels: Int
+    )
+
     companion object {
         private const val BUFFER_CAPACITY = 500
+
+        // 正弦波 Demo 配置(仅测试用):频率 1.5Hz,幅度 1000,覆盖三档采样率/默认宽度
+        private const val SINEWAVE_FREQ_HZ = 1.5f
+        private const val SINEWAVE_AMPLITUDE = 1000f
+        private val SINEWAVE_TARGETS = listOf(
+            SinewaveTarget(FunctionMode.ADT, sampleRateHz = 5, channels = 4),
+            SinewaveTarget(FunctionMode.HR, sampleRateHz = 25, channels = 8),
+            SinewaveTarget(FunctionMode.TEST1, sampleRateHz = 100, channels = 4)
+        )
 
         fun availableColumns(chipType: DeviceType): List<String> {
             val columns = mutableListOf<String>()

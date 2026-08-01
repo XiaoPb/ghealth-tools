@@ -31,8 +31,11 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -86,6 +89,9 @@ import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
+import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.pow
 import java.text.DecimalFormat
 
 private const val SPO2_MIN = 65f
@@ -115,6 +121,8 @@ private fun DemoScreenCompact(state: DemoUiState, viewModel: DemoViewModel) {
             testerName = state.testerName,
             scenario = state.scenario,
             testRound = state.testRound,
+            sinewaveActive = state.sinewaveActive,
+            onToggleSinewaveDemo = viewModel::toggleSinewaveDemo,
             onSelect = viewModel::selectFunction
         )
     } else {
@@ -183,52 +191,82 @@ private fun FunctionListScreen(
     testerName: String = "",
     scenario: String = "",
     testRound: Int = 0,
+    sinewaveActive: Boolean = false,
+    onToggleSinewaveDemo: () -> Unit = {},
     onSelect: (FunctionMode) -> Unit
 ) {
-    if (functionDataMap.isEmpty()) {
-        EmptyStateView(
-            icon = Icons.Default.ShowChart,
-            title = "等待数据",
-            subtitle = "连接设备并开始采集后，功能数据将显示在此处"
-        )
-        if (isRecording && testerName.isNotBlank()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "$testerName | $scenario | 第${testRound}次",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+    Column(modifier = Modifier.fillMaxSize()) {
+        SinewaveDemoButton(active = sinewaveActive, onToggle = onToggleSinewaveDemo)
+        if (functionDataMap.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                EmptyStateView(
+                    icon = Icons.Default.ShowChart,
+                    title = "等待数据",
+                    subtitle = "连接设备并开始采集后，功能数据将显示在此处"
                 )
             }
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
             if (isRecording && testerName.isNotBlank()) {
-                item(key = "tester_info") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
                         text = "$testerName | $scenario | 第${testRound}次",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
-            items(functionDataMap.values.toList(), key = { it.function.hashCode() }) { data ->
-                FunctionRow(
-                    data = data,
-                    onClick = { onSelect(data.function) }
-                )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (isRecording && testerName.isNotBlank()) {
+                    item(key = "tester_info") {
+                        Text(
+                            text = "$testerName | $scenario | 第${testRound}次",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+                        )
+                    }
+                }
+                items(functionDataMap.values.toList(), key = { it.function.hashCode() }) { data ->
+                    FunctionRow(
+                        data = data,
+                        onClick = { onSelect(data.function) }
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SinewaveDemoButton(active: Boolean, onToggle: () -> Unit) {
+    Button(
+        onClick = onToggle,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = if (active) {
+            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        } else {
+            ButtonDefaults.buttonColors()
+        }
+    ) {
+        Icon(
+            if (active) Icons.Default.Stop else Icons.Default.PlayArrow,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(if (active) "停止正弦波 Demo" else "正弦波 Demo")
     }
 }
 
@@ -479,12 +517,27 @@ private fun WaveformPanel(
     val modelProducer = remember { CartesianChartModelProducer() }
     val lineColor = MaterialTheme.colorScheme.primary.toArgb()
 
-    // Track Y-axis offset for manual range: data shifted by yOffset, formatter adds it back
+    // Y轴量级处理:数据按 yOffset 平移显示真实值;公共指数 e 提到轴顶,刻度只显示尾数
     var yOffset by remember { mutableStateOf(0f) }
+    var yMaxPad by remember { mutableStateOf(0f) }
 
-    val yAxisFormatter = remember {
+    // 公共量级 e = floor(log10(max(|yMinPad|, |yMaxPad|))),e≠0 时刻度除以 10^e
+    val yMagnitude = remember(yOffset, yMaxPad) {
+        val maxAbs = maxOf(kotlin.math.abs(yOffset), kotlin.math.abs(yMaxPad))
+        when {
+            maxAbs <= 0.0 -> 0
+            else -> floor(log10(maxAbs.toDouble())).toInt()
+        }
+    }
+    val yScale = remember(yMagnitude) {
+        if (yMagnitude <= 0) 1.0 else 10.0.pow(yMagnitude.toDouble())
+    }
+
+    val yAxisFormatter = remember(yOffset, yScale) {
         CartesianValueFormatter { _, value, _ ->
-            formatYAxisMixed(value.toDouble() + yOffset.toDouble())
+            val realValue = value.toDouble() + yOffset.toDouble()
+            val mantissa = if (yScale > 1.0) realValue / yScale else realValue
+            DecimalFormat("0.#").format(mantissa)
         }
     }
 
@@ -507,7 +560,9 @@ private fun WaveformPanel(
                 val range = yMax - yMin
                 val pad = if (range > 0) range * 0.1f else 10f
                 val yMinPad = yMin - pad
+                val yMaxPadVal = yMax + pad
                 yOffset = yMinPad
+                yMaxPad = yMaxPadVal
                 val shifted = windowed.map { it - yMinPad }
                 modelProducer.runTransaction {
                     lineSeries { series(y = shifted) }
@@ -568,10 +623,21 @@ private fun WaveformPanel(
 
             Spacer(modifier = Modifier.height(4.dp))
 
+            // Y轴量级标注:指数统一放此,e≠0 时显示(如 E3),刻度只显示尾数
+            if (yMagnitude != 0) {
+                Text(
+                    text = "E$yMagnitude",
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(start = 2.dp, bottom = 2.dp)
+                )
+            }
+
             val lineLayer = rememberLineCartesianLayer(
                 LineCartesianLayer.LineProvider.series(
                     listOf(LineCartesianLayer.Line(
-                        fill = LineCartesianLayer.LineFill.single(Fill(lineColor))
+                        fill = LineCartesianLayer.LineFill.single(Fill(lineColor)),
+                        areaFill = null
                     ))
                 )
             )
@@ -637,26 +703,6 @@ private fun StatsGrid(stats: WaveformStats) {
                     modifier = Modifier.weight(1f)
                 )
             }
-        }
-    }
-}
-
-/**
- * Mixed-mode Y-axis label formatter:
- * - Scientific notation (e.g. 1.2E4) for |value| >= 10000 or |value| < 0.01 (non-zero)
- * - Standard decimal otherwise
- */
-private fun formatYAxisMixed(value: Double): String {
-    val absV = kotlin.math.abs(value)
-    return when {
-        absV == 0.0 -> "0"
-        absV >= 10000.0 || (absV > 0.0 && absV < 0.01) ->
-            DecimalFormat("0.##E0").format(value)
-        else -> {
-            val formatted = String.format("%.6f", absV)
-                .trimEnd('0')
-                .trimEnd('.')
-            if (value < 0) "-$formatted" else formatted
         }
     }
 }
