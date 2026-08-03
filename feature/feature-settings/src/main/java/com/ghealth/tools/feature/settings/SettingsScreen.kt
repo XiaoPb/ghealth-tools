@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
@@ -145,6 +146,36 @@ fun SettingsScreen(
                     headlineContent = { Text(chipInfo.first) },
                     supportingContent = { Text(chipInfo.second) },
                     leadingContent = { Icon(Icons.Default.Memory, contentDescription = null) },
+                    colors = listItemColors
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                ListItem(
+                    headlineContent = { Text("固件版本") },
+                    leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
+                    trailingContent = {
+                        when {
+                            state.isReadingBleVersion -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                            state.isDeviceConnected -> {
+                                Text(
+                                    text = state.bleVersion.ifEmpty { "no_ver" },
+                                    color = if (state.bleVersion.isEmpty() || state.bleVersion == "no_ver")
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    "未连接",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
                     colors = listItemColors
                 )
             }
