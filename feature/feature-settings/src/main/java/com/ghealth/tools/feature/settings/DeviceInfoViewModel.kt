@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_GET_VERSION
+import com.ghealth.tools.ble.protocol.gh3036.parseGh3036VersionString
 import com.ghealth.tools.core.model.ConnectionState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -158,7 +159,7 @@ class DeviceInfoViewModel @Inject constructor(
                 }
                 result.isSuccess -> {
                     val data = result.getOrThrow()
-                    val versionStr = parseVersionString(data)
+                    val versionStr = parseGh3036VersionString(data)
                     Timber.d("Version ${query.label}: $versionStr")
                     VersionEntry(query.label, value = versionStr)
                 }
@@ -168,14 +169,6 @@ class DeviceInfoViewModel @Inject constructor(
             Timber.w(e, "Version query exception: ${query.label}")
             VersionEntry(query.label, value = "异常", isError = true)
         }
-    }
-
-    private fun parseVersionString(data: ByteArray): String {
-        if (data.size < 2) return "no_ver"
-        val len = (data[0].toInt() and 0xFF) or ((data[1].toInt() and 0xFF) shl 8)
-        if (len == 0 || data.size < 2 + len) return "no_ver"
-        val str = String(data.sliceArray(2 until 2 + len), Charsets.UTF_8).trimEnd()
-        return str.ifEmpty { "no_ver" }
     }
 
     fun clearError() {
