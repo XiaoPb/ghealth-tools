@@ -197,6 +197,7 @@ class DemoViewModel @Inject constructor(
         val w1Data = getColumnData(function, defaultCols.first)
         val w2Data = getColumnData(function, defaultCols.second)
         val roleResults = lastAlgoResultsByRole[function] ?: emptyMap()
+        // 用目标功能的宽度,而非 currentDisplayWidth(此时 selectedFunction 尚未更新,currentDisplayWidth 会取到旧功能的宽度)
         val width = _uiState.value.displayWidths[function] ?: DisplayWidthConfig.defaultFor(function)
         _uiState.update {
             it.copy(
@@ -247,8 +248,13 @@ class DemoViewModel @Inject constructor(
             "不支持的显示宽度: $width, 可选: ${DisplayWidthConfig.OPTIONS}"
         }
         val func = _uiState.value.selectedFunction ?: return
+        val state = _uiState.value
         _uiState.update {
-            it.copy(displayWidths = it.displayWidths + (func to width))
+            it.copy(
+                displayWidths = it.displayWidths + (func to width),
+                waveform1Stats = computeVisibleStats(state.waveform1Data, width),
+                waveform2Stats = computeVisibleStats(state.waveform2Data, width)
+            )
         }
     }
 
