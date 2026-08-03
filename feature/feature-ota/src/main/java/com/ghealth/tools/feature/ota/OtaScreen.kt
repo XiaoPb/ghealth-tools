@@ -99,9 +99,11 @@ fun OtaScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    // 进入 OTA 页面后,等 DFU 绑定完成且固件信息读取结束,自动发送一次默认控制点参数
+    // 进入 OTA 页面后,等 DFU 绑定完成且固件信息读取成功,自动发送一次默认控制点参数。
+    // 用 firmwareInfo 非空作为就绪信号,避免 isDfuReady=true 与 isReadingFirmwareInfo=true
+    // 之间的时序竞态导致提前触发。
     LaunchedEffect(Unit) {
-        snapshotFlow { state.isDfuReady && !state.isReadingFirmwareInfo }
+        snapshotFlow { state.isDfuReady && state.firmwareInfo != null }
             .filter { it }
             .first()
         viewModel.autoWriteDefaultControlPoint()
