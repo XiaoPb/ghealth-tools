@@ -40,6 +40,17 @@ data class WaveformStats(
     val diff: Float
 )
 
+/** 仅统计可见区域(最后 displayWidth 个点)的波形统计值;数据为空返回 null。 */
+internal fun computeVisibleStats(data: List<Float>, displayWidth: Int): WaveformStats? {
+    if (data.isEmpty()) return null
+    val windowed = if (data.size > displayWidth) data.takeLast(displayWidth) else data
+    val max = windowed.max()
+    val min = windowed.min()
+    val avg = windowed.sum() / windowed.size
+    val diff = max - min
+    return WaveformStats(max = max, min = min, avg = avg, diff = diff)
+}
+
 data class ManualCompareDevice(
     val name: String,
     val spo2: Float? = null
