@@ -653,6 +653,11 @@ class OtaViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         otaEngine.unbindDfuProfile()
+        // 退出 OTA 页面时后台静默断连并重连,恢复普通 GHealth 连接,前端无弹窗
+        val device = _uiState.value.selectedDevice
+        if (device != null) {
+            connectionManager.reconnectInBackground(device.address, device.name)
+        }
     }
 
     private fun readFileName(uri: Uri): String {
