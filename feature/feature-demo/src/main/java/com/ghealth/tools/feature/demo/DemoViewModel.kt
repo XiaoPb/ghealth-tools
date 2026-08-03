@@ -43,6 +43,7 @@ data class WaveformStats(
 /** 仅统计可见区域(最后 displayWidth 个点)的波形统计值;数据为空返回 null。 */
 internal fun computeVisibleStats(data: List<Float>, displayWidth: Int): WaveformStats? {
     if (data.isEmpty()) return null
+    if (displayWidth <= 0) return null
     val windowed = if (data.size > displayWidth) data.takeLast(displayWidth) else data
     val max = windowed.max()
     val min = windowed.min()

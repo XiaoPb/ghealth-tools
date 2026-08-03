@@ -40,4 +40,10 @@ class WaveformStatsTest {
         assertEquals(10f, stats.min)
         assertEquals(20f, stats.avg, 0.0001f)
     }
+
+    @Test
+    fun `displayWidth 为非正数时返回 null`() {
+        assertNull(computeVisibleStats(listOf(1f, 2f, 3f), 0))
+        assertNull(computeVisibleStats(listOf(1f, 2f, 3f), -5))
+    }
 }
