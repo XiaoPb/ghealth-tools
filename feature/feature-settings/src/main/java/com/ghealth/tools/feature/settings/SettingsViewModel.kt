@@ -2,8 +2,13 @@ package com.ghealth.tools.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ghealth.tools.ble.connection.BleConnectionManager
+import com.ghealth.tools.ble.connection.DeviceRole
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_GET_VERSION
+import com.ghealth.tools.ble.protocol.gh3036.parseGh3036VersionString
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.UserPreferences
+import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.core.network.ConfigPathProvider
 import com.ghealth.tools.core.network.ConfigSyncManager
 import com.ghealth.tools.core.network.api.ProjectApi
@@ -16,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -43,10 +49,14 @@ data class SettingsUiState(
     val updateDownloadUrl: String = "",
     val isForceUpdate: Boolean = false,
     val isCheckingUpdate: Boolean = false,
+    val isDeviceConnected: Boolean = false,
+    val bleVersion: String = "",
+    val isReadingBleVersion: Boolean = false,
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    private val connectionManager: BleConnectionManager,
     private val blePreferences: BlePreferences,
     private val logManager: LogManager,
     @Named("app_version") private val versionName: String,
@@ -56,6 +66,9 @@ class SettingsViewModel @Inject constructor(
     private val configPathProvider: ConfigPathProvider,
     private val updateChecker: UpdateChecker
 ) : ViewModel() {
+
+    // 记录上次已读取版本的主设备地址，用于"每连接只读一次、失败不重读"守卫
+    private var lastVersionReadAddress: String? = null
 
     private val _uiState = MutableStateFlow(SettingsUiState(appVersion = versionName))
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -104,6 +117,57 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferences.selectedProjectId.collect { id ->
                 _uiState.update { it.copy(selectedProjectId = id) }
+            }
+        }
+        // 主设备连接成功后主动读取一次 BLE 版本(verType=0x09)
+        viewModelScope.launch {
+            connectionManager.devices.collect { devices ->
+                val master = devices.values.find {
+                    it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED
+                }
+                if (master != null) {
+                    _uiState.update { it.copy(isDeviceConnected = true) }
+                    if (master.address != lastVersionReadAddress) {
+                        lastVersionReadAddress = master.address
+                        readBleVersion(master.address)
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(isDeviceConnected = false, bleVersion = "", isReadingBleVersion = false)
+                    }
+                    lastVersionReadAddress = null
+                }
+            }
+        }
+    }
+
+    /**
+     * 连接成功后主动读取一次 BLE 版本(verType=0x09)。
+     * - 不重复读取：同一地址仅在首次发现 CONNECTED 时读取一次（由 lastVersionReadAddress 守卫）。
+     * - 失败不重读：超时/异常/解析失败均置为 "no_ver"，且不会再次发起读取，直到设备断开重连。
+     */
+    private fun readBleVersion(address: String) {
+        _uiState.update { it.copy(isReadingBleVersion = true, bleVersion = "") }
+        viewModelScope.launch {
+            val versionStr = try {
+                val result = withTimeoutOrNull(2000L) {
+                    connectionManager.sendCommand(
+                        address = address,
+                        key = KEY_GH3X_GET_VERSION,
+                        param = byteArrayOf(0x09) // BLE版本
+                    )
+                }
+                when {
+                    result == null -> "no_ver"
+                    result.isFailure -> "no_ver"
+                    else -> parseGh3036VersionString(result.getOrThrow())
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Read BLE version failed")
+                "no_ver"
+            }
+            _uiState.update {
+                it.copy(isReadingBleVersion = false, bleVersion = versionStr)
             }
         }
     }
