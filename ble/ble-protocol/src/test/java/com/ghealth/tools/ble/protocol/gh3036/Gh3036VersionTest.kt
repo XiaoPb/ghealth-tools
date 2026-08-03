@@ -45,9 +45,9 @@ class Gh3036VersionTest {
     }
 
     @Test
-    fun `parse handles little-endian length prefix`() {
-        // len=258 = 0x0102 LE → [0x02, 0x01]，仅给 2 字节负载，应越界返回 no_ver
-        val data = byteArrayOf(0x02, 0x01, 0x41, 0x42)
-        assertEquals("no_ver", parseGh3036VersionString(data))
+    fun `parse interprets length as little-endian`() {
+        // len=3 LE = [0x03, 0x00]；若误用 BE 则 len=768 越界返回 no_ver，可区分方向
+        val data = byteArrayOf(0x03, 0x00, 0x41, 0x42, 0x43)  // "ABC"
+        assertEquals("ABC", parseGh3036VersionString(data))
     }
 }
