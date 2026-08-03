@@ -27,6 +27,7 @@ import com.juul.kable.write
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -119,6 +120,7 @@ class BleConnectionManager @Inject constructor(
         private const val MAX_CONNECT_RETRIES = 3
         private const val CONNECT_RETRY_DELAY_MS = 500L
         private const val DISCONNECT_TIMEOUT_MS = 5_000L
+        private const val RECONNECT_SETTLE_DELAY_MS = 500L
         // BLE 特征值属性位掩码（与 BluetoothGattCharacteristic 定义一致）
         private const val PROP_WRITE = 0x08
         private const val PROP_WRITE_NO_RESPONSE = 0x04
@@ -236,7 +238,7 @@ class BleConnectionManager @Inject constructor(
         }
     }
 
-    fun autoConnect(address: String, name: String?) {
+    fun autoConnect(address: String, name: String?, suppressError: Boolean = false) {
         val targetAddress = address.uppercase()
         Timber.d("Auto-connect: scanning for $targetAddress")
         scope.launch {
@@ -255,21 +257,43 @@ class BleConnectionManager @Inject constructor(
                     logging { level = Logging.Level.Events }
                     onServicesDiscovered { requestMtu(247) }
                 }
-                connect(peripheral, DeviceRole.MASTER)
+                connect(peripheral, DeviceRole.MASTER, suppressError = suppressError)
             } catch (e: Exception) {
                 Timber.w(e, "Auto-connect: failed to connect to $targetAddress")
             }
         }
     }
 
+    /**
+     * 后台主动断连并重连指定设备(用于 OTA 退出后恢复普通 GHealth 连接)。
+     * - 断连阶段标记为用户主动断开,抑制断连错误弹窗。
+     * - 重连阶段复用 autoConnect(suppressError=true),扫描失败与连接尝试失败均仅记日志、不弹窗。
+     * 整个过程在 BleConnectionManager 自身的 Singleton 协程作用域中执行,不依赖调用方作用域。
+     */
+    fun reconnectInBackground(address: String, name: String?) {
+        scope.launch {
+            Timber.i("reconnectInBackground: 断连 $address")
+            try {
+                disconnect(address)
+            } catch (e: Exception) {
+                Timber.w(e, "reconnectInBackground: 断连异常 $address")
+            }
+            delay(RECONNECT_SETTLE_DELAY_MS)
+            Timber.i("reconnectInBackground: 重连 $address")
+            autoConnect(address, name, suppressError = true)
+        }
+    }
+
     @OptIn(ExperimentalUuidApi::class)
-    suspend fun connect(peripheral: Peripheral, role: DeviceRole) {
+    suspend fun connect(peripheral: Peripheral, role: DeviceRole, suppressError: Boolean = false) {
         val address = peripheral.identifier.toString()
 
         val constraint = checkConnectionConstraint(role)
         if (constraint !is ConnectionConstraint.Success) {
             Timber.w("Connection constraint violated: $constraint")
-            emitConnectionError(address, ConnectionError.ConnectionFailed(constraint.getMessage()))
+            if (!suppressError) {
+                emitConnectionError(address, ConnectionError.ConnectionFailed(constraint.getMessage()))
+            }
             return
         }
 
@@ -304,13 +328,15 @@ class BleConnectionManager @Inject constructor(
 
         if (lastException != null) {
             Timber.e(lastException, "All $MAX_CONNECT_RETRIES connection attempts failed for $address")
-            emitConnectionError(
-                address,
-                ConnectionError.ConnectionFailed(
-                    errorMessage = lastException.message ?: "Unknown error",
-                    disconnectStatus = disconnectStatus
+            if (!suppressError) {
+                emitConnectionError(
+                    address,
+                    ConnectionError.ConnectionFailed(
+                        errorMessage = lastException.message ?: "Unknown error",
+                        disconnectStatus = disconnectStatus
+                    )
                 )
-            )
+            }
             updateDeviceState(address, ConnectionState.DISCONNECTED)
             return
         }

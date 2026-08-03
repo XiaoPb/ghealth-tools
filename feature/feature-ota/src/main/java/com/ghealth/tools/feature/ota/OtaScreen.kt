@@ -70,6 +70,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -96,6 +98,16 @@ fun OtaScreen(
     viewModel: OtaViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
+
+    // 进入 OTA 页面后,等 DFU 绑定完成且固件信息读取成功,自动发送一次默认控制点参数。
+    // 用 firmwareInfo 非空作为就绪信号,避免 isDfuReady=true 与 isReadingFirmwareInfo=true
+    // 之间的时序竞态导致提前触发。
+    LaunchedEffect(Unit) {
+        snapshotFlow { state.isDfuReady && state.firmwareInfo != null }
+            .filter { it }
+            .first()
+        viewModel.autoWriteDefaultControlPoint()
+    }
 
     val context = LocalContext.current
     val windowSizeClass = calculateWindowSizeClass(context as Activity)

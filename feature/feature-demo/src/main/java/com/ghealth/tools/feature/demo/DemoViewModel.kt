@@ -40,6 +40,18 @@ data class WaveformStats(
     val diff: Float
 )
 
+/** 仅统计可见区域(最后 displayWidth 个点)的波形统计值;数据为空返回 null。 */
+internal fun computeVisibleStats(data: List<Float>, displayWidth: Int): WaveformStats? {
+    if (data.isEmpty()) return null
+    if (displayWidth <= 0) return null
+    val windowed = if (data.size > displayWidth) data.takeLast(displayWidth) else data
+    val max = windowed.max()
+    val min = windowed.min()
+    val avg = windowed.sum() / windowed.size
+    val diff = max - min
+    return WaveformStats(max = max, min = min, avg = avg, diff = diff)
+}
+
 data class ManualCompareDevice(
     val name: String,
     val spo2: Float? = null
@@ -185,6 +197,7 @@ class DemoViewModel @Inject constructor(
         val w1Data = getColumnData(function, defaultCols.first)
         val w2Data = getColumnData(function, defaultCols.second)
         val roleResults = lastAlgoResultsByRole[function] ?: emptyMap()
+        // 用目标功能的宽度,而非 currentDisplayWidth(此时 selectedFunction 尚未更新,currentDisplayWidth 会取到旧功能的宽度)
         val width = _uiState.value.displayWidths[function] ?: DisplayWidthConfig.defaultFor(function)
         _uiState.update {
             it.copy(
@@ -193,8 +206,8 @@ class DemoViewModel @Inject constructor(
                 waveform2Column = defaultCols.second,
                 waveform1Data = w1Data,
                 waveform2Data = w2Data,
-                waveform1Stats = computeStats(w1Data),
-                waveform2Stats = computeStats(w2Data),
+                waveform1Stats = computeVisibleStats(w1Data, width),
+                waveform2Stats = computeVisibleStats(w2Data, width),
                 frameIds = getFrameIds(function),
                 masterAlgoResult = roleResults[DeviceRole.MASTER] ?: AlgorithmResult.None,
                 slaveAlgoResult = roleResults[DeviceRole.SLAVE],
@@ -206,11 +219,12 @@ class DemoViewModel @Inject constructor(
     fun selectWaveform1Column(column: String) {
         val funcMode = _uiState.value.selectedFunction ?: return
         val data = getColumnData(funcMode, column)
+        val width = _uiState.value.currentDisplayWidth
         _uiState.update {
             it.copy(
                 waveform1Column = column,
                 waveform1Data = data,
-                waveform1Stats = computeStats(data)
+                waveform1Stats = computeVisibleStats(data, width)
             )
         }
     }
@@ -218,11 +232,12 @@ class DemoViewModel @Inject constructor(
     fun selectWaveform2Column(column: String) {
         val funcMode = _uiState.value.selectedFunction ?: return
         val data = getColumnData(funcMode, column)
+        val width = _uiState.value.currentDisplayWidth
         _uiState.update {
             it.copy(
                 waveform2Column = column,
                 waveform2Data = data,
-                waveform2Stats = computeStats(data)
+                waveform2Stats = computeVisibleStats(data, width)
             )
         }
     }
@@ -234,7 +249,11 @@ class DemoViewModel @Inject constructor(
         }
         val func = _uiState.value.selectedFunction ?: return
         _uiState.update {
-            it.copy(displayWidths = it.displayWidths + (func to width))
+            it.copy(
+                displayWidths = it.displayWidths + (func to width),
+                waveform1Stats = computeVisibleStats(it.waveform1Data, width),
+                waveform2Stats = computeVisibleStats(it.waveform2Data, width)
+            )
         }
     }
 
@@ -347,12 +366,13 @@ class DemoViewModel @Inject constructor(
             val w2Col = _uiState.value.waveform2Column
             val w1Data = getColumnData(funcMode, w1Col)
             val w2Data = getColumnData(funcMode, w2Col)
+            val width = _uiState.value.currentDisplayWidth
             _uiState.update {
                 it.copy(
                     waveform1Data = w1Data,
                     waveform2Data = w2Data,
-                    waveform1Stats = computeStats(w1Data),
-                    waveform2Stats = computeStats(w2Data),
+                    waveform1Stats = computeVisibleStats(w1Data, width),
+                    waveform2Stats = computeVisibleStats(w2Data, width),
                     frameIds = getFrameIds(funcMode),
                     masterAlgoResult = masterResult,
                     slaveAlgoResult = slaveResult ?: it.slaveAlgoResult
@@ -554,15 +574,6 @@ class DemoViewModel @Inject constructor(
         val prefix = match.groupValues[1]
         val index = match.groupValues[2].toIntOrNull() ?: return null
         return prefix to index
-    }
-
-    private fun computeStats(data: List<Float>): WaveformStats? {
-        if (data.isEmpty()) return null
-        val max = data.max()
-        val min = data.min()
-        val avg = data.sum() / data.size
-        val diff = max - min
-        return WaveformStats(max = max, min = min, avg = avg, diff = diff)
     }
 
     companion object {

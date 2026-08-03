@@ -24,6 +24,7 @@ data class FirmwareFileInfo(
 data class OtaUiState(
     val availableDevices: List<ConnectedDeviceInfo> = emptyList(),
     val selectedDevice: ConnectedDeviceInfo? = null,
+    val isDfuReady: Boolean = false,
 
     val firmwareInfo: FirmwareInfo? = null,
     val isReadingFirmwareInfo: Boolean = false,

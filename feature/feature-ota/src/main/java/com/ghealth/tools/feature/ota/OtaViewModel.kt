@@ -39,6 +39,7 @@ class OtaViewModel @Inject constructor(
 
     private val context get() = getApplication<Application>()
     private var upgradeJob: Job? = null
+    private var hasAutoWrittenControlPoint = false
 
     init {
         viewModelScope.launch {
@@ -81,11 +82,11 @@ class OtaViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 otaEngine.bindDfuProfile(context, device.address)
-                _uiState.update { it.copy(errorMessage = null) }
+                _uiState.update { it.copy(errorMessage = null, isDfuReady = true) }
                 readFirmwareInfo()
             } catch (e: Throwable) {
                 Timber.e(e, "Failed to bind DFU profile")
-                _uiState.update { it.copy(errorMessage = "DFU服务绑定失败: ${e.message}") }
+                _uiState.update { it.copy(errorMessage = "DFU服务绑定失败: ${e.message}", isDfuReady = false) }
             }
         }
     }
@@ -332,6 +333,31 @@ class OtaViewModel @Inject constructor(
                 _uiState.update { it.copy(debugResults = emptyMap()) }
             } else {
                 _uiState.update { it.copy(errorMessage = result.message) }
+            }
+        }
+    }
+
+    /**
+     * 进入 OTA 页面后自动发送一次默认控制点参数。
+     * - 由 hasAutoWrittenControlPoint 守卫,整个 ViewModel 生命周期内仅触发一次。
+     * - 失败仅记日志,不弹出错误,避免打扰用户。
+     */
+    fun autoWriteDefaultControlPoint() {
+        if (hasAutoWrittenControlPoint) return
+        hasAutoWrittenControlPoint = true
+        viewModelScope.launch {
+            if (!otaEngine.isDfuReady) return@launch
+            val hex = _uiState.value.controlPointHex
+            val result = try {
+                otaEngine.writeControlPoint(hex)
+            } catch (e: Throwable) {
+                Timber.w(e, "自动写控制点异常")
+                return@launch
+            }
+            if (result.success) {
+                _uiState.update { it.copy(debugResults = emptyMap()) }
+            } else {
+                Timber.w("自动写控制点失败: ${result.message}")
             }
         }
     }
@@ -627,6 +653,11 @@ class OtaViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         otaEngine.unbindDfuProfile()
+        // 退出 OTA 页面时后台静默断连并重连,恢复普通 GHealth 连接,前端无弹窗
+        val device = _uiState.value.selectedDevice
+        if (device != null) {
+            connectionManager.reconnectInBackground(device.address, device.name)
+        }
     }
 
     private fun readFileName(uri: Uri): String {
