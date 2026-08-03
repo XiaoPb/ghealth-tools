@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.util.Collections
@@ -119,6 +120,7 @@ class BleConnectionManager @Inject constructor(
         private const val MAX_CONNECT_RETRIES = 3
         private const val CONNECT_RETRY_DELAY_MS = 500L
         private const val DISCONNECT_TIMEOUT_MS = 5_000L
+        private const val RECONNECT_SETTLE_DELAY_MS = 500L
         // BLE 特征值属性位掩码（与 BluetoothGattCharacteristic 定义一致）
         private const val PROP_WRITE = 0x08
         private const val PROP_WRITE_NO_RESPONSE = 0x04
@@ -259,6 +261,26 @@ class BleConnectionManager @Inject constructor(
             } catch (e: Exception) {
                 Timber.w(e, "Auto-connect: failed to connect to $targetAddress")
             }
+        }
+    }
+
+    /**
+     * 后台主动断连并重连指定设备(用于 OTA 退出后恢复普通 GHealth 连接)。
+     * - 断连阶段标记为用户主动断开,抑制断连错误弹窗。
+     * - 重连阶段复用 autoConnect,扫描失败仅记日志,不弹窗。
+     * 整个过程在 BleConnectionManager 自身的 Singleton 协程作用域中执行,不依赖调用方作用域。
+     */
+    fun reconnectInBackground(address: String, name: String?) {
+        scope.launch {
+            Timber.i("reconnectInBackground: 断连 $address")
+            try {
+                disconnect(address)
+            } catch (e: Exception) {
+                Timber.w(e, "reconnectInBackground: 断连异常 $address")
+            }
+            delay(RECONNECT_SETTLE_DELAY_MS)
+            Timber.i("reconnectInBackground: 重连 $address")
+            autoConnect(address, name)
         }
     }
 
