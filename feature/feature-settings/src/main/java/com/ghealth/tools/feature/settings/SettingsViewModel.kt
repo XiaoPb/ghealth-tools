@@ -15,6 +15,8 @@ import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.storage.LogManager
 import com.ghealth.tools.core.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -69,6 +71,8 @@ class SettingsViewModel @Inject constructor(
 
     // 记录上次已读取版本的主设备地址，用于"每连接只读一次、失败不重读"守卫
     private var lastVersionReadAddress: String? = null
+    // 在途的版本读取协程，断开或重新读取时取消以避免陈旧结果覆盖新状态
+    private var readVersionJob: Job? = null
 
     private val _uiState = MutableStateFlow(SettingsUiState(appVersion = versionName))
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -132,6 +136,8 @@ class SettingsViewModel @Inject constructor(
                         readBleVersion(master.address)
                     }
                 } else {
+                    readVersionJob?.cancel()
+                    readVersionJob = null
                     _uiState.update {
                         it.copy(isDeviceConnected = false, bleVersion = "", isReadingBleVersion = false)
                     }
@@ -147,8 +153,9 @@ class SettingsViewModel @Inject constructor(
      * - 失败不重读：超时/异常/解析失败均置为 "no_ver"，且不会再次发起读取，直到设备断开重连。
      */
     private fun readBleVersion(address: String) {
+        readVersionJob?.cancel()
         _uiState.update { it.copy(isReadingBleVersion = true, bleVersion = "") }
-        viewModelScope.launch {
+        readVersionJob = viewModelScope.launch {
             val versionStr = try {
                 val result = withTimeoutOrNull(2000L) {
                     connectionManager.sendCommand(
@@ -162,6 +169,8 @@ class SettingsViewModel @Inject constructor(
                     result.isFailure -> "no_ver"
                     else -> parseGh3036VersionString(result.getOrThrow())
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.w(e, "Read BLE version failed")
                 "no_ver"
