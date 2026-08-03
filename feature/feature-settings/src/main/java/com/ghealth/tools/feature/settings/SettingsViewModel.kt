@@ -151,6 +151,9 @@ class SettingsViewModel @Inject constructor(
      * 连接成功后主动读取一次 BLE 版本(verType=0x09)。
      * - 不重复读取：同一地址仅在首次发现 CONNECTED 时读取一次（由 lastVersionReadAddress 守卫）。
      * - 失败不重读：超时/异常/解析失败均置为 "no_ver"，且不会再次发起读取，直到设备断开重连。
+     *
+     * 注：数据源为 BLE 版本字段(0x09)，但 UI 标签显示为"固件版本"，这是产品需求的有意设计，
+     * 不要误改为 verType=0x01（DeviceInfoScreen 中的"固件版本"才用 0x01）。
      */
     private fun readBleVersion(address: String) {
         readVersionJob?.cancel()
