@@ -248,12 +248,11 @@ class DemoViewModel @Inject constructor(
             "不支持的显示宽度: $width, 可选: ${DisplayWidthConfig.OPTIONS}"
         }
         val func = _uiState.value.selectedFunction ?: return
-        val state = _uiState.value
         _uiState.update {
             it.copy(
                 displayWidths = it.displayWidths + (func to width),
-                waveform1Stats = computeVisibleStats(state.waveform1Data, width),
-                waveform2Stats = computeVisibleStats(state.waveform2Data, width)
+                waveform1Stats = computeVisibleStats(it.waveform1Data, width),
+                waveform2Stats = computeVisibleStats(it.waveform2Data, width)
             )
         }
     }
