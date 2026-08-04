@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.demo
 
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
+import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
 
 /**
@@ -19,6 +20,7 @@ internal class FunctionDataBuffers(private val capacity: Int = 500) {
     private val phyBuffers = mutableMapOf<FunctionMode, MultiChannelRingBuffer>()
     private val algoBuffers = mutableMapOf<FunctionMode, MultiChannelRingBuffer>()
     private val scalarBuffers = mutableMapOf<FunctionMode, MultiChannelRingBuffer>()
+    private val maxGsChannels = mutableMapOf<FunctionMode, Int>()
 
     /** 将一帧数据写入对应功能模式的缓冲区(空数组跳过,标量帧始终写入)。 */
     fun addFrame(funcMode: FunctionMode, frame: GhFuncFrame) {
@@ -43,6 +45,7 @@ internal class FunctionDataBuffers(private val capacity: Int = 500) {
                     frame.frameCnt
                 )
             )
+        maxGsChannels[funcMode] = maxOf(maxGsChannels[funcMode] ?: 0, frame.gsData.size)
     }
 
     /** 读取指定列名在指定功能模式下的历史数据点;列名无效或无数据时返回空列表。 */
@@ -68,12 +71,42 @@ internal class FunctionDataBuffers(private val capacity: Int = 500) {
     fun frameIds(funcMode: FunctionMode): List<Float> =
         scalarBuffers[funcMode]?.getChannel(3) ?: emptyList()
 
+    /**
+     * 返回指定功能模式在指定芯片类型下「当前有数据」的可选列名,按
+     * ACC → FRAME_ID → Ipd/CH → Rawdata → ALGO_RESULT 顺序排列。
+     * 仅在该功能模式已收到至少一帧后返回非空列表;随通道数增长动态扩展。
+     */
+    fun availableColumns(funcMode: FunctionMode, chipType: DeviceType): List<String> {
+        if (!scalarBuffers.containsKey(funcMode)) return emptyList()
+        val columns = mutableListOf<String>()
+        val gsCount = maxGsChannels[funcMode] ?: 0
+        if (gsCount > 0) columns.add("ACCX")
+        if (gsCount > 1) columns.add("ACCY")
+        if (gsCount > 2) columns.add("ACCZ")
+        columns.add("FRAME_ID")
+        val phyCount = phyBuffers[funcMode]?.getMaxChannelCount() ?: 0
+        val rawCount = rawdataBuffers[funcMode]?.getMaxChannelCount() ?: 0
+        val algoCount = algoBuffers[funcMode]?.getMaxChannelCount() ?: 0
+        when (chipType) {
+            DeviceType.GH3036 -> {
+                for (i in 0 until phyCount) columns.add("Ipd$i")
+                for (i in 0 until rawCount) columns.add("Rawdata$i")
+            }
+            DeviceType.GH3220, DeviceType.GH3300 -> {
+                for (i in 0 until rawCount) columns.add("CH$i")
+            }
+        }
+        for (i in 0 until algoCount) columns.add("ALGO_RESULT$i")
+        return columns
+    }
+
     /** 清空所有功能模式的缓冲区(录制会话开始时调用)。 */
     fun clear() {
         rawdataBuffers.clear()
         phyBuffers.clear()
         algoBuffers.clear()
         scalarBuffers.clear()
+        maxGsChannels.clear()
     }
 
     private fun parseColumnName(name: String): Pair<String, Int>? {

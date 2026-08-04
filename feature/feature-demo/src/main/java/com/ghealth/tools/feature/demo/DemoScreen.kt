@@ -310,9 +310,6 @@ private fun FunctionDetailScreen(
     isWide: Boolean = false
 ) {
     val function = state.selectedFunction ?: return
-    val availableColumns = remember(state.chipType) {
-        DemoViewModel.availableColumns(state.chipType)
-    }
 
     var showColumnDialog1 by remember { mutableStateOf(false) }
     var showColumnDialog2 by remember { mutableStateOf(false) }
@@ -372,7 +369,7 @@ private fun FunctionDetailScreen(
             data = state.waveform1Data,
             frameIds = state.frameIds,
             stats = state.waveform1Stats,
-            availableColumns = availableColumns,
+            availableColumns = state.availableColumns,
             onColumnSelect = onSelectWaveform1Column,
             showDialog = showColumnDialog1,
             onShowDialogChange = { showColumnDialog1 = it },
@@ -388,7 +385,7 @@ private fun FunctionDetailScreen(
             data = state.waveform2Data,
             frameIds = state.frameIds,
             stats = state.waveform2Stats,
-            availableColumns = availableColumns,
+            availableColumns = state.availableColumns,
             onColumnSelect = onSelectWaveform2Column,
             showDialog = showColumnDialog2,
             onShowDialogChange = { showColumnDialog2 = it },
@@ -400,7 +397,7 @@ private fun FunctionDetailScreen(
     if (showColumnDialog1) {
         ColumnSelectDialog(
             currentColumn = state.waveform1Column,
-            columns = availableColumns,
+            columns = state.availableColumns,
             onSelect = {
                 onSelectWaveform1Column(it)
                 showColumnDialog1 = false
@@ -412,7 +409,7 @@ private fun FunctionDetailScreen(
     if (showColumnDialog2) {
         ColumnSelectDialog(
             currentColumn = state.waveform2Column,
-            columns = availableColumns,
+            columns = state.availableColumns,
             onSelect = {
                 onSelectWaveform2Column(it)
                 showColumnDialog2 = false

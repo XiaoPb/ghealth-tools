@@ -2,6 +2,7 @@ package com.ghealth.tools.feature.demo
 
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
+import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -99,5 +100,67 @@ class FunctionDataBuffersTest {
 
         assertEquals(listOf(10f), buffers.getColumn(FunctionMode.HR, "ALGO_RESULT0"))
         assertEquals(listOf(20f), buffers.getColumn(FunctionMode.SPO2, "ALGO_RESULT0"))
+    }
+
+    @Test
+    fun `availableColumns 仅包含有数据的列 GH3036`() {
+        val buffers = FunctionDataBuffers(capacity = 8)
+        buffers.addFrame(
+            FunctionMode.HR,
+            frame(
+                rawdata = IntArray(8) { it },
+                phyValue = IntArray(4) { it },
+                algoData = IntArray(2) { it },
+                gsData = intArrayOf(1, 2, 3),
+                frameCnt = 1
+            )
+        )
+        val cols = buffers.availableColumns(FunctionMode.HR, DeviceType.GH3036)
+        assertEquals(
+            listOf(
+                "ACCX", "ACCY", "ACCZ", "FRAME_ID",
+                "Ipd0", "Ipd1", "Ipd2", "Ipd3",
+                "Rawdata0", "Rawdata1", "Rawdata2", "Rawdata3", "Rawdata4", "Rawdata5", "Rawdata6", "Rawdata7",
+                "ALGO_RESULT0", "ALGO_RESULT1"
+            ),
+            cols
+        )
+    }
+
+    @Test
+    fun `availableColumns GH3220 用 CH 列且无 Ipd 与 Rawdata`() {
+        val buffers = FunctionDataBuffers(capacity = 8)
+        buffers.addFrame(FunctionMode.HR, frame(rawdata = IntArray(2), gsData = intArrayOf(1), frameCnt = 1))
+        val cols = buffers.availableColumns(FunctionMode.HR, DeviceType.GH3220)
+        assertEquals(listOf("ACCX", "FRAME_ID", "CH0", "CH1"), cols)
+    }
+
+    @Test
+    fun `availableColumns 无数据时返回空`() {
+        val buffers = FunctionDataBuffers(capacity = 8)
+        assertEquals(emptyList<String>(), buffers.availableColumns(FunctionMode.HR, DeviceType.GH3036))
+    }
+
+    @Test
+    fun `availableColumns 随通道数增长动态扩展`() {
+        val buffers = FunctionDataBuffers(capacity = 8)
+        buffers.addFrame(FunctionMode.HR, frame(rawdata = IntArray(2), frameCnt = 1))
+        assertEquals(
+            listOf("FRAME_ID", "Rawdata0", "Rawdata1"),
+            buffers.availableColumns(FunctionMode.HR, DeviceType.GH3036)
+        )
+        buffers.addFrame(FunctionMode.HR, frame(rawdata = IntArray(5), frameCnt = 2))
+        assertEquals(
+            listOf("FRAME_ID", "Rawdata0", "Rawdata1", "Rawdata2", "Rawdata3", "Rawdata4"),
+            buffers.availableColumns(FunctionMode.HR, DeviceType.GH3036)
+        )
+    }
+
+    @Test
+    fun `availableColumns 清空后返回空`() {
+        val buffers = FunctionDataBuffers(capacity = 8)
+        buffers.addFrame(FunctionMode.HR, frame(rawdata = IntArray(2), frameCnt = 1))
+        buffers.clear()
+        assertEquals(emptyList<String>(), buffers.availableColumns(FunctionMode.HR, DeviceType.GH3036))
     }
 }

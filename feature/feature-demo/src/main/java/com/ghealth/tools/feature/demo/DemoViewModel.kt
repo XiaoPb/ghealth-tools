@@ -81,7 +81,9 @@ data class DemoUiState(
     val editingCompareDeviceIndex: Int? = null,
     val showRestartConfigDialog: Boolean = false,
     /** 每个功能模式当前选中的显示宽度(数据点数),首次使用时由 DisplayWidthConfig 填入默认值。 */
-    val displayWidths: Map<FunctionMode, Int> = emptyMap()
+    val displayWidths: Map<FunctionMode, Int> = emptyMap(),
+    /** 当前选中功能模式「有数据」的可选列,随帧动态更新;无选中或无数据时为空。 */
+    val availableColumns: List<String> = emptyList()
 )
 
 /** 当前选中功能模式的显示宽度;未选中或未初始化时返回 125 作为兜底。 */
@@ -183,7 +185,7 @@ class DemoViewModel @Inject constructor(
     }
 
     private fun resetAllData() {
-        _uiState.update { it.copy(functionDataMap = emptyMap(), masterAlgoResult = AlgorithmResult.None, slaveAlgoResult = null) }
+        _uiState.update { it.copy(functionDataMap = emptyMap(), masterAlgoResult = AlgorithmResult.None, slaveAlgoResult = null, availableColumns = emptyList()) }
         buffers.clear()
         lastColumnValues.clear()
         algoNonZeroSeen.clear()
@@ -211,7 +213,8 @@ class DemoViewModel @Inject constructor(
                 frameIds = buffers.frameIds(function),
                 masterAlgoResult = roleResults[DeviceRole.MASTER] ?: AlgorithmResult.None,
                 slaveAlgoResult = roleResults[DeviceRole.SLAVE],
-                displayWidths = it.displayWidths + (function to width)
+                displayWidths = it.displayWidths + (function to width),
+                availableColumns = buffers.availableColumns(function, chipType)
             )
         }
     }
@@ -345,6 +348,10 @@ class DemoViewModel @Inject constructor(
             val w1Data = buffers.getColumn(funcMode, w1Col)
             val w2Data = buffers.getColumn(funcMode, w2Col)
             val width = _uiState.value.currentDisplayWidth
+            val cols = buffers.availableColumns(funcMode, _uiState.value.chipType)
+            if (cols != _uiState.value.availableColumns) {
+                _uiState.update { it.copy(availableColumns = cols) }
+            }
             _uiState.update {
                 it.copy(
                     waveform1Data = w1Data,
@@ -390,7 +397,9 @@ class DemoViewModel @Inject constructor(
         }
         val detectedType = masterDevice?.deviceType ?: DeviceType.GH3036
         if (_uiState.value.chipType != detectedType) {
-            _uiState.update { it.copy(chipType = detectedType) }
+            val selected = _uiState.value.selectedFunction
+            val cols = if (selected != null) buffers.availableColumns(selected, detectedType) else emptyList()
+            _uiState.update { it.copy(chipType = detectedType, availableColumns = cols) }
         }
     }
 
@@ -526,25 +535,6 @@ class DemoViewModel @Inject constructor(
 
     companion object {
         private const val BUFFER_CAPACITY = 500
-
-        fun availableColumns(chipType: DeviceType): List<String> {
-            val columns = mutableListOf<String>()
-            columns.add("ACCX")
-            columns.add("ACCY")
-            columns.add("ACCZ")
-            columns.add("FRAME_ID")
-            when (chipType) {
-                DeviceType.GH3036 -> {
-                    for (i in 0..31) columns.add("Ipd$i")
-                    for (i in 0..31) columns.add("Rawdata$i")
-                }
-                DeviceType.GH3220, DeviceType.GH3300 -> {
-                    for (i in 0..31) columns.add("CH$i")
-                }
-            }
-            for (i in 0..15) columns.add("ALGO_RESULT$i")
-            return columns
-        }
 
         fun defaultColumnsForChip(chipType: DeviceType): Pair<String, String> = when (chipType) {
             DeviceType.GH3036 -> "Ipd0" to "Ipd1"
