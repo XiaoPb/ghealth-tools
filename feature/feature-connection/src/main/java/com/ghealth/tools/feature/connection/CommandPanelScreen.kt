@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import com.ghealth.tools.ble.protocol.gh3036.CommandGroup
 import com.ghealth.tools.ble.protocol.gh3036.CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.CommandParamDef
+import com.ghealth.tools.ble.protocol.gh3036.CommandPayloadBuilder
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.ParamType
 import com.ghealth.tools.core.ui.theme.ButtonShape
@@ -339,11 +340,11 @@ private fun CommandCard(
                     Button(
                         onClick = {
                             val params = if (isRegWrite && multiReg) {
-                                buildMultiRegWriteParams(regPairs)
+                                CommandPayloadBuilder.buildMultiRegWriteParams(regPairs)
                             } else if (isRegRead && multiReg) {
-                                buildMultiRegReadParams(readStartAddr, readCount)
+                                CommandPayloadBuilder.buildMultiRegReadParams(readStartAddr, readCount)
                             } else {
-                                buildCommandParams(command, paramValues)
+                                CommandPayloadBuilder.buildCommandParams(command, paramValues)
                             }
                             onExecute(params)
                         },
@@ -549,41 +550,6 @@ private fun parseArrayValue(value: String, type: ParamType): Any? = try {
     }
 } catch (_: Exception) { null }
 
-private fun buildCommandParams(command: CommandMeta, paramValues: Map<String, Any>): ByteArray {
-    val bytes = mutableListOf<Byte>()
-    command.params.forEach { param ->
-        val value = paramValues[param.name] ?: param.defaultValue
-            ?: throw IllegalArgumentException("参数 ${param.label} 未设置")
-        when (param.type) {
-            ParamType.U8, ParamType.I8 -> bytes.add((value as Number).toByte())
-            ParamType.U16, ParamType.I16 -> {
-                val v = (value as Number).toShort()
-                bytes.add((v.toInt() and 0xFF).toByte())
-                bytes.add((v.toInt() shr 8 and 0xFF).toByte())
-            }
-            ParamType.U32, ParamType.I32, ParamType.TIMESTAMP, ParamType.FUNC_MODE_BITS -> {
-                val v = (value as Number).toInt()
-                bytes.add((v and 0xFF).toByte())
-                bytes.add((v shr 8 and 0xFF).toByte())
-                bytes.add((v shr 16 and 0xFF).toByte())
-                bytes.add((v shr 24 and 0xFF).toByte())
-            }
-            ParamType.U16_ARRAY -> {
-                val arr = value as ShortArray
-                arr.forEach { v ->
-                    bytes.add((v.toInt() and 0xFF).toByte())
-                    bytes.add((v.toInt() shr 8 and 0xFF).toByte())
-                }
-            }
-            ParamType.U8_ARRAY -> {
-                val arr = value as ByteArray
-                bytes.addAll(arr.toList())
-            }
-        }
-    }
-    return bytes.toByteArray()
-}
-
 // ── Single / Multi Register Inputs ─────────────────────────────────────
 
 @Composable
@@ -712,28 +678,6 @@ private fun MultiRegReadInput(
             modifier = Modifier.weight(1f).height(40.dp),
         )
     }
-}
-
-private fun buildMultiRegWriteParams(pairs: List<Pair<String, String>>): ByteArray {
-    val shorts = mutableListOf<Short>()
-    pairs.forEach { (addr, value) ->
-        shorts.add(addr.trim().toInt(16).toShort())
-        shorts.add(value.trim().toInt(16).toShort())
-    }
-    return buildCommandParams(
-        Gh3036CommandMeta.getCommandByKey("GH3X_RegsWriteCmd")!!,
-        mapOf("regs" to shorts.toShortArray())
-    )
-}
-
-private fun buildMultiRegReadParams(addr: String, count: String): ByteArray {
-    return buildCommandParams(
-        Gh3036CommandMeta.getCommandByKey("GH3X_RegsReadCmd")!!,
-        mapOf(
-            "regAddr" to addr.trim().toInt(16).toShort().toUShort(),
-            "readLen" to count.trim().toInt()
-        )
-    )
 }
 
 // ── 寄存器配置下载卡片 ─────────────────────────────────────────────
