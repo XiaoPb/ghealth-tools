@@ -1,6 +1,7 @@
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Properties
+import java.util.TimeZone
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,7 +11,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val buildTimestamp: String = SimpleDateFormat("yyyyMMdd-HHmm").format(Date())
+val buildTimestamp: String = SimpleDateFormat("yyyyMMdd-HHmm").apply {
+    timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+}.format(Date())
 
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties()
