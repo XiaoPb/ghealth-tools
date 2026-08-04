@@ -180,6 +180,59 @@ fun SettingsScreen(
                 )
             }
 
+            // 版本类型选择器
+            var versionTypeExpanded by remember { mutableStateOf(false) }
+            val versionTypeOptions = listOf(
+                "1" to "固件版本",
+                "3" to "虚拟寄存器版本",
+                "4" to "Bootloader版本",
+                "5" to "协议版本",
+                "6" to "驱动功能支持",
+                "7" to "驱动版本",
+                "8" to "芯片版本",
+                "9" to "BLE版本",
+            )
+
+            SettingsGroupCard {
+                ExposedDropdownMenuBox(
+                    expanded = versionTypeExpanded,
+                    onExpandedChange = { versionTypeExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = versionTypeOptions.find { it.first == state.versionType }?.second ?: "BLE版本",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("版本来源") },
+                        supportingText = { Text("设备卡片显示的版本类型") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Build, contentDescription = null)
+                        },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = versionTypeExpanded)
+                        },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = versionTypeExpanded,
+                        onDismissRequest = { versionTypeExpanded = false }
+                    ) {
+                        versionTypeOptions.forEach { (type, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    viewModel.setVersionType(type)
+                                    versionTypeExpanded = false
+                                },
+                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                            )
+                        }
+                    }
+                }
+            }
+
             SectionHeader("外观设置")
             SettingsGroupCard {
                 Column(modifier = Modifier.padding(16.dp)) {

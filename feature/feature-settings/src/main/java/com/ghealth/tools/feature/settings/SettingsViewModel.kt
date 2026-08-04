@@ -54,6 +54,7 @@ data class SettingsUiState(
     val isDeviceConnected: Boolean = false,
     val bleVersion: String = "",
     val isReadingBleVersion: Boolean = false,
+    val versionType: String = "9",
 )
 
 @HiltViewModel
@@ -101,6 +102,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             blePreferences.themeMode.collect { key ->
                 _uiState.update { it.copy(themeMode = ThemeMode.fromKey(key)) }
+            }
+        }
+        viewModelScope.launch {
+            blePreferences.versionType.collect { type ->
+                _uiState.update { it.copy(versionType = type) }
             }
         }
         viewModelScope.launch {
@@ -202,6 +208,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { blePreferences.setThemeMode(mode.key) }
+    }
+
+    fun setVersionType(type: String) {
+        viewModelScope.launch { blePreferences.setVersionType(type) }
     }
 
     fun exportLogs() {
