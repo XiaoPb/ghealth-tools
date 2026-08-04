@@ -29,6 +29,7 @@ class BlePreferences @Inject constructor(
         val SELECTED_CHIP = stringPreferencesKey("selected_chip")
         val SELECTED_PROJECT_CHIP = stringPreferencesKey("selected_project_chip")
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val VERSION_TYPE = stringPreferencesKey("version_type")
     }
 
     val serviceUuid: Flow<String> = context.dataStore.data.map { prefs ->
@@ -71,6 +72,10 @@ class BlePreferences @Inject constructor(
         prefs[Keys.THEME_MODE] ?: "sky_blue"
     }
 
+    val versionType: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.VERSION_TYPE] ?: "9"
+    }
+
     suspend fun setServiceUuid(uuid: String) {
         context.dataStore.edit { it[Keys.SERVICE_UUID] = uuid }
     }
@@ -109,6 +114,10 @@ class BlePreferences @Inject constructor(
 
     suspend fun setThemeMode(mode: String) {
         context.dataStore.edit { it[Keys.THEME_MODE] = mode }
+    }
+
+    suspend fun setVersionType(type: String) {
+        context.dataStore.edit { it[Keys.VERSION_TYPE] = type }
     }
 
     companion object {
