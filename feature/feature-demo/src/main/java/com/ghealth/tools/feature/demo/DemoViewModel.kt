@@ -118,6 +118,8 @@ class DemoViewModel @Inject constructor(
     private val lastColumnValues = mutableMapOf<FunctionMode, MutableMap<String, Any?>>()
     private val algoNonZeroSeen = mutableMapOf<String, Boolean>()
     private val lastAlgoResultsByRole = mutableMapOf<FunctionMode, MutableMap<DeviceRole, AlgorithmResult>>()
+    // ADT IDLE 回退：按 role 记录上一次非 IDLE 的 wearEvent，用于 IDLE 帧显示补偿
+    private val lastNonIdleWearByRole = mutableMapOf<DeviceRole, Int>()
 
     init {
         viewModelScope.launch {
@@ -166,6 +168,7 @@ class DemoViewModel @Inject constructor(
                 }
                 if (!hasSlave) {
                     lastAlgoResultsByRole.values.forEach { it.remove(DeviceRole.SLAVE) }
+                    lastNonIdleWearByRole.remove(DeviceRole.SLAVE)
                 }
                 _uiState.update { state ->
                     val selectedFunc = state.selectedFunction
@@ -189,6 +192,7 @@ class DemoViewModel @Inject constructor(
         lastColumnValues.clear()
         algoNonZeroSeen.clear()
         lastAlgoResultsByRole.clear()
+        lastNonIdleWearByRole.clear()
     }
 
     fun selectFunction(function: FunctionMode) {
@@ -319,8 +323,10 @@ class DemoViewModel @Inject constructor(
         val role = devicesSnapshot[deviceAddress]?.role ?: DeviceRole.MASTER
         val roleResults = lastAlgoResultsByRole.getOrPut(funcMode) { mutableMapOf() }
         val newResult = parseAlgorithmResult(funcMode, frame.algoData)
-        if (newResult.hasData) {
-            roleResults[role] = newResult
+        // ADT: wearEvent 为 IDLE 时回退到上一个非 IDLE 事件，保持界面持续显示有效佩戴状态
+        val effectiveResult = applyLastNonIdleWear(role, newResult)
+        if (effectiveResult.hasData) {
+            roleResults[role] = effectiveResult
         }
         val masterResult = roleResults[DeviceRole.MASTER] ?: AlgorithmResult.None
         val slaveResult = roleResults[DeviceRole.SLAVE]
@@ -390,6 +396,18 @@ class DemoViewModel @Inject constructor(
             val chipType = _uiState.value.chipType
             recordingManager.writeFrame(deviceAddress, funcMode.name, frame.toColumnMap(funcMode, chipType), role)
         }
+    }
+
+    /**
+     * ADT 佩戴事件 IDLE 回退：当 [result] 为 ADT 且 wearEvent == IDLE 时，
+     * 用该 role 上一次非 IDLE 的 wearEvent 替换，便于界面持续显示有效状态。
+     * 非 IDLE 帧更新历史；非 ADT 结果原样返回。
+     */
+    private fun applyLastNonIdleWear(role: DeviceRole, result: AlgorithmResult): AlgorithmResult {
+        if (result !is AlgorithmResult.ADT) return result
+        val (newLast, effectiveWear) = AdtWearStateReducer.reduce(lastNonIdleWearByRole[role], result.wearEvent)
+        if (newLast != null) lastNonIdleWearByRole[role] = newLast
+        return if (effectiveWear == result.wearEvent) result else result.copy(wearEvent = effectiveWear)
     }
 
     private fun detectChipType() {
