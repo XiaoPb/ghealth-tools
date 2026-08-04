@@ -349,11 +349,10 @@ class DemoViewModel @Inject constructor(
             val w2Data = buffers.getColumn(funcMode, w2Col)
             val width = _uiState.value.currentDisplayWidth
             val cols = buffers.availableColumns(funcMode, _uiState.value.chipType)
-            if (cols != _uiState.value.availableColumns) {
-                _uiState.update { it.copy(availableColumns = cols) }
-            }
             _uiState.update {
+                // 列集合不变时复用旧引用,避免 ColumnSelectDialog 不必要重组;单次 update 减少发射
                 it.copy(
+                    availableColumns = if (cols != it.availableColumns) cols else it.availableColumns,
                     waveform1Data = w1Data,
                     waveform2Data = w2Data,
                     waveform1Stats = computeVisibleStats(w1Data, width),

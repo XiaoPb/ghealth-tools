@@ -1,7 +1,6 @@
 package com.ghealth.tools.feature.demo
 
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
-import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
 import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -15,10 +14,8 @@ class FunctionDataBuffersTest {
         rawdata: IntArray = IntArray(0),
         phyValue: IntArray = IntArray(0),
         gsData: IntArray = IntArray(0),
-        frameCnt: Int = 0,
-        funcId: GhFuncId = GhFuncId.HR
+        frameCnt: Int = 0
     ) = GhFuncFrame().apply {
-        this.funcId = funcId
         this.frameCnt = frameCnt
         this.rawdata = rawdata
         this.phyValue = phyValue
@@ -61,6 +58,16 @@ class FunctionDataBuffersTest {
         buffers.addFrame(FunctionMode.HR, frame(rawdata = intArrayOf(1, 2), frameCnt = 1))
 
         assertEquals(listOf(1f), buffers.getColumn(FunctionMode.HR, "Rawdata0"))
+    }
+
+    @Test
+    fun `CH 列返回 rawdata 通道历史(GH3220 与 GH3300 用法)`() {
+        val buffers = FunctionDataBuffers(capacity = 8)
+        buffers.addFrame(FunctionMode.HR, frame(rawdata = intArrayOf(3, 4), frameCnt = 1))
+        buffers.addFrame(FunctionMode.HR, frame(rawdata = intArrayOf(5, 6), frameCnt = 2))
+
+        assertEquals(listOf(3f, 5f), buffers.getColumn(FunctionMode.HR, "CH0"))
+        assertEquals(listOf(4f, 6f), buffers.getColumn(FunctionMode.HR, "CH1"))
     }
 
     @Test
