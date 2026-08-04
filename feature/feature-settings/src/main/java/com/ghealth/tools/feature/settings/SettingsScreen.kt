@@ -164,40 +164,43 @@ fun SettingsScreen(
                 )
                 ListItem(
                     headlineContent = { Text("固件版本") },
-                    leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
-                    trailingContent = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            when {
-                                state.isReadingBleVersion -> {
+                    supportingContent = {
+                        when {
+                            state.isReadingBleVersion -> {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
+                                        modifier = Modifier.size(14.dp),
                                         strokeWidth = 2.dp
                                     )
-                                }
-                                state.isDeviceConnected -> {
-                                    Text(
-                                        text = state.bleVersion.ifEmpty { "no_ver" },
-                                        color = if (state.bleVersion.isEmpty() || state.bleVersion == "no_ver")
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        else MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                else -> {
-                                    Text(
-                                        "未连接",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("读取中…")
                                 }
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = if (versionTypeExpanded) Icons.Default.KeyboardArrowUp
-                                    else Icons.Default.KeyboardArrowDown,
-                                contentDescription = if (versionTypeExpanded) "收起" else "版本来源",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.clickable { versionTypeExpanded = !versionTypeExpanded }
-                            )
+                            state.isDeviceConnected -> {
+                                Text(
+                                    text = state.bleVersion.ifEmpty { "no_ver" },
+                                    color = if (state.bleVersion.isEmpty() || state.bleVersion == "no_ver")
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    "未连接",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
+                    },
+                    leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
+                    trailingContent = {
+                        Icon(
+                            imageVector = if (versionTypeExpanded) Icons.Default.KeyboardArrowUp
+                                else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (versionTypeExpanded) "收起" else "版本来源",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.clickable { versionTypeExpanded = !versionTypeExpanded }
+                        )
                     },
                     colors = listItemColors
                 )
