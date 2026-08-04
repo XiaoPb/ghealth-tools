@@ -364,7 +364,7 @@ private fun MainMenuContent(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        DeviceStatusCard(state.connectedDevices.values.toList(), onDisconnectDevice)
+        DeviceStatusCard(state.connectedDevices.values.toList(), state.masterFirmwareVersion, onDisconnectDevice)
 
         if (state.dataMonitorState.isMonitoring || state.dataMonitorState.testConfig != null) {
             DataMonitorCard(state = state.dataMonitorState)
@@ -446,6 +446,7 @@ private fun MainMenuContent(
 @Composable
 private fun DeviceStatusCard(
     devices: List<ConnectedDevice>,
+    masterFirmwareVersion: String?,
     onDisconnect: (String) -> Unit
 ) {
     ElevatedCard(
@@ -498,11 +499,19 @@ private fun DeviceStatusCard(
                                 text = "${device.role.name} - ${device.name}",
                                 style = MaterialTheme.typography.bodyMedium
                             )
-                            Text(
-                                text = device.address,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            if (device.role == DeviceRole.MASTER && !masterFirmwareVersion.isNullOrBlank()) {
+                                Text(
+                                    text = masterFirmwareVersion,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            } else {
+                                Text(
+                                    text = device.address,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         StatusBadge(status = device.state.toUiStatus())
                     }

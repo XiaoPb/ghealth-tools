@@ -6,10 +6,11 @@ import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.ConnectionError
 import com.ghealth.tools.ble.connection.DeviceRole
-import com.ghealth.tools.ble.protocol.gh3036.KEY_G
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_GET_VERSION
 import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
+import com.ghealth.tools.ble.protocol.gh3036.parseGh3036VersionString
 import com.ghealth.tools.ble.scanner.BleScanException
 import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.model.BleDevice
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -78,7 +80,8 @@ data class ConnectionUiState(
     val masterDeviceName: String? = null,
     val dataMonitorState: DataMonitorState = DataMonitorState(),
     val selectedChip: String = "gh3036",
-    val registerConfigDownloadState: RegisterConfigDownloadState = RegisterConfigDownloadState()
+    val registerConfigDownloadState: RegisterConfigDownloadState = RegisterConfigDownloadState(),
+    val masterFirmwareVersion: String? = null,
 )
 
 @HiltViewModel
@@ -115,6 +118,14 @@ class ConnectionViewModel @Inject constructor(
                             showTestConfigDialog = true,
                             masterDeviceName = newMaster.value.name
                         )
+                    }
+                }
+
+                // 主设备新连接时，延迟 5 秒非阻塞读取版本
+                if (newMaster != null) {
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(5_000L)
+                        fetchMasterVersion(newMaster.key)
                     }
                 }
 
@@ -477,6 +488,34 @@ class ConnectionViewModel @Inject constructor(
                     isMonitoring = false
                 )
             )
+        }
+    }
+
+    private suspend fun fetchMasterVersion(masterAddress: String) {
+        val verType = blePreferences.versionType.first().toIntOrNull() ?: 9
+        try {
+            val result = withTimeoutOrNull(3_000L) {
+                connectionManager.sendCommand(
+                    address = masterAddress,
+                    key = KEY_GH3X_GET_VERSION,
+                    param = byteArrayOf(verType.toByte())
+                )
+            }
+            when {
+                result == null -> {
+                    Timber.w("Version read timeout for $masterAddress (verType=$verType)")
+                }
+                result.isFailure -> {
+                    Timber.w("Version read failed: ${result.exceptionOrNull()?.message}")
+                }
+                result.isSuccess -> {
+                    val versionStr = parseGh3036VersionString(result.getOrThrow())
+                    Timber.d("Version for $masterAddress (verType=$verType): $versionStr")
+                    _uiState.update { it.copy(masterFirmwareVersion = versionStr) }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Version read exception for $masterAddress")
         }
     }
 
