@@ -125,4 +125,58 @@ class CommandPayloadBuilderTest {
             bytes
         )
     }
+    // ── 边界与数组 ──
+
+    @Test
+    fun `missing required parameter throws IllegalArgumentException`() {
+        // readLen 有默认值 1，regAddr 必填；空 map 应抛异常而非崩溃。
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException::class.java) {
+            CommandPayloadBuilder.buildCommandParams(regReadCmd, emptyMap())
+        }
+    }
+
+    @Test
+    fun `unsupported value type throws IllegalArgumentException`() {
+        val synthetic = CommandMeta(
+            key = "test_bad",
+            displayName = "test",
+            description = "",
+            requestFormat = "<u16>",
+            params = listOf(CommandParamDef(name = "v", label = "v", type = ParamType.U16)),
+            hasResponse = false
+        )
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException::class.java) {
+            CommandPayloadBuilder.buildCommandParams(synthetic, mapOf("v" to "not a number"))
+        }
+    }
+
+    @Test
+    fun `U16_ARRAY param accepts ShortArray`() {
+        // 寄存器写入命令走 U16_ARRAY 分支，须保持小端逐元素、无数量前缀。
+        val regWriteCmd = Gh3036CommandMeta.getCommandByKey(KEY_GH3X_REGS_WRITE_CMD)!!
+        val bytes = CommandPayloadBuilder.buildCommandParams(
+            regWriteCmd,
+            mapOf("regs" to shortArrayOf(0x1000.toShort(), 0xABCD.toShort(), 0x1002.toShort(), 0x0001.toShort()))
+        )
+        assertArrayEquals(
+            byteArrayOf(
+                0x00, 0x10, 0xCD.toByte(), 0xAB.toByte(),
+                0x02, 0x10, 0x01, 0x00
+            ),
+            bytes
+        )
+    }
+
+    @Test
+    fun `I8 param accepts Byte value`() {
+        val timeSet = Gh3036CommandMeta.getCommandByKey(KEY_GH_TIME_SET)!!
+        // FMT_GH_TIME_SET = "<u32><d8>"；ts=1700000000=0x6553F100
+        val bytes = CommandPayloadBuilder.buildCommandParams(
+            timeSet, mapOf("ts" to 1700000000, "hourOffset" to 8.toByte())
+        )
+        assertArrayEquals(
+            byteArrayOf(0x00, 0xF1.toByte(), 0x53, 0x65, 0x08),
+            bytes
+        )
+    }
 }
