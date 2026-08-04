@@ -43,6 +43,12 @@ class AdtTypesTest {
     }
 
     @Test
+    fun `wear event only unknown bit returns hex only`() {
+        // 仅未知位（无已知位）时直接输出 "0x<hex>"，不带前导 "|"
+        assertEquals("0x10", AdtWearEvent.labels(0x10))
+    }
+
+    @Test
     fun `det state maps raw values`() {
         assertEquals(AdtDetState.DET_ON, AdtDetState.fromValue(0))
         assertEquals(AdtDetState.DET_OFF, AdtDetState.fromValue(1))
