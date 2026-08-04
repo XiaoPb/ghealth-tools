@@ -89,4 +89,40 @@ class CommandPayloadBuilderTest {
         )
         assertArrayEquals(byteArrayOf(0x5A.toByte()), bytes)
     }
+
+    // ── 多寄存器读写 ──
+
+    @Test
+    fun `buildMultiRegReadParams produces little-endian address and count`() {
+        val bytes = CommandPayloadBuilder.buildMultiRegReadParams("1000", "2")
+        // regAddr 0x1000 LE + readLen 2 LE(d32)
+        assertArrayEquals(
+            byteArrayOf(0x00, 0x10, 0x02, 0x00, 0x00, 0x00),
+            bytes
+        )
+    }
+
+    @Test
+    fun `buildMultiRegReadParams accepts high-bit address`() {
+        val bytes = CommandPayloadBuilder.buildMultiRegReadParams("FFFF", "1")
+        assertArrayEquals(
+            byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0x01, 0x00, 0x00, 0x00),
+            bytes
+        )
+    }
+
+    @Test
+    fun `buildMultiRegWriteParams produces interleaved address value pairs`() {
+        val bytes = CommandPayloadBuilder.buildMultiRegWriteParams(
+            listOf("1000" to "ABCD", "1002" to "0001")
+        )
+        // FMT_GH3X_REGS_WRITE_CMD = "<u16*>"，逐元素小端，无数量前缀
+        assertArrayEquals(
+            byteArrayOf(
+                0x00, 0x10, 0xCD.toByte(), 0xAB.toByte(), // addr=0x1000, val=0xABCD
+                0x02, 0x10, 0x01, 0x00                    // addr=0x1002, val=0x0001
+            ),
+            bytes
+        )
+    }
 }

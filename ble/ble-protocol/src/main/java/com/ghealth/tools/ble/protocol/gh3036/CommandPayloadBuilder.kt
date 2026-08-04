@@ -55,6 +55,30 @@ object CommandPayloadBuilder {
         return bytes.toByteArray()
     }
 
+    /** 多寄存器写入：从 (地址, 值) 十六进制字符串对拼装载荷。 */
+    fun buildMultiRegWriteParams(pairs: List<Pair<String, String>>): ByteArray {
+        val shorts = mutableListOf<Short>()
+        pairs.forEach { (addr, value) ->
+            shorts.add(addr.trim().toInt(16).toShort())
+            shorts.add(value.trim().toInt(16).toShort())
+        }
+        return buildCommandParams(
+            Gh3036CommandMeta.getCommandByKey(KEY_GH3X_REGS_WRITE_CMD)!!,
+            mapOf("regs" to shorts.toShortArray())
+        )
+    }
+
+    /** 多寄存器读取：从起始地址(十六进制字符串)与读取个数拼装载荷。 */
+    fun buildMultiRegReadParams(addr: String, count: String): ByteArray {
+        return buildCommandParams(
+            Gh3036CommandMeta.getCommandByKey(KEY_GH3X_REGS_READ_CMD)!!,
+            mapOf(
+                "regAddr" to addr.trim().toInt(16).toShort().toUShort(),
+                "readLen" to count.trim().toInt()
+            )
+        )
+    }
+
     private fun toByte(value: Any): Byte = when (value) {
         is Number -> value.toByte()
         is UByte -> value.toByte()
