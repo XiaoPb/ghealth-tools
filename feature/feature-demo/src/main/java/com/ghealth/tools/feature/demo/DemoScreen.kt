@@ -824,20 +824,12 @@ private fun validCell(r: AlgorithmResult): String {
 
 private fun wearCell(r: AlgorithmResult): String {
     val a = r as? AlgorithmResult.ADT ?: return "--"
-    return when (a.wearEvent) {
-        1 -> "Wear"
-        2 -> "Off"
-        else -> a.wearEvent.toString()
-    }
+    return AdtWearEvent.labels(a.wearEvent)
 }
 
 private fun detStatusCell(r: AlgorithmResult): String {
     val a = r as? AlgorithmResult.ADT ?: return "--"
-    return when (a.detStatus) {
-        1 -> "Detecting"
-        2 -> "Detected"
-        else -> a.detStatus.toString()
-    }
+    return AdtDetState.fromValue(a.detStatus).label
 }
 
 private fun ctrCell(r: AlgorithmResult): String {
