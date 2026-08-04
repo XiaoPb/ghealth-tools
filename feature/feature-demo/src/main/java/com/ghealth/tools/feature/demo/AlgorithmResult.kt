@@ -78,8 +78,8 @@ sealed class AlgorithmResult {
      * ADT (Auto Detect Wear) algorithm result.
      *
      * Fields per gh_adt_alg_e:
-     * - wearEvent: wear status event
-     * - detStatus: detection status
+     * - wearEvent: wear status event（位掩码，见 [AdtWearEvent]）
+     * - detStatus: detection state（见 [AdtDetState]）
      * - ctr: counter
      */
     data class ADT(
@@ -87,14 +87,11 @@ sealed class AlgorithmResult {
         val detStatus: Int = 0,
         val ctr: Int = 0
     ) : AlgorithmResult() {
-        override val hasData: Boolean get() = wearEvent > 0 || detStatus > 0
-        override val display: String get() = when {
-            wearEvent == 1 -> "Wear"
-            wearEvent == 2 -> "Off"
-            detStatus == 1 -> "Detecting"
-            detStatus == 2 -> "Detected"
-            else -> "--"
-        }
+        // ADT 帧到达即视为有数据：DET_ON(0) 与 IDLE(0) 都是合法状态，
+        // 不能用 > 0 判断，否则佩戴检测中状态会被丢弃。
+        override val hasData: Boolean get() = true
+        override val display: String get() =
+            "${AdtWearEvent.labels(wearEvent)} / ${AdtDetState.fromValue(detStatus).label}"
     }
 
     /**
