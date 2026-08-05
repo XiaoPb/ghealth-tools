@@ -362,12 +362,19 @@ class BleConnectionManager @Inject constructor(
         peripheral.state.onEach { state ->
             when (state) {
                 is State.Connected -> {
-                    updateDeviceState(address, ConnectionState.CONNECTED)
+                    // 先完成服务发现与 notify 订阅，再标记 CONNECTED。
+                    // CONNECTED 即代表命令通道就绪，避免上层（如 SettingsViewModel）立即下发命令时
+                    // 因 notify 未订阅导致响应丢失/超时（表现为固件版本读到 "no_ver"）。
                     validateServices(peripheral, address, role)
-                    if (role == DeviceRole.MASTER) {
-                        scope.launch {
-                            blePreferences.setLastDeviceAddress(address)
-                            blePreferences.setLastDeviceName(peripheral.name ?: "")
+                    // validateServices 失败时会调用 disconnectAfterFailure 将状态置为 DISCONNECTING，
+                    // 仅当仍处于 CONNECTING（即校验成功）时才升级为 CONNECTED。
+                    if (_devices.value[address]?.state == ConnectionState.CONNECTING) {
+                        updateDeviceState(address, ConnectionState.CONNECTED)
+                        if (role == DeviceRole.MASTER) {
+                            scope.launch {
+                                blePreferences.setLastDeviceAddress(address)
+                                blePreferences.setLastDeviceName(peripheral.name ?: "")
+                            }
                         }
                     }
                 }
