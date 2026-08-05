@@ -499,17 +499,19 @@ private fun DeviceStatusCard(
                                 text = "${device.role.name} - ${device.name}",
                                 style = MaterialTheme.typography.bodyMedium
                             )
-                            if (device.role == DeviceRole.MASTER && !masterFirmwareVersion.isNullOrBlank()) {
+                            Text(
+                                text = device.address,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (device.role == DeviceRole.MASTER &&
+                                !masterFirmwareVersion.isNullOrBlank() &&
+                                masterFirmwareVersion != "no_ver"
+                            ) {
                                 Text(
-                                    text = masterFirmwareVersion,
+                                    text = "固件版本: $masterFirmwareVersion",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface
-                                )
-                            } else {
-                                Text(
-                                    text = device.address,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
