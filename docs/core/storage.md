@@ -81,17 +81,22 @@ class CsvWriter(
 
 | 方法 | 内容 | 文件格式 |
 |------|------|---------|
-| `logBle(address, direction, data)` | BLE 原始字节（RX/TX） | `ble_{date}.log` |
-| `logInfo(message)` | 一般信息 | `app_{date}.log` |
-| `logError(message, throwable)` | 错误信息 | `app_{date}.log` |
-| `logOta(message)` | OTA 升级日志 | `ota_{date}.log` |
+| `logBle(deviceAddress, direction, data)` | BLE 原始字节（RX/TX），16-hex 空格分隔 | `ble_raw_{address}_{date}.log`（地址去冒号） |
+| `logProtocol(message)` | 协议解析层日志 | `protocol_{date}.log` |
+| `logApp(level, tag, message)` | 应用日志（由 FileLoggingTree 转发 Timber 日志） | `app_{date}.log` |
+
+> 文件路径均为 `logs/{date}/` 子目录下，按日期分目录。
 
 ### 5.2 BLE 日志格式
 
 ```
+文件: logs/20260530/ble_raw_AABBCCDDEEFF_20260530.log
+
 [2026-05-30 14:30:00.123] AA:BB:CC:DD:EE:FF RX: 0A C4 1E 8F 92 ...
 [2026-05-30 14:30:00.456] AA:BB:CC:DD:EE:FF TX: 01 FE D3 4A 7B ...
 ```
+
+> **实现注意**：`LogManager` 内部使用 `android.util.Log` 而非 `Timber` 记录自身的调试/错误信息。因为 `FileLoggingTree` 会把 Timber 日志转发回 `LogManager.logApp()`，若 `LogManager` 自身调用 Timber 会形成无限递归导致 `OutOfMemoryError`。
 
 ### 5.3 FileLoggingTree
 

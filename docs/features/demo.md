@@ -8,8 +8,9 @@
 
 | 组件 | 文件 | 职责 |
 |------|------|------|
-| `DemoViewModel` | `DemoViewModel.kt` | 实时数据处理、算法解析、录制控制 |
+| `DemoViewModel` | `DemoViewModel.kt` | 实时数据处理、算法解析、录制控制、重连清空 |
 | `DemoScreen` | `DemoScreen.kt` | 波形/算法/心率展示 UI |
+| `AdtWearStateReducer` | `AdtWearStateReducer.kt` | 纯函数：ADT wearEvent IDLE 与 detStatus UNKNOWN 回退归约 |
 | `DemoUiState` | DemoViewModel 内 | UI 状态数据类 |
 
 ## 3. DemoUiState
@@ -60,14 +61,17 @@ onFrameReceived(address, frame)
   ├── 3. 提取波形数据 (rawdata / phyValue)
   │     └── 更新 waveformData List → 触发图表重绘
   │
-  ├── 4. toColumnMap() 构建 CSV 列映射
+  ├── 4. ADT 状态回退（见第 7 节）
+  │     └── applyAdtStateFallback(role, result) → wearEvent IDLE / detStatus UNKNOWN 回退
+  │
+  ├── 5. toColumnMap() 构建 CSV 列映射
   │     ├── TimeStamp → frame.timestamp
   │     ├── FRAME_ID → frame.frameCnt
   │     ├── Ipd0..31 → frame.rawdata
   │     ├── ACCX/ACCY/ACCZ → frame.gsData
   │     └── ALGO_RESULT0..n → frame.algoData
   │
-  └── 5. recordingManager.writeFrame(mode, address, columnMap, role)
+  └── 6. recordingManager.writeFrame(mode, address, columnMap, role)
         └── channel.trySend(WriteTask) — 非阻塞入队
 ```
 
@@ -140,9 +144,37 @@ DemoScreen 算法结果卡片
   └── ... (根据芯片型号)
 ```
 
-## 7. 设备对比功能
+## 7. AdT 状态回退
 
-### 7.1 心率对比
+固件在两种情况下会上报"无效"状态，直接展示会导致界面在有效/无效之间频繁闪烁：
+
+- **wearEvent = IDLE(0)**：无佩戴事件时上报。回退显示该 role 上一次的非 IDLE 事件。
+- **detStatus = UNKNOWN(2)**：检测准备中上报。回退显示该 role 上一次的非 UNKNOWN 检测状态。
+
+`AdtWearStateReducer` 是无状态的纯函数对象，调用方（`DemoViewModel`）按 role 自行保存历史值并在每帧调用：
+
+```
+每帧 GhFuncFrame 到达 → DemoViewModel.onFrameReceived
+  │
+  └── applyAdtStateFallback(role, result)
+        │
+        ├── AdtWearStateReducer.reduce(lastNonIdleWearByRole[role], wearEvent)
+        │     └── 返回 (新的 lastNonIdle, 用于显示的 wearEvent)
+        │
+        └── AdtWearStateReducer.reduceDetState(lastNonUnknownDetByRole[role], detStatus)
+              └── 返回 (新的 lastNonUnknown, 用于显示的 detStatus)
+```
+
+| 函数 | 回退条件 | 历史更新 |
+|------|---------|---------|
+| `reduce(lastNonIdle, wearEvent)` | wearEvent == IDLE 且有历史 | 非 IDLE 帧更新历史 |
+| `reduceDetState(lastNonUnknown, detStatus)` | detStatus 为 UNKNOWN 且有历史 | 非 UNKNOWN 帧更新历史 |
+
+历史状态按 `DeviceRole` 分别保存（`lastNonIdleWearByRole` / `lastNonUnknownDetByRole`），从设备断开时清理该 role 的历史（见第 9.4 节）。
+
+## 8. 设备对比功能
+
+### 8.1 心率对比
 
 ```
 COMPARE 设备: 标准心率服务 (BLE HR Service)
@@ -166,7 +198,7 @@ DemoViewModel 收集 heartRateResults StateFlow
         └── 差异计算: |MasterHR - CompareHR|
 ```
 
-### 7.2 主比较设备
+### 8.2 主比较设备
 
 ```
 ConnectionViewModel.setPrimaryCompareDevice(address)
@@ -175,9 +207,9 @@ ConnectionViewModel.setPrimaryCompareDevice(address)
   └── isPrimaryCompare = true (排序时排最前面)
 ```
 
-## 8. 录制控制
+## 9. 录制控制
 
-### 8.1 手动录制
+### 9.1 手动录制
 
 ```
 用户点击 TopAppBar 录制/停止按钮
@@ -199,7 +231,7 @@ DemoViewModel.toggleRecording()
         └── connectionManager.notifyRecordingStopped()
 ```
 
-### 8.2 重连恢复录制
+### 9.2 重连恢复录制
 
 ```
 设备重连 → TestConfigDialog 确认
@@ -214,7 +246,7 @@ DemoViewModel.confirmRestartRecording(config)
   └── DemoUiState.isRecording = true
 ```
 
-### 8.3 断联自动停止
+### 9.3 断联自动停止
 
 ```
 BLE 断开 → devices StateFlow 变空
@@ -226,9 +258,39 @@ DemoViewModel 检测 devices.isEmpty
         └── 允许下次重连后自动恢复 (通过 TestConfigDialog)
 ```
 
-## 9. CSV 文件输出
+### 9.4 主设备重连清空数据
 
-### 9.1 文件结构（每次会话）
+为避免上一次会话的累积数据影响本次分析，`DemoViewModel` 订阅 `connectionManager.devices` 检测主设备"重新连接"上升沿（从未连接 → 已连接），触发 `resetAllData()`：
+
+```
+devices StateFlow 变化
+  │
+  ├── shouldClearOnMasterReconnect(wasMasterConnected, devices)
+  │     └── 主设备从未连接变为 CONNECTED → true
+  │     └── 首次连接也触发(此时数据为空,清空无副作用)
+  │
+  ├── true → resetAllData()
+  │     ├── DemoUiState.clearReceivedData()
+  │     │     ├── functionDataMap / waveform1Data / waveform2Data 清空
+  │     │     ├── waveform1Stats / waveform2Stats 清空
+  │     │     ├── frameIds 清空
+  │     │     ├── masterAlgoResult / slaveAlgoResult 清空
+  │     │     └── availableColumns 清空
+  │     │     （保留:选中功能、列选择、显示宽度、对比设备、测试信息、录制状态）
+  │     ├── buffers.clear()
+  │     ├── lastColumnValues / algoNonZeroSeen / lastAlgoResultsByRole 清空
+  │     └── lastNonIdleWearByRole / lastNonUnknownDetByRole 清空
+  │
+  └── 更新 wasMasterConnected = 当前主设备是否已连接
+```
+
+从设备断开时（`!hasSlave`），额外清理 SLAVE role 的算法结果与 AdT 回退历史（`lastAlgoResultsByRole` / `lastNonIdleWearByRole` / `lastNonUnknownDetByRole` 中 SLAVE 项），避免 stale 数据残留。
+
+> `clearReceivedData()` 与 `shouldClearOnMasterReconnect()` 为 `internal` 顶层纯函数，便于单元测试。
+
+## 10. CSV 文件输出
+
+### 10.1 文件结构（每次会话）
 
 ```
 {sessionDate}/
@@ -245,7 +307,7 @@ DemoViewModel 检测 devices.isEmpty
     └── ble_20260530_143000.log
 ```
 
-### 9.2 Server CSV 格式
+### 10.2 Server CSV 格式
 
 ```
 行1: {"MAC":"AA:BB:CC:DD:EE:FF","App-version":"1.0.0","name":"DeviceName",...}
@@ -253,7 +315,7 @@ DemoViewModel 检测 devices.isEmpty
 行3+: 228530,1,0.1234,0.5678,...,72,98,...
 ```
 
-### 9.3 Records CSV 格式
+### 10.3 Records CSV 格式
 
 ```
 行1: TimeStamp,MasterAlgo,SlaveAlgo,Compare0_HR,...,Compare4_HR

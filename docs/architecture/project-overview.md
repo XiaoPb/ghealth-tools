@@ -8,7 +8,7 @@
 
 | 类别 | 技术选型 | 版本 |
 |------|---------|------|
-| 语言 | Kotlin + Compose | K2 / JVM 17 |
+| 语言 | Kotlin + Compose | 2.3.20 (K2) / JVM 17 |
 | UI 框架 | Jetpack Compose + Material3 | BOM 2024.09.00 |
 | 导航 | Navigation Compose | 2.8.4 |
 | 依赖注入 | Hilt (Dagger) | 2.58 |

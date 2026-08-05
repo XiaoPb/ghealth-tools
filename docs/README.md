@@ -14,7 +14,7 @@
 
 | 文档 | 说明 |
 |------|------|
-| [BLE 端到端流程](ble/ble-end-to-end-flow.md) | 扫描→连接→服务验证→数据通信→断开 全流程 |
+| [BLE 端到端流程](ble/ble-end-to-end-flow.md) | 扫描→连接→服务验证→电池服务→版本读取→数据通信→断开 全流程 |
 | [BLE 协议层架构](ble/ble-protocol/architecture.md) | RPC 帧格式、TypeKey 位域、安全帧/非安全帧处理 |
 | [BLE 协议层 API 参考](ble/ble-protocol/api-reference.md) | GHealthExecutor/Call/Send/Publish 接口文档 |
 
@@ -23,11 +23,11 @@
 | 文档 | 说明 |
 |------|------|
 | [Login 模块](features/login.md) | 认证流程（在线/离线/自动登录）、项目管理 |
-| [Connection 模块](features/connection.md) | 设备扫描/连接、命令交互、测试配置 |
+| [Connection 模块](features/connection.md) | 设备扫描/连接、命令交互、设备状态卡（电池/固件版本）、测试配置 |
 | [Demo 模块](features/demo.md) | G 协议实时数据、波形展示、算法结果、设备对比 |
 | [Factory 模块](features/factory.md) | 产测流程、配置加载、测试执行、CSV 导出 |
 | [OTA 模块](features/ota.md) | DFU 固件升级、资源升级、设备重连 |
-| [Settings 模块](features/settings.md) | BLE UUID 配置、主题、设备信息、日志导出 |
+| [Settings 模块](features/settings.md) | BLE UUID 配置、主题（4 套 M3 调色板）、固件版本读取、设备信息、日志导出 |
 
 ### 核心模块文档 (Core)
 

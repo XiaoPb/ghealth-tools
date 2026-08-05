@@ -155,6 +155,77 @@ BleConnectionManager.createExecutor(address)
         └── gh3300 → Gh3300Executor
 ```
 
+### 4.3 电池服务读取（Battery Service 0x180F）
+
+服务验证完成、设备进入 CONNECTED 后，`BleConnectionManager` 以 fire-and-forget 方式异步触发 `readBatteryService(peripheral, address)`，不阻塞 CONNECTED 状态迁移，失败仅记日志。
+
+```
+CONNECTED → scope.launch { readBatteryService(peripheral, address) }
+  │
+  ├── 拍平所有已发现特征为 (服务UUID, 特征UUID) 列表
+  │
+  ├── BatteryServiceMatcher.match(refs)
+  │     ├── 按特征 UUID 0x2A19 跨服务查找所属服务 UUID（必选）
+  │     └── 按特征 UUID 0x2A1E 跨服务查找所属服务 UUID（可选）
+  │
+  ├── 0x2A19 Battery Level（电量百分比）
+  │     ├── peripheral.read() 初次读取 → parseLevel → updateBatteryStatus(level)
+  │     └── 若支持 notify/indicate → peripheral.observe() 持续刷新
+  │
+  └── 0x2A1E Battery Level Status（充放电状态，可选）
+        └── 若存在且支持 notify → peripheral.observe() → parseChargeState → updateBatteryStatus(chargeState)
+  │
+  └── batteryStatus: StateFlow<Map<String, BatteryStatus>>  [按地址索引]
+        └── 消费者: ConnectionViewModel → DeviceStatusCard → BatteryIndicator
+```
+
+**UUID 常量**（`BatteryServiceUuids`）：
+
+| 名称 | UUID | 说明 |
+|------|------|------|
+| Battery Service | `0000180f-...` | 标准电池服务 |
+| Battery Level | `00002a19-...` | 1 字节 uint8，0–100（必选） |
+| Battery Level Status | `00002a1e-...` | flags + 可选字段（可选） |
+
+**BatteryLevelStatusParser** 解析 0x2A1E：
+- 基于 GSS v7（pre-BAS v1.1）结构，flags 各 bit 表示独立可选字段存在性。
+- 按字段出现顺序计算偏移：Battery Level(1) → Charge Level(2) → Charge Type(1) → Status(1)。
+- 无 Status 字段时，依据外接电源位（wired/wireless）保守推断为 Charging。
+- BAS v1.1 引入不兼容的 Power State 字段结构，新设备需另行实现。
+
+**原子更新**：`updateBatteryStatus(address, transform)` 通过 `_batteryStatus.update { currentMap + (address to transform(currentMap[address])) }` 保证电量与充放电状态并发更新不丢失。
+
+### 4.4 固件版本读取（FirmwareVersionHolder）
+
+固件版本由 `@Singleton` 的 `FirmwareVersionHolder` 统一获取，连接页与设置页共享同一份状态，避免重复下发读取命令。
+
+```
+FirmwareVersionHolder 订阅 BleConnectionManager.devices
+  │
+  ├── 主设备 CONNECTED（地址变化）→ scheduleFetch(address)
+  │     ├── fetchJob?.cancel()  取消上一次在途读取
+  │     ├── state.isReading = true, version = null
+  │     └── delay(5_000)  连接稳定后再读取
+  │           ├── 读取前校验 isStillCurrentMaster(address)  防止 stale
+  │           ├── resolveFirmwareVersion(sendCmd)
+  │           │     ├── 优先 verType=0x09（BLE 版本）→ GH3X_GetVersion
+  │           │     │     └── 解析为 "no_ver" 视为失败，触发回退
+  │           │     ├── 回退 verType=0x01（固件版本）→ GH3X_GetVersion
+  │           │     │     └── 解析为 "no_ver" 视为失败
+  │           │     └── 两者都失败 → null
+  │           ├── 单次读取超时 3000ms（withTimeoutOrNull）
+  │           └── 再次校验 isStillCurrentMaster 后写入 state
+  │
+  └── 主设备断开（无 CONNECTED 主设备）
+        ├── fetchJob?.cancel()  取消在途读取
+        └── state = FirmwareVersionState()  清空版本，避免 stale 回填
+```
+
+**关键约束**：
+- `CancellationException` 会被重新抛出（不吞掉协程取消信号）。
+- 其他异常捕获后记 `Timber.w` 并返回 null，不中断订阅。
+- `state: StateFlow<FirmwareVersionState(version, isReading)>` 被 `ConnectionViewModel`（主屏设备卡）与 `SettingsViewModel`（设置页）共同订阅。
+
 ## 5. 数据通信阶段
 
 ### 5.1 GHealthExecutor 初始化
@@ -259,8 +330,11 @@ BleConnectionManager.disconnect(address)
   └── 状态监听触发 onDeviceDisconnected()
         ├── peripherals.remove(address)
         ├── _devices 移除
+        ├── _batteryStatus 移除该地址（清除电池状态）
+        ├── clearWriteServiceUuid(address)（清除写入特征所属服务 UUID 缓存）
         ├── COMPARE 设备: 清空心率结果
         └── RecordingManager.endSession() (自动停止录制)
+        └── 注：主设备断开后 FirmwareVersionHolder 自行取消读取并清空版本（见 4.4）
 ```
 
 ### 6.2 被动断开（设备端断开）

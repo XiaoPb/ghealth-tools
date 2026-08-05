@@ -68,7 +68,7 @@ core-storage
 | feature-demo | core-model, core-ui, core-storage, core-data | ble-connection, ble-protocol | ❌ |
 | feature-factory | core-model, core-ui, core-storage | ble-connection, ble-protocol | ❌ |
 | feature-ota | core-model, core-ui, core-network | ble-connection | ⚠️ (仅 KableBleConnection 适配器) |
-| feature-settings | core-model, core-ui, core-datastore, core-storage | - | ❌ |
+| feature-settings | core-model, core-ui, core-datastore, core-storage | ble-connection (FirmwareVersionHolder/BatteryStatus) | ❌ |
 
 ## 5. 外部模块
 
@@ -92,33 +92,51 @@ core-storage
   ├── @Inject LogManager
   ├── @Inject CoroutineScope
   ├── @Inject BleScanner (ble-scanner, 用于获取扫描缓存)
+  ├── 暴露状态: devices / dataFlow / ghFrameFlow / connectionErrors
+  │             / heartRateResults / batteryStatus / testConfig
+  ├── 缓存: writeServiceUuidByAddress (写入特征实际所属服务 UUID)
   └── 内部创建 GHealthExecutor (根据 chipName)
         ├── Gh3036Executor → RpcCore + FrameParser + Gh3036FrameDecoder
         ├── Gh3220Executor → RpcCore + FrameParser + Gh3220FrameDecoder
         └── Gh3300Executor → RpcCore + FrameParser + Gh3300FrameDecoder
 
+@Singleton FirmwareVersionHolder
+  ├── @Inject BleConnectionManager
+  ├── @Inject CoroutineScope
+  └── 订阅 devices → 主设备 CONNECTED 后延迟 5s 读取版本（0x09 优先 / 0x01 回退）
+      断开时取消在途读取并清空 state
+
 @HiltViewModel ConnectionViewModel
   ├── @Inject BleScanner
   ├── @Inject BleConnectionManager
+  ├── @Inject FirmwareVersionHolder  (订阅共享版本状态)
   ├── @Inject BlePreferences
   ├── @Inject RecordingManager
-  └── @Inject DownloadManager, ConfigDownloader, ConfigSyncManager
+  └── @Inject RegisterConfigParser, ConfigPathProvider
+
+@HiltViewModel SettingsViewModel
+  ├── @Inject BlePreferences, UserPreferences
+  ├── @Inject FirmwareVersionHolder  (订阅共享版本状态 → bleVersion)
+  └── @Inject LogManager
 
 @HiltViewModel DemoViewModel
   ├── @Inject BleConnectionManager
   ├── @Inject RecordingManager
-  └── @Inject LogManager
+  ├── @Inject BlePreferences
+  └── @Named("app_version") appVersion
 ```
 
 ## 7. 关键数据持有者
 
 | 持有者 | 类型 | 内容 | 消费者 |
 |--------|------|------|--------|
-| `BleConnectionManager.devices` | `StateFlow<Map<String, ConnectedDevice>>` | 已连接设备状态 | ConnectionVM, DemoVM, OTAVM |
+| `BleConnectionManager.devices` | `StateFlow<Map<String, ConnectedDevice>>` | 已连接设备状态 | ConnectionVM, DemoVM, OTAVM, FirmwareVersionHolder |
 | `BleConnectionManager.dataFlow` | `SharedFlow<Pair<String, ParseResult>>` | 命令响应 | ConnectionVM |
 | `BleConnectionManager.ghFrameFlow` | `SharedFlow<Pair<String, GhFuncFrame>>` | G 协议实时帧 | DemoVM |
 | `BleConnectionManager.connectionErrors` | `SharedFlow<Pair<String, ConnectionError>>` | 连接错误 | ConnectionVM |
 | `BleConnectionManager.heartRateResults` | `StateFlow<Map<Int, Int>>` | 对比设备心率 | DemoVM |
+| `BleConnectionManager.batteryStatus` | `StateFlow<Map<String, BatteryStatus>>` | 按地址索引的电池状态（电量/充放电） | ConnectionVM |
 | `BleConnectionManager.testConfig` | `StateFlow<TestConfig?>` | 当前测试配置 | ConnectionVM, DemoVM |
+| `FirmwareVersionHolder.state` | `StateFlow<FirmwareVersionState>` | 主设备固件版本（0x09 优先/0x01 回退）+ 读取中标识 | ConnectionVM, SettingsVM |
 | `UserSessionManager` | DataStore | JWT Token / 用户信息 | TokenManager |
 | `BlePreferences` | DataStore | 蓝牙 UUID / 芯片类型 / 主题 | BleConnectionManager, Settings |
