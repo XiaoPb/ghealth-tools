@@ -8,6 +8,7 @@ import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.core.datastore.BlePreferences
+import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.network.ConfigPathProvider
 import com.ghealth.tools.feature.factory.engine.FactoryTestEngine
 import com.ghealth.tools.feature.factory.engine.LogLevel
@@ -39,12 +40,14 @@ class FactoryViewModel @Inject constructor(
     private val application: Application,
     private val connectionManager: BleConnectionManager,
     private val blePreferences: BlePreferences,
+    private val userPreferences: UserPreferences,
     private val testEngine: FactoryTestEngine,
     private val configJsonParser: ConfigJsonParser,
     private val registerConfigParser: RegisterConfigParser,
     private val csvExporter: CsvResultExporter,
     @Named("storageBaseDir") private val baseDir: File,
-    private val configPathProvider: ConfigPathProvider
+    private val configPathProvider: ConfigPathProvider,
+    private val onlineProjectConfigLoader: OnlineProjectConfigLoader
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FactoryUiState())
@@ -75,55 +78,26 @@ class FactoryViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     availableProjects = projects,
+                    selectedProject = it.selectedProject ?: projects.firstOrNull(),
                     isLoadingConfigs = false,
-                    configError = if (projects.isEmpty()) "未找到产测配置文件" else null
+                    configError = if (projects.isEmpty())
+                        "当前项目未找到产测配置文件，请在项目设置中上传或同步配置"
+                    else null
                 )
             }
         }
     }
 
     private suspend fun loadOnlineProjects(): List<ProjectConfig> {
-        val projects = mutableListOf<ProjectConfig>()
-        try {
+        val projectName = userPreferences.selectedProjectName.first() ?: return emptyList()
+        if (projectName.isBlank()) return emptyList()
+        return try {
             val scanDir = configPathProvider.getFactoryScanDir()
-            if (!scanDir.exists()) return emptyList()
-
-            val projectDirs = scanDir.listFiles()?.filter { it.isDirectory } ?: return emptyList()
-            for (projectDir in projectDirs) {
-                val configFile = projectDir.listFiles()?.firstOrNull { it.extension == "json" }
-                if (configFile == null) continue
-
-                val jsonContent = configFile.readText()
-                val config = configJsonParser.parseOrNull(jsonContent) ?: continue
-
-                val registerConfigs = mutableMapOf<String, RegisterConfig>()
-                val allFiles = projectDir.listFiles() ?: emptyArray()
-                for ((testKey, testDef) in config.tests) {
-                    if (!testDef.enabled) continue
-                    val registerFile = allFiles.firstOrNull { f ->
-                        f.name.startsWith(testKey, ignoreCase = true) &&
-                                (f.extension == "config" || f.extension == "ini")
-                    }
-                    if (registerFile != null) {
-                        val content = registerFile.readText()
-                        registerConfigs[testKey] = registerConfigParser.parseByChip(
-                            content, config.chip, registerFile.name
-                        )
-                    }
-                }
-
-                projects.add(
-                    ProjectConfig(
-                        projectName = config.project,
-                        chip = config.chip,
-                        factoryConfig = config,
-                        registerConfigs = registerConfigs
-                    )
-                )
-            }
+            val config = onlineProjectConfigLoader.load(scanDir, projectName) ?: return emptyList()
+            listOf(config)
         } catch (_: Exception) {
+            emptyList()
         }
-        return projects
     }
 
     private fun loadAllProjects(): List<ProjectConfig> {
