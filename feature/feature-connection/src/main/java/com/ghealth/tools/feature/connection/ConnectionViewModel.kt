@@ -597,18 +597,39 @@ class ConnectionViewModel @Inject constructor(
                     File(baseDir, "application/config/$chip")
                 }
                 if (configDir.exists()) {
-                    configDir.listFiles()
-                        ?.filter { f -> f.isFile && (f.name.endsWith(".config") || f.name.endsWith(".ini")) }
-                        ?.forEach { file ->
-                            configs.add(
-                                ConfigFileInfo(
-                                    fileName = file.name,
-                                    displayPath = file.name,
-                                    fullPath = file,
-                                    chipName = chip
+                    if (isOnline) {
+                        // 在线模式：当前项目独有目录，直接列文件
+                        configDir.listFiles()
+                            ?.filter { f -> f.isFile && (f.name.endsWith(".config") || f.name.endsWith(".ini")) }
+                            ?.forEach { file ->
+                                configs.add(
+                                    ConfigFileInfo(
+                                        fileName = file.name,
+                                        displayPath = file.name,
+                                        fullPath = file,
+                                        chipName = chip
+                                    )
                                 )
-                            )
-                        }
+                            }
+                    } else {
+                        // 离线模式：无 projectName，遍历芯片目录下的项目子目录（保留原行为）
+                        configDir.listFiles()
+                            ?.filter { it.isDirectory }
+                            ?.forEach { projectDir ->
+                                projectDir.listFiles()
+                                    ?.filter { f -> f.isFile && (f.name.endsWith(".config") || f.name.endsWith(".ini")) }
+                                    ?.forEach { file ->
+                                        configs.add(
+                                            ConfigFileInfo(
+                                                fileName = file.name,
+                                                displayPath = "${projectDir.name}/${file.name}",
+                                                fullPath = file,
+                                                chipName = chip
+                                            )
+                                        )
+                                    }
+                            }
+                    }
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load register config files (chip=$chip)")
