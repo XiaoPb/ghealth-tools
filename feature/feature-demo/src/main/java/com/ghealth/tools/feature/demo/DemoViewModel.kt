@@ -5,13 +5,13 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
-import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.connection.ConnectedDevice
-import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.protocol.gh3036.AgcPhysicalCodec
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
 import com.ghealth.tools.core.datastore.BlePreferences
+import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
 import com.ghealth.tools.core.model.TestConfig
