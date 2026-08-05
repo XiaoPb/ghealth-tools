@@ -112,7 +112,6 @@ fun ConnectionScreen(
             state,
             onFactoryTest,
             onOtaUpgrade,
-            onToggleMockBatteryPreview = viewModel::toggleMockBatteryPreview
         )
     } else {
         ConnectionScreenCompact(
@@ -120,7 +119,6 @@ fun ConnectionScreen(
             state,
             onFactoryTest,
             onOtaUpgrade,
-            onToggleMockBatteryPreview = viewModel::toggleMockBatteryPreview
         )
     }
 }
@@ -132,7 +130,6 @@ private fun ConnectionScreenLandscape(
     state: ConnectionUiState,
     onFactoryTest: () -> Unit = {},
     onOtaUpgrade: () -> Unit = {},
-    onToggleMockBatteryPreview: () -> Unit = {},
 ) {
     var showCommandPanel by remember { mutableStateOf(false) }
 
@@ -150,7 +147,6 @@ private fun ConnectionScreenLandscape(
                 onCommand = { showCommandPanel = true },
                 onFactoryTest = onFactoryTest,
                 onOtaUpgrade = onOtaUpgrade,
-                onToggleMockBatteryPreview = onToggleMockBatteryPreview,
             )
         }
 
@@ -258,7 +254,6 @@ private fun ConnectionScreenCompact(
     state: ConnectionUiState,
     onFactoryTest: () -> Unit = {},
     onOtaUpgrade: () -> Unit = {},
-    onToggleMockBatteryPreview: () -> Unit = {},
 ) {
     val navController = rememberNavController()
 
@@ -291,7 +286,6 @@ private fun ConnectionScreenCompact(
                         onCommand = { navController.navigate(CommandRoutes.COMMAND_PANEL) },
                         onFactoryTest = onFactoryTest,
                         onOtaUpgrade = onOtaUpgrade,
-                        onToggleMockBatteryPreview = onToggleMockBatteryPreview,
                     )
                 }
             }
@@ -381,7 +375,6 @@ private fun MainMenuContent(
     onCommand: () -> Unit,
     onFactoryTest: () -> Unit = {},
     onOtaUpgrade: () -> Unit = {},
-    onToggleMockBatteryPreview: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -390,18 +383,14 @@ private fun MainMenuContent(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (BuildConfig.DEBUG) {
-            TextButton(onClick = onToggleMockBatteryPreview) {
-                Text(if (state.isMockPreview) "清除预览（调试）" else "预览电池（调试）")
-            }
+        BatteryPreviewScope(state = state) { previewState ->
+            DeviceStatusCard(
+                devices = previewState.connectedDevices.values.toList(),
+                masterFirmwareVersion = previewState.masterFirmwareVersion,
+                batteryStatusByAddress = previewState.batteryStatusByAddress,
+                onDisconnect = onDisconnectDevice
+            )
         }
-
-        DeviceStatusCard(
-            devices = state.connectedDevices.values.toList(),
-            masterFirmwareVersion = state.masterFirmwareVersion,
-            batteryStatusByAddress = state.batteryStatusByAddress,
-            onDisconnect = onDisconnectDevice
-        )
 
         if (state.dataMonitorState.isMonitoring || state.dataMonitorState.testConfig != null) {
             DataMonitorCard(state = state.dataMonitorState)
@@ -489,19 +478,21 @@ private fun BatteryIndicator(
     val isCharging = status.chargeState == BatteryStatus.ChargeState.Charging
     val isFull = status.chargeState == BatteryStatus.ChargeState.Full
 
-    val fillColor = MaterialTheme.colorScheme.primary
+    // 填充用浅主色（primaryContainer），数字用随容器色自适应的 onPrimaryContainer，
+    // 亮/暗主题下都与填充形成舒适对比
+    val fillColor = MaterialTheme.colorScheme.primaryContainer
     val outlineColor = MaterialTheme.colorScheme.outline
-    val textColor = MaterialTheme.colorScheme.onSurface
+    val textColor = MaterialTheme.colorScheme.onPrimaryContainer
 
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        // 电池本体：圆角外框 + 右侧正极凸起 + 按百分比宽度的容量填充 + 内部居中百分比数字
+        // 电池本体：圆角外框 + 右侧正极凸起 + 按百分比宽度的容量填充 + 内部居中加粗数字（无百分号）
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.size(width = 46.dp, height = 22.dp)
+            modifier = Modifier.size(width = 52.dp, height = 26.dp)
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val terminalW = 3.dp.toPx()
@@ -539,20 +530,25 @@ private fun BatteryIndicator(
                 }
             }
             Text(
-                text = "${level ?: "--"}%",
-                style = MaterialTheme.typography.labelSmall,
+                text = if (level != null) "$level" else "--",
+                style = MaterialTheme.typography.labelLarge,
                 color = textColor,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Bold
             )
         }
-        // 充电中：右侧闪电图标（满电时不显示）
-        if (isCharging && !isFull) {
-            Icon(
-                imageVector = Icons.Default.Bolt,
-                contentDescription = "充电中",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(14.dp)
-            )
+        // 充电符号槽位：固定宽度预占，保证各行电池右缘对齐；满电时不显示闪电
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(16.dp)
+        ) {
+            if (isCharging && !isFull) {
+                Icon(
+                    imageVector = Icons.Default.Bolt,
+                    contentDescription = "充电中",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }

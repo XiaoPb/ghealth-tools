@@ -17,9 +17,13 @@ CLAUDE.md
 AGENTS.md
 .trae/
 debug/
+# Android debug source set（模拟预览等调试代码，release 不编译）
+!feature/feature-connection/src/debug/
+!feature/feature-connection/src/debug/**
 keystore.properties
 .kotlin/errors/
 docs/superpowers/
 external/tmp/
 memory/
+.screenshots/
 .worktree/
