@@ -5,12 +5,13 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
-import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.connection.ConnectedDevice
-import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.ble.connection.DeviceRole
+import com.ghealth.tools.ble.protocol.gh3036.AgcPhysicalCodec
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
 import com.ghealth.tools.core.datastore.BlePreferences
+import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
 import com.ghealth.tools.core.model.TestConfig
@@ -479,8 +480,13 @@ class DemoViewModel @Inject constructor(
                 fillRangeCached(map, cache, "REF_RESULT", 0, 15, null)
                 fillRangeCached(map, cache, "ALGO_RESULT", 0, 15, algoData)
                 fillRangeCached(map, cache, "Rawdata", 0, 31, rawdata)
-                fillRangeCached(map, cache, "AGC_INFO_CH", 0, 31, agcInfo)
-                fillRangeCached(map, cache, "LED_INFO_CH", 0, 31, agcInfoHigh)
+                // AGC_INFO_CH / LED_INFO_CH: 仅 GH3036，列值按物理量位域重新打包
+                //   AGC_INFO_CH = gain|bg_cancel_level|dc_cancel_level|dc_cancel_code|led_current_sum
+                //   LED_INFO_CH = led_current_drv0|led_current_drv1（均 0.1mA）
+                //   详见 AgcPhysicalCodec 与 .claude/csv_rules/gh3036.yaml
+                val (packedAgcInfo, packedLedInfo) = AgcPhysicalCodec.encodeColumns(agcInfo, agcInfoHigh)
+                fillRangeCached(map, cache, "AGC_INFO_CH", 0, 31, packedAgcInfo)
+                fillRangeCached(map, cache, "LED_INFO_CH", 0, 31, packedLedInfo)
                 putCached(map, cache, "GYRO_X", null)
                 putCached(map, cache, "GYRO_Y", null)
                 putCached(map, cache, "GYRO_Z", null)
