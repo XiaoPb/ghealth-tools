@@ -6,6 +6,12 @@ plugins {
 
 android {
     namespace = "com.ghealth.tools.feature.factory"
+
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+        }
+    }
 }
 
 dependencies {
@@ -27,4 +33,7 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     implementation(libs.moshi)
     implementation(libs.kotlin.csv)
+
+    testImplementation(libs.junit5)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
