@@ -6,6 +6,12 @@ plugins {
 
 android {
     namespace = "com.ghealth.tools.ble.connection"
+
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+        }
+    }
 }
 
 dependencies {
@@ -19,4 +25,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.coroutines.core)
     implementation(libs.timber)
+
+    testImplementation(libs.junit5)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
