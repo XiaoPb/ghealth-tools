@@ -14,7 +14,7 @@ package com.ghealth.tools.ble.protocol.gh3036
  *     [7:0] led_drv1
  *
  * CSV 打包位域（仅 GH3036，列值语义改为物理量）：
- *   AGC_INFO_CH 列（int32，低 29 位有效）：
+ *   AGC_INFO_CH 列（int32，低 30 位有效）：
  *     [3:0] gain             [5:4] bg_cancel_level    [7:6] dc_cancel_level
  *     [15:8] dc_cancel_code  [29:16] led_current_sum (0.1mA, drv0+drv1)
  *   LED_INFO_CH 列（int32，低 24 位有效）：
@@ -68,7 +68,7 @@ object AgcPhysicalCodec {
     private fun ledCurrentMa(ledDrv: Int, ledDrvFs: Int): Int =
         10 * ledDrv * ledDrvFs / 255
 
-    /** 打包为 CSV AGC_INFO_CH 列值（低 29 位有效）。 */
+    /** 打包为 CSV AGC_INFO_CH 列值（低 30 位有效）。 */
     fun encodeAgcInfoColumn(p: Physical): Int =
         (p.gain and 0x0F) or
             ((p.bgCancelLevel and 0x03) shl 4) or

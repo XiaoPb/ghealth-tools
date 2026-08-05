@@ -276,7 +276,7 @@ private suspend fun consumeModeChannel(
 
 GH3036 CSV 中 `AGC_INFO_CH{0-31}` 与 `LED_INFO_CH{0-31}` 两列组存的是**按物理量位域重新打包的 int32**，而非芯片原始寄存器值。转换由 `ble-protocol` 的 `AgcPhysicalCodec.encodeColumns` 完成，在 `DemoViewModel.toColumnMap` 的 GH3036 分支调用。
 
-**AGC_INFO_CH 列**（低 29 位有效）：
+**AGC_INFO_CH 列**（低 30 位有效）：
 
 | 字段 | 位 | 单位 | 说明 |
 |------|----|------|------|
