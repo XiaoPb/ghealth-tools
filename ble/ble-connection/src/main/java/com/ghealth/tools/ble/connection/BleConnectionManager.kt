@@ -161,6 +161,10 @@ class BleConnectionManager @Inject constructor(
     private val _heartRateResults = MutableStateFlow<Map<Int, Int>>(emptyMap())
     val heartRateResults: StateFlow<Map<Int, Int>> = _heartRateResults.asStateFlow()
 
+    private val _batteryStatus = MutableStateFlow<Map<String, BatteryStatus>>(emptyMap())
+    /** 按 MAC 地址索引的电池状态；仅当设备暴露 Battery Service (0x180F) 时出现。 */
+    val batteryStatus: StateFlow<Map<String, BatteryStatus>> = _batteryStatus.asStateFlow()
+
     private val _testConfig = MutableStateFlow<TestConfig?>(null)
     val testConfig: StateFlow<TestConfig?> = _testConfig.asStateFlow()
 
@@ -385,6 +389,8 @@ class BleConnectionManager @Inject constructor(
                                 blePreferences.setLastDeviceName(peripheral.name ?: "")
                             }
                         }
+                        // 电池服务与角色无关；CONNECTED 后 fire-and-forget 读取/订阅，不阻塞命令通道。
+                        scope.launch { readBatteryService(peripheral, address) }
                     }
                 }
                 is State.Disconnected -> {
@@ -448,6 +454,125 @@ class BleConnectionManager @Inject constructor(
             _heartRateResults.value = _heartRateResults.value + (index to heartRate)
             Timber.d("Heart rate from $address (index $index): $heartRate bpm")
         }
+    }
+
+    /**
+     * 读取并订阅 Battery Service (0x180F)。
+     * - 0x2A19 Battery Level：先读一次，若支持 notify/indicate 则订阅以持续刷新。
+     * - 0x2A1E Battery Level Status：若存在且支持 notify/indicate 则订阅充放电状态。
+     * 无 Battery Level 特征时直接返回（卡片不显示电池）。
+     * fire-and-forget：不阻塞 CONNECTED 状态迁移，失败仅记日志。
+     */
+    @OptIn(ExperimentalUuidApi::class)
+    private suspend fun readBatteryService(peripheral: Peripheral, address: String) {
+        val services = try {
+            peripheral.services.first() ?: return
+        } catch (e: Exception) {
+            Timber.w(e, "Battery: service discovery not available for $address")
+            return
+        }
+
+        val refs = services.flatMap { service ->
+            service.characteristics.map { char ->
+                DiscoveredCharacteristicRef(service.serviceUuid, char.characteristicUuid)
+            }
+        }
+        val match = BatteryServiceMatcher.match(refs)
+        val levelServiceUuid = match.batteryLevelServiceUuid ?: return
+
+        val levelChar = characteristicOf(
+            service = levelServiceUuid,
+            characteristic = BatteryServiceUuids.BATTERY_LEVEL_UUID
+        )
+
+        // 初次读取电量
+        try {
+            val data = peripheral.read(levelChar)
+            BatteryLevelStatusParser.parseLevel(data)?.let { level ->
+                updateBatteryStatus(address) { existing ->
+                    (existing ?: BatteryStatus()).copy(level = level)
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Battery: read level failed for $address")
+        }
+
+        // 订阅 0x2A19 通知（若支持）
+        val levelCharacteristic = services
+            .flatMap { it.characteristics }
+            .firstOrNull { it.characteristicUuid == BatteryServiceUuids.BATTERY_LEVEL_UUID }
+        if (levelCharacteristic != null && supportsNotify(levelCharacteristic.properties.value)) {
+            try {
+                peripheral.observe(levelChar)
+                    .onEach { data ->
+                        BatteryLevelStatusParser.parseLevel(data)?.let { level ->
+                            updateBatteryStatus(address) { existing ->
+                                (existing ?: BatteryStatus()).copy(level = level)
+                            }
+                        }
+                    }
+                    .onCompletion { cause ->
+                        if (cause != null) {
+                            Timber.w("Battery level observation ended with cause: $cause")
+                        }
+                    }
+                    .launchIn(scope)
+            } catch (e: Exception) {
+                Timber.w(e, "Battery: observe level failed for $address")
+            }
+        }
+
+        // 订阅 0x2A1E 充放电状态通知（若存在且支持）
+        match.batteryLevelStatusServiceUuid?.let { statusServiceUuid ->
+            val statusChar = characteristicOf(
+                service = statusServiceUuid,
+                characteristic = BatteryServiceUuids.BATTERY_LEVEL_STATUS_UUID
+            )
+            val statusCharacteristic = services
+                .flatMap { it.characteristics }
+                .firstOrNull { it.characteristicUuid == BatteryServiceUuids.BATTERY_LEVEL_STATUS_UUID }
+            if (statusCharacteristic != null && supportsNotify(statusCharacteristic.properties.value)) {
+                try {
+                    peripheral.observe(statusChar)
+                        .onEach { data ->
+                            val state = BatteryLevelStatusParser.parseChargeState(data)
+                            updateBatteryStatus(address) { existing ->
+                                (existing ?: BatteryStatus()).copy(chargeState = state)
+                            }
+                        }
+                        .onCompletion { cause ->
+                            if (cause != null) {
+                                Timber.w("Battery status observation ended with cause: $cause")
+                            }
+                        }
+                        .launchIn(scope)
+                } catch (e: Exception) {
+                    Timber.w(e, "Battery: observe level status failed for $address")
+                }
+            }
+        }
+
+        Timber.i("Battery service enabled for $address (levelService=$levelServiceUuid, statusService=${match.batteryLevelStatusServiceUuid})")
+    }
+
+    private fun updateBatteryStatus(
+        address: String,
+        transform: (BatteryStatus?) -> BatteryStatus?,
+    ) {
+        val current = _batteryStatus.value[address]
+        val next = transform(current)
+        _batteryStatus.value = if (next == null) {
+            _batteryStatus.value - address
+        } else {
+            _batteryStatus.value + (address to next)
+        }
+    }
+
+    private fun supportsNotify(propertiesValue: Int): Boolean {
+        // BluetoothGattCharacteristic.PROPERTY_NOTIFY | PROPERTY_INDICATE
+        val PROP_NOTIFY = 0x10
+        val PROP_INDICATE = 0x20
+        return (propertiesValue and (PROP_NOTIFY or PROP_INDICATE)) != 0
     }
 
     @OptIn(ExperimentalUuidApi::class)
@@ -782,6 +907,7 @@ class BleConnectionManager @Inject constructor(
         peripherals.remove(address)
         writeTypeByAddress.remove(address)
         clearWriteServiceUuid(address)
+        _batteryStatus.value = _batteryStatus.value - address
         _devices.value = _devices.value - address
         
         if (device?.role == DeviceRole.COMPARE) {
@@ -838,6 +964,7 @@ class BleConnectionManager @Inject constructor(
         peripherals.remove(oldAddress)
         writeTypeByAddress.remove(oldAddress)
         clearWriteServiceUuid(oldAddress)
+        _batteryStatus.value = _batteryStatus.value - oldAddress
         val oldDevice = _devices.value[oldAddress]
         val role = oldDevice?.role ?: DeviceRole.MASTER
         val deviceType = oldDevice?.deviceType ?: DeviceType.GH3036
