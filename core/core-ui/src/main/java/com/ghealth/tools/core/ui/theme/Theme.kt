@@ -19,7 +19,7 @@ private val AppShapes = Shapes(
 @Composable
 fun GHealthTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    themeMode: ThemeMode = ThemeMode.SKY_BLUE,
+    themeMode: ThemeMode = ThemeMode.BLUE_500,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = if (darkTheme) {

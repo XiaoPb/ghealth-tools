@@ -9,6 +9,27 @@ enum class ThemeMode(
     val lightColors: ThemeColors,
     val darkColors: ThemeColors,
 ) {
+    BLUE_500(
+        key = "blue_500",
+        displayName = "活力蓝",
+        previewColor = AppColors.Blue500.Light.primary,
+        lightColors = AppColors.Blue500.Light,
+        darkColors = AppColors.Blue500.Dark,
+    ),
+    VIOLET_500(
+        key = "violet_500",
+        displayName = "紫罗兰",
+        previewColor = AppColors.Violet500.Light.primary,
+        lightColors = AppColors.Violet500.Light,
+        darkColors = AppColors.Violet500.Dark,
+    ),
+    PINK_500(
+        key = "pink_500",
+        displayName = "樱花粉",
+        previewColor = AppColors.Pink500.Light.primary,
+        lightColors = AppColors.Pink500.Light,
+        darkColors = AppColors.Pink500.Dark,
+    ),
     SKY_BLUE(
         key = "sky_blue",
         displayName = "天蓝色",
@@ -54,7 +75,7 @@ enum class ThemeMode(
 
     companion object {
         fun fromKey(key: String): ThemeMode {
-            return entries.find { it.key == key } ?: SKY_BLUE
+            return entries.find { it.key == key } ?: BLUE_500
         }
     }
 }

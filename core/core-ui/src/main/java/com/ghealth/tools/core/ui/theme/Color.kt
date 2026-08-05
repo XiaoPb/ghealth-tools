@@ -413,6 +413,114 @@ object AppColors {
         )
         val Dark = darkScheme(darkBrand)
     }
+
+    // Tailwind blue-500 (#3B82F6) 衍生的 M3 调色板
+    object Blue500 {
+        private val brand = BrandColors(
+            primary                = Color(0xFF3B82F6),
+            onPrimary              = Color(0xFFFFFFFF),
+            primaryContainer       = Color(0xFFDBE7FF),
+            onPrimaryContainer     = Color(0xFF001A41),
+            secondary              = Color(0xFF555F71),
+            onSecondary            = Color(0xFFFFFFFF),
+            secondaryContainer     = Color(0xFFD9E3F8),
+            onSecondaryContainer   = Color(0xFF121C2B),
+            tertiary               = Color(0xFF1F6E5C),
+            onTertiary             = Color(0xFFFFFFFF),
+            tertiaryContainer      = Color(0xFFA4F0DF),
+            onTertiaryContainer    = Color(0xFF002019),
+            inversePrimary         = Color(0xFFB0C6FF),
+        )
+        val Light = lightScheme(brand)
+        private val darkBrand = BrandColors(
+            primary                = Color(0xFFB0C6FF),
+            onPrimary              = Color(0xFF002E6F),
+            primaryContainer       = Color(0xFF00429A),
+            onPrimaryContainer     = Color(0xFFDBE7FF),
+            secondary              = Color(0xFFBDC7DC),
+            onSecondary            = Color(0xFF273141),
+            secondaryContainer     = Color(0xFF3D4858),
+            onSecondaryContainer   = Color(0xFFD9E3F8),
+            tertiary               = Color(0xFF88D8C6),
+            onTertiary             = Color(0xFF00382E),
+            tertiaryContainer      = Color(0xFF005045),
+            onTertiaryContainer    = Color(0xFFA4F0DF),
+            inversePrimary         = Color(0xFF3B82F6),
+        )
+        val Dark = darkScheme(darkBrand)
+    }
+
+    // Tailwind violet-500 (#8B5CF6) 衍生的 M3 调色板
+    object Violet500 {
+        private val brand = BrandColors(
+            primary                = Color(0xFF8B5CF6),
+            onPrimary              = Color(0xFFFFFFFF),
+            primaryContainer       = Color(0xFFEBDCFF),
+            onPrimaryContainer     = Color(0xFF2A0066),
+            secondary              = Color(0xFF62597C),
+            onSecondary            = Color(0xFFFFFFFF),
+            secondaryContainer     = Color(0xFFE8DDFF),
+            onSecondaryContainer   = Color(0xFF1E1635),
+            tertiary               = Color(0xFF7E5260),
+            onTertiary             = Color(0xFFFFFFFF),
+            tertiaryContainer      = Color(0xFFFFD9E2),
+            onTertiaryContainer    = Color(0xFF31101D),
+            inversePrimary         = Color(0xFFC9B0FF),
+        )
+        val Light = lightScheme(brand)
+        private val darkBrand = BrandColors(
+            primary                = Color(0xFFC9B0FF),
+            onPrimary              = Color(0xFF3F008F),
+            primaryContainer       = Color(0xFF6E2BD6),
+            onPrimaryContainer     = Color(0xFFEBDCFF),
+            secondary              = Color(0xFFCBC0E9),
+            onSecondary            = Color(0xFF332B4B),
+            secondaryContainer     = Color(0xFF4A4263),
+            onSecondaryContainer   = Color(0xFFE8DDFF),
+            tertiary               = Color(0xFFF0B0C5),
+            onTertiary             = Color(0xFF4A2535),
+            tertiaryContainer      = Color(0xFF643B4C),
+            onTertiaryContainer    = Color(0xFFFFD9E2),
+            inversePrimary         = Color(0xFF8B5CF6),
+        )
+        val Dark = darkScheme(darkBrand)
+    }
+
+    // Tailwind pink-500 (#EC4899) 衍生的 M3 调色板
+    object Pink500 {
+        private val brand = BrandColors(
+            primary                = Color(0xFFEC4899),
+            onPrimary              = Color(0xFFFFFFFF),
+            primaryContainer       = Color(0xFFFFD9E2),
+            onPrimaryContainer     = Color(0xFF3E001D),
+            secondary              = Color(0xFF745760),
+            onSecondary            = Color(0xFFFFFFFF),
+            secondaryContainer     = Color(0xFFFFD9E2),
+            onSecondaryContainer   = Color(0xFF2B151C),
+            tertiary               = Color(0xFF7D5733),
+            onTertiary             = Color(0xFFFFFFFF),
+            tertiaryContainer      = Color(0xFFFFDCC2),
+            onTertiaryContainer    = Color(0xFF2E1500),
+            inversePrimary         = Color(0xFFFFB0CC),
+        )
+        val Light = lightScheme(brand)
+        private val darkBrand = BrandColors(
+            primary                = Color(0xFFFFB0CC),
+            onPrimary              = Color(0xFF650038),
+            primaryContainer       = Color(0xFFB30E73),
+            onPrimaryContainer     = Color(0xFFFFD9E2),
+            secondary              = Color(0xFFE3BDC7),
+            onSecondary            = Color(0xFF42272E),
+            secondaryContainer     = Color(0xFF5A3D44),
+            onSecondaryContainer   = Color(0xFFFFD9E2),
+            tertiary               = Color(0xFFF0BD86),
+            onTertiary             = Color(0xFF482900),
+            tertiaryContainer      = Color(0xFF623F10),
+            onTertiaryContainer    = Color(0xFFFFDCC2),
+            inversePrimary         = Color(0xFFEC4899),
+        )
+        val Dark = darkScheme(darkBrand)
+    }
 }
 
 // ── Status colors ────────────────────────────────────────────────────

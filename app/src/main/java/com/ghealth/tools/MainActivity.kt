@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
     private val themeModeState by lazy {
         blePreferences.themeMode
             .map { ThemeMode.fromKey(it) }
-            .stateIn(lifecycleScope, SharingStarted.WhileSubscribed(5000), ThemeMode.SKY_BLUE)
+            .stateIn(lifecycleScope, SharingStarted.WhileSubscribed(5000), ThemeMode.BLUE_500)
     }
 
     private val bluetoothManager by lazy {

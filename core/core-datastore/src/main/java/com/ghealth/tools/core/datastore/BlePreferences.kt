@@ -69,7 +69,7 @@ class BlePreferences @Inject constructor(
     }
 
     val themeMode: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[Keys.THEME_MODE] ?: "sky_blue"
+        prefs[Keys.THEME_MODE] ?: "blue_500"
     }
 
     val versionType: Flow<String> = context.dataStore.data.map { prefs ->

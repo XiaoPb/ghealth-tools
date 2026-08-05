@@ -36,7 +36,7 @@ data class SettingsUiState(
     val autoReconnect: Boolean = true,
     val appVersion: String = "",
     val exportedLogPath: String? = null,
-    val themeMode: ThemeMode = ThemeMode.SKY_BLUE,
+    val themeMode: ThemeMode = ThemeMode.BLUE_500,
     val availableThemes: List<ThemeMode> = ThemeMode.entries,
     val selectedChip: String = "gh3036",
     val isOnlineMode: Boolean = false,
