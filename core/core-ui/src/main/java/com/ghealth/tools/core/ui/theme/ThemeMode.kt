@@ -16,12 +16,12 @@ enum class ThemeMode(
         lightColors = AppColors.Blue500.Light,
         darkColors = AppColors.Blue500.Dark,
     ),
-    VIOLET_500(
-        key = "violet_500",
-        displayName = "紫罗兰",
-        previewColor = AppColors.Violet500.Light.primary,
-        lightColors = AppColors.Violet500.Light,
-        darkColors = AppColors.Violet500.Dark,
+    EMERALD_500(
+        key = "emerald_500",
+        displayName = "翡翠绿",
+        previewColor = AppColors.Emerald500.Light.primary,
+        lightColors = AppColors.Emerald500.Light,
+        darkColors = AppColors.Emerald500.Dark,
     ),
     PINK_500(
         key = "pink_500",
@@ -30,47 +30,12 @@ enum class ThemeMode(
         lightColors = AppColors.Pink500.Light,
         darkColors = AppColors.Pink500.Dark,
     ),
-    SKY_BLUE(
-        key = "sky_blue",
-        displayName = "天蓝色",
-        previewColor = AppColors.SkyBlue.Light.primary,
-        lightColors = AppColors.SkyBlue.Light,
-        darkColors = AppColors.SkyBlue.Dark,
-    ),
-    OCEAN_BLUE(
-        key = "ocean_blue",
-        displayName = "海洋蓝",
-        previewColor = AppColors.OceanBlue.Light.primary,
-        lightColors = AppColors.OceanBlue.Light,
-        darkColors = AppColors.OceanBlue.Dark,
-    ),
-    FOREST_GREEN(
-        key = "forest_green",
-        displayName = "森林绿",
-        previewColor = AppColors.ForestGreen.Light.primary,
-        lightColors = AppColors.ForestGreen.Light,
-        darkColors = AppColors.ForestGreen.Dark,
-    ),
-    WARM_ORANGE(
-        key = "warm_orange",
-        displayName = "暖阳橙",
-        previewColor = AppColors.WarmOrange.Light.primary,
-        lightColors = AppColors.WarmOrange.Light,
-        darkColors = AppColors.WarmOrange.Dark,
-    ),
-    LAVENDER_PURPLE(
-        key = "lavender_purple",
-        displayName = "薰衣紫",
-        previewColor = AppColors.LavenderPurple.Light.primary,
-        lightColors = AppColors.LavenderPurple.Light,
-        darkColors = AppColors.LavenderPurple.Dark,
-    ),
-    ROSE_RED(
-        key = "rose_red",
-        displayName = "玫瑰红",
-        previewColor = AppColors.RoseRed.Light.primary,
-        lightColors = AppColors.RoseRed.Light,
-        darkColors = AppColors.RoseRed.Dark,
+    VIOLET_500(
+        key = "violet_500",
+        displayName = "紫罗兰",
+        previewColor = AppColors.Violet500.Light.primary,
+        lightColors = AppColors.Violet500.Light,
+        darkColors = AppColors.Violet500.Dark,
     );
 
     companion object {

@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
         checkBluetoothAndPermissions()
 
         setContent {
-            val themeMode by themeModeState.collectAsState(initial = ThemeMode.SKY_BLUE)
+            val themeMode by themeModeState.collectAsState(initial = ThemeMode.BLUE_500)
             
             GHealthTheme(themeMode = themeMode) {
                 GHealthNavHost()
