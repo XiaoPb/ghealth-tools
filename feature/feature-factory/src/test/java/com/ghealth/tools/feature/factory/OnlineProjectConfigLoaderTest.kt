@@ -60,4 +60,42 @@ class OnlineProjectConfigLoaderTest {
         val result = loader.load(scanDir, "ProjectD")
         assertNull(result)
     }
+
+    @Test
+    fun `loads register configs for enabled tests`() {
+        writeProjectConfig(
+            "ProjectE",
+            """
+            {
+              "project": "ProjectE",
+              "chip": "gh3036",
+              "tests": {
+                "base_noise": {"enabled": true},
+                "disabled_test": {"enabled": false}
+              }
+            }
+            """.trimIndent()
+        )
+        // gh3036 寄存器配置格式：[Register_List] 段 + {0xaddr, 0xvalue} 行
+        val projectDir = File(scanDir, "ProjectE")
+        File(projectDir, "base_noise.config").writeText(
+            """
+            [Register_List]
+            addr, value, default
+            {0x01, 0x02}
+            {0x03, 0x04}
+            """.trimIndent()
+        )
+
+        val result = loader.load(scanDir, "ProjectE")
+        assertNotNull(result)
+        // enabled 测试项的寄存器配置被加载并正确解析
+        val baseNoise = result!!.registerConfigs["base_noise"]
+        assertNotNull(baseNoise)
+        assertEquals(2, baseNoise!!.registers.size)
+        assertEquals(0x01, baseNoise.registers[0].addr)
+        assertEquals(0x02, baseNoise.registers[0].value)
+        // disabled 测试项被过滤，不加载寄存器配置
+        assertNull(result.registerConfigs["disabled_test"])
+    }
 }
