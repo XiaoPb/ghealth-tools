@@ -112,20 +112,20 @@ validateServices(peripheral, address, role)
         │
         ├── MASTER / SLAVE:
         │     ├── 从 BlePreferences 读取 UUID 配置
-        │     │     ├── serviceUuid (如 "6e400001-b5a3-f393-e0a9-e50e24dcca9e")
         │     │     ├── writeCharUuid
         │     │     └── notifyCharUuid
+        │     │     （serviceUuid 不再参与匹配，仅作异常回退）
         │     │
-        │     ├── 查找 serviceUuid 对应的服务
-        │     │     └── null → ServiceNotFound
+        │     ├── 把所有已发现服务的特征拍平为 (服务UUID, 特征UUID) 列表
         │     │
-        │     ├── 查找 writeCharUuid 对应的写入特征
-        │     │     └── null → WriteCharacteristicNotFound
+        │     ├── CharacteristicMatcher.match(...) 按特征 UUID 跨全部服务查找
+        │     │     ├── 写入特征未命中 → WriteCharacteristicNotFound
+        │     │     └── 通知特征未命中 → NotifyCharacteristicNotFound
         │     │
-        │     ├── 查找 notifyCharUuid 对应的通知特征
-        │     │     └── null → NotifyCharacteristicNotFound
+        │     ├── 记录写入特征实际所属服务 UUID → writeServiceUuidByAddress
+        │     ├── 按写入特征属性选择 WriteType (WithResponse / WithoutResponse)
         │     │
-        │     ├── peripheral.observe(notifyChar) — 订阅通知
+        │     ├── peripheral.observe(characteristicOf(实际服务UUID, notifyUuid)) — 订阅通知
         │     │     └── 异常 → NotifyCharacteristicNotFound
         │     │
         │     └── 创建 GHealthExecutor (根据芯片类型)
@@ -320,6 +320,10 @@ ConnectionViewModel 收集 connectionErrors
   ├── 解析错误类型 → ConnectionErrorState
   └── UI 展示 Toast / ErrorDisplay
 ```
+
+### 7.3 写入路径的服务 UUID
+
+`writeToDevice` 使用 `validateServices` 期间缓存的、写入特征**实际所属**服务 UUID 构建 `characteristicOf`，而非配置的 `serviceUuid`。这样设备固件使用与配置不同的服务 UUID 时，订阅通知与写入命令都能定位到正确的特征。断连与 DFU 切换地址时通过 `clearWriteServiceUuid` 清理缓存。
 
 ## 8. DFU 模式连接（OTA 用）
 
