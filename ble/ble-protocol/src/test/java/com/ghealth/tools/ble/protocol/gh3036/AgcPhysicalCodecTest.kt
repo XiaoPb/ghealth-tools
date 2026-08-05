@@ -115,7 +115,7 @@ class AgcPhysicalCodecTest {
     @Test
     fun `encode 端到端保留 gain bg dc dc_code 位不变`() {
         // 原始 agcL 低 16 位 = gain|bg|dc|dcCode，encode 后这些位应不变
-        val agcL = 0x37C5 // gain=5, bg=1, dc=1, dcCode=0x37
+        val agcL = 0x37C5 // gain=5, bg=0, dc=3, dcCode=0x37
         val p = AgcPhysicalCodec.decode(agcL, 0)
         val encoded = AgcPhysicalCodec.encodeAgcInfoColumn(p)
         assertEquals(agcL and 0xFFFF, encoded and 0xFFFF)

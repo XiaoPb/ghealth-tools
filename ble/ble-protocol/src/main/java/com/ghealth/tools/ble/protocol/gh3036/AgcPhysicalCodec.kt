@@ -85,7 +85,7 @@ object AgcPhysicalCodec {
      * 批量转换整帧 AGC 通道数据为 CSV 列值。
      *
      * @param agcInfo frame.agcInfo（低 32 位数组）
-     * @param agcInfoHigh frame.agcInfoHigh（高 32 位数组，长度应与 agcInfo 相同）
+     * @param agcInfoHigh frame.agcInfoHigh（高 32 位数组，长度不足时按 0 补齐，长度取两者较大值）
      * @return (packedAgcInfo, packedLedInfo)，分别用于 AGC_INFO_CH / LED_INFO_CH 列
      */
     fun encodeColumns(
