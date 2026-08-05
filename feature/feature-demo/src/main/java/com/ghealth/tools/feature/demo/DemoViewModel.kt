@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.DeviceRole
+import com.ghealth.tools.ble.connection.ConnectedDevice
+import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
 import com.ghealth.tools.core.datastore.BlePreferences
@@ -109,6 +111,26 @@ internal fun DemoUiState.clearReceivedData(): DemoUiState = copy(
     slaveAlgoResult = null,
     availableColumns = emptyList()
 )
+
+/**
+ * 判断是否发生主设备「重新连接」:主设备从未连接变为已连接(MASTER + CONNECTED 上升沿)。
+ *
+ * - 首次连接时 `wasMasterConnected=false`,触发清空(此时数据为空,清空无副作用)。
+ * - 重连/换设备连接时清空上一次累积数据,避免影响本次分析。
+ * - CONNECTING / 仅从设备 / 已持续连接 均不触发。
+ *
+ * @param wasMasterConnected 上一次设备快照中主设备是否已连接。
+ * @param devices 当前设备快照。
+ */
+internal fun shouldClearOnMasterReconnect(
+    wasMasterConnected: Boolean,
+    devices: Map<String, ConnectedDevice>
+): Boolean {
+    val isMasterConnected = devices.values.any {
+        it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED
+    }
+    return isMasterConnected && !wasMasterConnected
+}
 
 @HiltViewModel
 class DemoViewModel @Inject constructor(
