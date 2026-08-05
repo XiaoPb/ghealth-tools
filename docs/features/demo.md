@@ -69,7 +69,10 @@ onFrameReceived(address, frame)
   │     ├── FRAME_ID → frame.frameCnt
   │     ├── Ipd0..31 → frame.rawdata
   │     ├── ACCX/ACCY/ACCZ → frame.gsData
-  │     └── ALGO_RESULT0..n → frame.algoData
+  │     ├── ALGO_RESULT0..n → frame.algoData
+  │     └── AGC_INFO_CH / LED_INFO_CH (仅 GH3036)
+  │           └── AgcPhysicalCodec.encodeColumns(agcInfo, agcInfoHigh)
+  │               → 列值按物理量位域打包（gain/bg/dc/dc_code + LED 电流 0.1mA）
   │
   └── 6. recordingManager.writeFrame(mode, address, columnMap, role)
         └── channel.trySend(WriteTask) — 非阻塞入队

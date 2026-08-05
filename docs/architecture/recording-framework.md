@@ -272,6 +272,31 @@ private suspend fun consumeModeChannel(
 每秒写入一行（按硬件时间戳/1000 的秒边界）
 ```
 
+### AGC 物理量位域（仅 GH3036）
+
+GH3036 CSV 中 `AGC_INFO_CH{0-31}` 与 `LED_INFO_CH{0-31}` 两列组存的是**按物理量位域重新打包的 int32**，而非芯片原始寄存器值。转换由 `ble-protocol` 的 `AgcPhysicalCodec.encodeColumns` 完成，在 `DemoViewModel.toColumnMap` 的 GH3036 分支调用。
+
+**AGC_INFO_CH 列**（低 29 位有效）：
+
+| 字段 | 位 | 单位 | 说明 |
+|------|----|------|------|
+| gain | [3:0] | — | 增益等级 |
+| bg_cancel_level | [5:4] | — | 背景抵消等级 |
+| dc_cancel_level | [7:6] | — | DC 抵消等级 |
+| dc_cancel_code | [15:8] | — | DC 抵消校准码 |
+| led_current_sum | [29:16] | 0.1mA | LED 总电流（drv0+drv1） |
+
+**LED_INFO_CH 列**（低 24 位有效）：
+
+| 字段 | 位 | 单位 | 说明 |
+|------|----|------|------|
+| led_current_drv0 | [11:0] | 0.1mA | DRV0 通道电流 |
+| led_current_drv1 | [23:12] | 0.1mA | DRV1 通道电流 |
+
+**LED 电流公式**：`led_drv0_ma = 10 * led_drv0 * led_drv_fs / 255`，`led_drv1_ma` 同理，`led_current_sum = led_drv0_ma + led_drv1_ma`。其中 `led_drv_fs` / `led_drv0` / `led_drv1` 取自芯片原始 AGC 位域（见 `.claude/gh_protocol/c/user/gh_data_package.h` 的 `gh_agc_upload_t`）。
+
+> GH3220/GH3300 的 `agcInfoHigh` 始终为空，不适用此转换，其 `AGC_INFO_CH` 列仍写原始值。
+
 ### Server CSV 懒创建
 
 ```kotlin
