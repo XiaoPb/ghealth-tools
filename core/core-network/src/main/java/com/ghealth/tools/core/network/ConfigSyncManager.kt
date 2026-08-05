@@ -17,8 +17,16 @@ class ConfigSyncManager @Inject constructor(
     ): Result<Unit> {
         return try {
             val targetDir = configPathProvider.getFactoryConfigDir("", projectName)
-            configDownloader.downloadProductionTestConfig(projectId, targetDir)
-            Timber.i("Synced production test config for project: $projectName")
+            val result = configDownloader.downloadProductionTestConfig(projectId, targetDir)
+            if (result.isFailure) {
+                val e = result.exceptionOrNull()!!
+                Timber.e(e, "Failed to sync production test config for project: $projectName")
+                return Result.failure(e)
+            }
+            when (val file = result.getOrNull()) {
+                null -> Timber.i("No prod-test config for project: $projectName (not uploaded yet)")
+                else -> Timber.i("Synced production test config for project: $projectName -> ${file.absolutePath}")
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Timber.e(e, "Failed to sync production test config for project: $projectName")

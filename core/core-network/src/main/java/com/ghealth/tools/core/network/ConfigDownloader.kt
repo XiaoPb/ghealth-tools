@@ -37,9 +37,9 @@ class ConfigDownloader @Inject constructor(
 
             val config = response.body()!!.data!!
             if (!config.isComplete) {
-                return@withContext Result.failure(
-                    Exception("产测配置文件尚未上传，请先在网页端上传配置文件")
-                )
+                // 项目尚未上传完整产测配置：视为正常的空状态（成功但无文件）。
+                // 不同项目配置位于独有路径，无需也不应清除任何目录。
+                return@withContext Result.success(null)
             }
 
             val downloadedFile = downloadAndUnzipConfig(config, targetDir)
