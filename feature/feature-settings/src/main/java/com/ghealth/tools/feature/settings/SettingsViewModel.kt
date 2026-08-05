@@ -174,14 +174,20 @@ class SettingsViewModel @Inject constructor(
                     )
                 }
                 when {
-                    result == null -> "no_ver"
-                    result.isFailure -> "no_ver"
+                    result == null -> {
+                        Timber.w("Read BLE version timeout for $address (verType=0x09)")
+                        "no_ver"
+                    }
+                    result.isFailure -> {
+                        Timber.w(result.exceptionOrNull(), "Read BLE version failed for $address")
+                        "no_ver"
+                    }
                     else -> parseGh3036VersionString(result.getOrThrow())
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Timber.w(e, "Read BLE version failed")
+                Timber.w(e, "Read BLE version failed for $address")
                 "no_ver"
             }
             _uiState.update {
