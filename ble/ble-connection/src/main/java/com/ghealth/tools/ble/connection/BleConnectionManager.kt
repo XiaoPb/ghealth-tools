@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -514,6 +515,7 @@ class BleConnectionManager @Inject constructor(
                             }
                         }
                     }
+                    .catch { e -> Timber.e(e, "Battery level observe error for $address") }
                     .onCompletion { cause ->
                         if (cause != null) {
                             Timber.w("Battery level observation ended with cause: $cause")
@@ -543,6 +545,7 @@ class BleConnectionManager @Inject constructor(
                                 (existing ?: BatteryStatus()).copy(chargeState = state)
                             }
                         }
+                        .catch { e -> Timber.e(e, "Battery status observe error for $address") }
                         .onCompletion { cause ->
                             if (cause != null) {
                                 Timber.w("Battery status observation ended with cause: $cause")
@@ -903,7 +906,7 @@ class BleConnectionManager @Inject constructor(
         peripherals.remove(address)
         writeTypeByAddress.remove(address)
         clearWriteServiceUuid(address)
-        _batteryStatus.value = _batteryStatus.value - address
+        _batteryStatus.update { it - address }
         _devices.value = _devices.value - address
         
         if (device?.role == DeviceRole.COMPARE) {
@@ -960,7 +963,7 @@ class BleConnectionManager @Inject constructor(
         peripherals.remove(oldAddress)
         writeTypeByAddress.remove(oldAddress)
         clearWriteServiceUuid(oldAddress)
-        _batteryStatus.value = _batteryStatus.value - oldAddress
+        _batteryStatus.update { it - oldAddress }
         val oldDevice = _devices.value[oldAddress]
         val role = oldDevice?.role ?: DeviceRole.MASTER
         val deviceType = oldDevice?.deviceType ?: DeviceType.GH3036
