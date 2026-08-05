@@ -2,6 +2,7 @@ package com.ghealth.tools.feature.connection
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ghealth.tools.ble.connection.BatteryStatus
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.ConnectionError
@@ -82,6 +83,7 @@ data class ConnectionUiState(
     val selectedChip: String = "gh3036",
     val registerConfigDownloadState: RegisterConfigDownloadState = RegisterConfigDownloadState(),
     val masterFirmwareVersion: String? = null,
+    val batteryStatusByAddress: Map<String, BatteryStatus> = emptyMap(),
 )
 
 @HiltViewModel
@@ -192,6 +194,12 @@ class ConnectionViewModel @Inject constructor(
         viewModelScope.launch {
             blePreferences.selectedChip.collect { chip ->
                 _uiState.update { it.copy(selectedChip = chip) }
+            }
+        }
+
+        viewModelScope.launch {
+            connectionManager.batteryStatus.collect { batteryByAddress ->
+                _uiState.update { it.copy(batteryStatusByAddress = batteryByAddress) }
             }
         }
 

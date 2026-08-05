@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.connection
 
 import android.app.Activity
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Cable
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.Done
@@ -62,7 +64,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -70,6 +78,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.ghealth.tools.ble.connection.BatteryStatus
 import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.core.model.BleDevice
@@ -364,7 +373,12 @@ private fun MainMenuContent(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        DeviceStatusCard(state.connectedDevices.values.toList(), state.masterFirmwareVersion, onDisconnectDevice)
+        DeviceStatusCard(
+            devices = state.connectedDevices.values.toList(),
+            masterFirmwareVersion = state.masterFirmwareVersion,
+            batteryStatusByAddress = state.batteryStatusByAddress,
+            onDisconnect = onDisconnectDevice
+        )
 
         if (state.dataMonitorState.isMonitoring || state.dataMonitorState.testConfig != null) {
             DataMonitorCard(state = state.dataMonitorState)
@@ -444,9 +458,87 @@ private fun MainMenuContent(
 }
 
 @Composable
+private fun BatteryIndicator(
+    status: BatteryStatus,
+    modifier: Modifier = Modifier,
+) {
+    val level = status.level
+    val isCharging = status.chargeState == BatteryStatus.ChargeState.Charging
+    val isFull = status.chargeState == BatteryStatus.ChargeState.Full
+
+    val fillColor = MaterialTheme.colorScheme.primary
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val textColor = MaterialTheme.colorScheme.onSurface
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        // 电池本体：圆角外框 + 右侧正极凸起 + 按百分比宽度的容量填充 + 内部居中百分比数字
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(width = 46.dp, height = 22.dp)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val terminalW = 3.dp.toPx()
+                val stroke = 2.dp.toPx()
+                val bodyW = size.width - terminalW
+                val bodyH = size.height
+                val corner = 3.dp.toPx()
+                val pad = stroke / 2 + 1.dp.toPx()
+
+                // 电池主体外框（圆角矩形）
+                drawRoundRect(
+                    color = outlineColor,
+                    topLeft = Offset(stroke / 2, stroke / 2),
+                    size = Size(bodyW - stroke, bodyH - stroke),
+                    cornerRadius = CornerRadius(corner),
+                    style = Stroke(width = stroke)
+                )
+                // 右侧正极终端凸起
+                drawRoundRect(
+                    color = outlineColor,
+                    topLeft = Offset(bodyW, bodyH * 0.32f),
+                    size = Size(terminalW, bodyH * 0.36f),
+                    cornerRadius = CornerRadius(1.dp.toPx()),
+                    style = Fill
+                )
+                // 容量填充（宽度按百分比，0 时不绘制）
+                if (level != null && level > 0) {
+                    val fillW = (bodyW - 2 * pad) * (level.coerceIn(0, 100) / 100f)
+                    drawRoundRect(
+                        color = fillColor,
+                        topLeft = Offset(pad, pad),
+                        size = Size(fillW, bodyH - 2 * pad),
+                        cornerRadius = CornerRadius((corner - pad).coerceAtLeast(0f))
+                    )
+                }
+            }
+            Text(
+                text = "${level ?: "--"}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = textColor,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        // 充电中：右侧闪电图标（满电时不显示）
+        if (isCharging && !isFull) {
+            Icon(
+                imageVector = Icons.Default.Bolt,
+                contentDescription = "充电中",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun DeviceStatusCard(
     devices: List<ConnectedDevice>,
     masterFirmwareVersion: String?,
+    batteryStatusByAddress: Map<String, BatteryStatus>,
     onDisconnect: (String) -> Unit
 ) {
     ElevatedCard(
@@ -514,6 +606,10 @@ private fun DeviceStatusCard(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
+                        }
+                        batteryStatusByAddress[device.address]?.let { battery ->
+                            BatteryIndicator(status = battery)
+                            Spacer(modifier = Modifier.width(12.dp))
                         }
                         StatusBadge(status = device.state.toUiStatus())
                     }
