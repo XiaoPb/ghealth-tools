@@ -162,6 +162,8 @@ class DemoViewModel @Inject constructor(
     private val lastNonIdleWearByRole = mutableMapOf<DeviceRole, Int>()
     // ADT detStatus UNKNOWN 回退：按 role 记录上一次非 UNKNOWN 的 detStatus
     private val lastNonUnknownDetByRole = mutableMapOf<DeviceRole, Int>()
+    // 主设备连接状态:用于检测重新连接(从未连接 → 已连接)上升沿,触发演示数据清空
+    private var wasMasterConnected = false
 
     init {
         viewModelScope.launch {
@@ -205,8 +207,17 @@ class DemoViewModel @Inject constructor(
                 if (devices.isEmpty()) {
                     autoRecordingStopped = false
                 }
+                // 主设备重新连接(从未连接 → 已连接)时清空演示页累积数据,
+                // 避免上一次的数据影响本次分析。首次连接时数据为空,清空无副作用。
+                if (shouldClearOnMasterReconnect(wasMasterConnected, devices)) {
+                    Log.d("DemoViewModel", "Master reconnected, clearing demo data")
+                    resetAllData()
+                }
+                wasMasterConnected = devices.values.any {
+                    it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED
+                }
                 val hasSlave = devices.values.any {
-                    it.role == DeviceRole.SLAVE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED
+                    it.role == DeviceRole.SLAVE && it.state == ConnectionState.CONNECTED
                 }
                 if (!hasSlave) {
                     lastAlgoResultsByRole.values.forEach { it.remove(DeviceRole.SLAVE) }
@@ -228,7 +239,7 @@ class DemoViewModel @Inject constructor(
     }
 
     private fun resetAllData() {
-        _uiState.update { it.copy(functionDataMap = emptyMap(), masterAlgoResult = AlgorithmResult.None, slaveAlgoResult = null, availableColumns = emptyList()) }
+        _uiState.update { it.clearReceivedData() }
         buffers.clear()
         lastColumnValues.clear()
         algoNonZeroSeen.clear()
