@@ -64,7 +64,7 @@ sealed class ConnectionError {
     ) : ConnectionError()
 
     fun getMessage(): String = when (this) {
-        is ServiceNotFound -> "未找到指定的服务UUID"
+        is ServiceNotFound -> "服务发现失败，未发现任何 BLE 服务"
         is WriteCharacteristicNotFound -> "未找到写入特征UUID"
         is NotifyCharacteristicNotFound -> "未找到通知特征UUID"
         is HeartRateServiceNotFound -> "未找到心率服务"
