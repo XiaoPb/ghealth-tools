@@ -150,18 +150,6 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                // 固件版本（带版本来源展开）
-                var versionTypeExpanded by remember { mutableStateOf(false) }
-                val versionTypeOptions = listOf(
-                    "1" to "固件版本",
-                    "3" to "虚拟寄存器版本",
-                    "4" to "Bootloader版本",
-                    "5" to "协议版本",
-                    "6" to "驱动功能支持",
-                    "7" to "驱动版本",
-                    "8" to "芯片版本",
-                    "9" to "BLE版本",
-                )
                 ListItem(
                     headlineContent = { Text("固件版本") },
                     supportingContent = {
@@ -193,57 +181,8 @@ fun SettingsScreen(
                         }
                     },
                     leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
-                    trailingContent = {
-                        Icon(
-                            imageVector = if (versionTypeExpanded) Icons.Default.KeyboardArrowUp
-                                else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (versionTypeExpanded) "收起" else "版本来源",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.clickable { versionTypeExpanded = !versionTypeExpanded }
-                        )
-                    },
                     colors = listItemColors
                 )
-                AnimatedVisibility(visible = versionTypeExpanded) {
-                    var versionTypeDropdownExpanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = versionTypeDropdownExpanded,
-                        onExpandedChange = { versionTypeDropdownExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = versionTypeOptions.find { it.first == state.versionType }?.second ?: "BLE版本",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("版本来源") },
-                            supportingText = { Text("设备卡片显示的版本类型") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Build, contentDescription = null)
-                            },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = versionTypeDropdownExpanded)
-                            },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = versionTypeDropdownExpanded,
-                            onDismissRequest = { versionTypeDropdownExpanded = false }
-                        ) {
-                            versionTypeOptions.forEach { (type, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        viewModel.setVersionType(type)
-                                        versionTypeDropdownExpanded = false
-                                    },
-                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
-                                )
-                            }
-                        }
-                    }
-                }
             }
 
             SectionHeader("外观设置")
