@@ -100,6 +100,8 @@ class ConnectionViewModel @Inject constructor(
     val uiState: StateFlow<ConnectionUiState> = _uiState.asStateFlow()
 
     private var scanJob: Job? = null
+    // 主设备版本读取在途协程；断联或重连时取消，避免陈旧结果覆盖版本缓存
+    private var versionFetchJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -123,9 +125,22 @@ class ConnectionViewModel @Inject constructor(
 
                 // 主设备新连接时，延迟 5 秒非阻塞读取版本
                 if (newMaster != null) {
-                    viewModelScope.launch {
+                    versionFetchJob?.cancel()
+                    versionFetchJob = viewModelScope.launch {
                         kotlinx.coroutines.delay(5_000L)
                         fetchMasterVersion(newMaster.key)
+                    }
+                }
+
+                // 主设备断开时清除版本号缓存并取消在途读取，避免断联后残留/陈旧版本
+                val hasConnectedMaster = devices.entries.any {
+                    it.value.role == DeviceRole.MASTER && it.value.state == ConnectionState.CONNECTED
+                }
+                if (!hasConnectedMaster) {
+                    versionFetchJob?.cancel()
+                    versionFetchJob = null
+                    if (_uiState.value.masterFirmwareVersion != null) {
+                        _uiState.update { it.copy(masterFirmwareVersion = null) }
                     }
                 }
 
@@ -511,7 +526,15 @@ class ConnectionViewModel @Inject constructor(
                 result.isSuccess -> {
                     val versionStr = parseGh3036VersionString(result.getOrThrow())
                     Timber.d("Version for $masterAddress (verType=$verType): $versionStr")
-                    _uiState.update { it.copy(masterFirmwareVersion = versionStr) }
+                    // 写入前确认该主设备仍处于连接状态，避免断联后陈旧结果覆盖已清空的版本缓存
+                    val stillCurrentMaster = _uiState.value.connectedDevices.entries.any {
+                        it.key == masterAddress &&
+                            it.value.role == DeviceRole.MASTER &&
+                            it.value.state == ConnectionState.CONNECTED
+                    }
+                    if (stillCurrentMaster) {
+                        _uiState.update { it.copy(masterFirmwareVersion = versionStr) }
+                    }
                 }
             }
         } catch (e: Exception) {
