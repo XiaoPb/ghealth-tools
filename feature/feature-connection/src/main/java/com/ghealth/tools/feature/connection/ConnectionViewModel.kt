@@ -6,11 +6,10 @@ import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.ConnectionError
 import com.ghealth.tools.ble.connection.DeviceRole
-import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_GET_VERSION
+import com.ghealth.tools.ble.connection.FirmwareVersionHolder
 import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
-import com.ghealth.tools.ble.protocol.gh3036.parseGh3036VersionString
 import com.ghealth.tools.ble.scanner.BleScanException
 import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.model.BleDevice
@@ -32,7 +31,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -88,6 +86,7 @@ data class ConnectionUiState(
 class ConnectionViewModel @Inject constructor(
     private val bleScanner: BleScanner,
     private val connectionManager: BleConnectionManager,
+    private val firmwareVersionHolder: FirmwareVersionHolder,
     private val recordingManager: com.ghealth.tools.core.storage.RecordingManager,
     private val blePreferences: com.ghealth.tools.core.datastore.BlePreferences,
     private val userPreferences: com.ghealth.tools.core.datastore.UserPreferences,
@@ -100,47 +99,24 @@ class ConnectionViewModel @Inject constructor(
     val uiState: StateFlow<ConnectionUiState> = _uiState.asStateFlow()
 
     private var scanJob: Job? = null
-    // 主设备版本读取在途协程；断联或重连时取消，避免陈旧结果覆盖版本缓存
-    private var versionFetchJob: Job? = null
 
     init {
         viewModelScope.launch {
             connectionManager.devices.collect { devices ->
                 val previousDevices = _uiState.value.connectedDevices
 
-                val newMaster = devices.entries.find { 
-                    it.value.role == DeviceRole.MASTER && 
+                val newMaster = devices.entries.find {
+                    it.value.role == DeviceRole.MASTER &&
                     it.value.state == ConnectionState.CONNECTED &&
                     previousDevices[it.key]?.state != ConnectionState.CONNECTED
                 }
-                
+
                 if (newMaster != null && !_uiState.value.dataMonitorState.isMonitoring) {
-                    _uiState.update { 
+                    _uiState.update {
                         it.copy(
                             showTestConfigDialog = true,
                             masterDeviceName = newMaster.value.name
                         )
-                    }
-                }
-
-                // 主设备新连接时，延迟 5 秒非阻塞读取版本
-                if (newMaster != null) {
-                    versionFetchJob?.cancel()
-                    versionFetchJob = viewModelScope.launch {
-                        kotlinx.coroutines.delay(5_000L)
-                        fetchMasterVersion(newMaster.key)
-                    }
-                }
-
-                // 主设备断开时清除版本号缓存并取消在途读取，避免断联后残留/陈旧版本
-                val hasConnectedMaster = devices.entries.any {
-                    it.value.role == DeviceRole.MASTER && it.value.state == ConnectionState.CONNECTED
-                }
-                if (!hasConnectedMaster) {
-                    versionFetchJob?.cancel()
-                    versionFetchJob = null
-                    if (_uiState.value.masterFirmwareVersion != null) {
-                        _uiState.update { it.copy(masterFirmwareVersion = null) }
                     }
                 }
 
@@ -152,6 +128,13 @@ class ConnectionViewModel @Inject constructor(
                 }
 
                 _uiState.update { it.copy(connectedDevices = devices) }
+            }
+        }
+
+        // 订阅共享固件版本状态（由 FirmwareVersionHolder 统一获取：优先 0x09，回退 0x01，都失败为 null）
+        viewModelScope.launch {
+            firmwareVersionHolder.state.collect { versionState ->
+                _uiState.update { it.copy(masterFirmwareVersion = versionState.version) }
             }
         }
 
@@ -503,42 +486,6 @@ class ConnectionViewModel @Inject constructor(
                     isMonitoring = false
                 )
             )
-        }
-    }
-
-    private suspend fun fetchMasterVersion(masterAddress: String) {
-        val verType = blePreferences.versionType.first().toIntOrNull() ?: 9
-        try {
-            val result = withTimeoutOrNull(3_000L) {
-                connectionManager.sendCommand(
-                    address = masterAddress,
-                    key = KEY_GH3X_GET_VERSION,
-                    param = byteArrayOf(verType.toByte())
-                )
-            }
-            when {
-                result == null -> {
-                    Timber.w("Version read timeout for $masterAddress (verType=$verType)")
-                }
-                result.isFailure -> {
-                    Timber.w("Version read failed: ${result.exceptionOrNull()?.message}")
-                }
-                result.isSuccess -> {
-                    val versionStr = parseGh3036VersionString(result.getOrThrow())
-                    Timber.d("Version for $masterAddress (verType=$verType): $versionStr")
-                    // 写入前确认该主设备仍处于连接状态，避免断联后陈旧结果覆盖已清空的版本缓存
-                    val stillCurrentMaster = _uiState.value.connectedDevices.entries.any {
-                        it.key == masterAddress &&
-                            it.value.role == DeviceRole.MASTER &&
-                            it.value.state == ConnectionState.CONNECTED
-                    }
-                    if (stillCurrentMaster) {
-                        _uiState.update { it.copy(masterFirmwareVersion = versionStr) }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "Version read exception for $masterAddress")
         }
     }
 
