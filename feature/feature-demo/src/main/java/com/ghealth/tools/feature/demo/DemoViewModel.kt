@@ -92,6 +92,24 @@ val DemoUiState.currentDisplayWidth: Int
         ?.let { displayWidths[it] ?: DisplayWidthConfig.defaultFor(it) }
         ?: 125
 
+/**
+ * 清空演示页累积的「接收数据」字段,保留用户偏好(选中功能、列选择、显示宽度、
+ * 手动对比设备、测试信息、录制状态、对话框状态、对比设备心率)。
+ *
+ * 用于重新连接或重新开始录制时,避免上一次的数据影响本次分析。
+ */
+internal fun DemoUiState.clearReceivedData(): DemoUiState = copy(
+    functionDataMap = emptyMap(),
+    waveform1Data = emptyList(),
+    waveform2Data = emptyList(),
+    waveform1Stats = null,
+    waveform2Stats = null,
+    frameIds = emptyList(),
+    masterAlgoResult = AlgorithmResult.None,
+    slaveAlgoResult = null,
+    availableColumns = emptyList()
+)
+
 @HiltViewModel
 class DemoViewModel @Inject constructor(
     private val connectionManager: BleConnectionManager,
