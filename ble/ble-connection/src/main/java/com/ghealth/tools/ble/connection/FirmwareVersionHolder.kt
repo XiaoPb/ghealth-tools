@@ -3,6 +3,7 @@ package com.ghealth.tools.ble.connection
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_GET_VERSION
 import com.ghealth.tools.ble.protocol.gh3036.parseGh3036VersionString
 import com.ghealth.tools.core.model.ConnectionState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -97,6 +98,8 @@ class FirmwareVersionHolder @Inject constructor(
                     withTimeoutOrNull(VERSION_READ_TIMEOUT_MS) {
                         connectionManager.sendCommand(address, KEY_GH3X_GET_VERSION, byteArrayOf(verType))
                     }?.getOrNull()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Timber.w(e, "Version read exception for $address (verType=0x%02X)".format(verType))
                     null
