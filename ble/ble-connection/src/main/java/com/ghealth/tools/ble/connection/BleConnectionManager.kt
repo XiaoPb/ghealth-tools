@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
@@ -124,6 +125,8 @@ class BleConnectionManager @Inject constructor(
         // BLE 特征值属性位掩码（与 BluetoothGattCharacteristic 定义一致）
         private const val PROP_WRITE = 0x08
         private const val PROP_WRITE_NO_RESPONSE = 0x04
+        private const val PROP_NOTIFY = 0x10
+        private const val PROP_INDICATE = 0x20
     }
     private val _devices = MutableStateFlow<Map<String, ConnectedDevice>>(emptyMap())
 
@@ -557,21 +560,14 @@ class BleConnectionManager @Inject constructor(
 
     private fun updateBatteryStatus(
         address: String,
-        transform: (BatteryStatus?) -> BatteryStatus?,
+        transform: (BatteryStatus?) -> BatteryStatus,
     ) {
-        val current = _batteryStatus.value[address]
-        val next = transform(current)
-        _batteryStatus.value = if (next == null) {
-            _batteryStatus.value - address
-        } else {
-            _batteryStatus.value + (address to next)
+        _batteryStatus.update { currentMap ->
+            currentMap + (address to transform(currentMap[address]))
         }
     }
 
     private fun supportsNotify(propertiesValue: Int): Boolean {
-        // BluetoothGattCharacteristic.PROPERTY_NOTIFY | PROPERTY_INDICATE
-        val PROP_NOTIFY = 0x10
-        val PROP_INDICATE = 0x20
         return (propertiesValue and (PROP_NOTIFY or PROP_INDICATE)) != 0
     }
 
