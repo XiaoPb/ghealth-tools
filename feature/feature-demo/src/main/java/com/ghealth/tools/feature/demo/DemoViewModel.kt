@@ -326,7 +326,7 @@ class DemoViewModel @Inject constructor(
         val role = devicesSnapshot[deviceAddress]?.role ?: DeviceRole.MASTER
         val roleResults = lastAlgoResultsByRole.getOrPut(funcMode) { mutableMapOf() }
         val newResult = parseAlgorithmResult(funcMode, frame.algoData)
-        // ADT: wearEvent 为 IDLE 时回退到上一个非 IDLE 事件，保持界面持续显示有效佩戴状态
+        // ADT: 对 wearEvent IDLE 与 detStatus UNKNOWN 应用历史值回退，避免界面闪烁
         val effectiveResult = applyAdtStateFallback(role, newResult)
         if (effectiveResult.hasData) {
             roleResults[role] = effectiveResult
