@@ -7,6 +7,10 @@ package com.ghealth.tools.ble.connection
  * - [parseChargeState]：Battery Level Status (0x2A1E)，按 GATT Spec Supplement
  *   依 flags 位顺序跳过可选字段后读取 Battery Status 枚举；若设备未提供
  *   Status 字段但外接电源已连接，则保守推断为充电中。
+ *
+ * 注意：0x2A1E 解析基于 GSS v7（pre-BAS v1.1）结构，即 Flags 各 bit 表示
+ * 独立可选字段存在性。BAS v1.1 引入了不兼容的 Power State 字段结构，
+ * 若需支持新设备需另行实现。
  */
 internal object BatteryLevelStatusParser {
 
@@ -53,6 +57,7 @@ internal object BatteryLevelStatusParser {
         if (offset >= data.size) return BatteryStatus.ChargeState.Unknown
 
         return when (data[offset].toInt() and 0x07) {
+            STATUS_UNKNOWN -> BatteryStatus.ChargeState.Unknown
             STATUS_NOT_CHARGING -> BatteryStatus.ChargeState.NotCharging
             STATUS_CHARGING -> BatteryStatus.ChargeState.Charging
             STATUS_DISCHARGING -> BatteryStatus.ChargeState.Discharging

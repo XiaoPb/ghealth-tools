@@ -70,6 +70,12 @@ class BatteryLevelStatusParserTest {
     }
 
     @Test
+    fun `status field reserved enum value returns Unknown`() {
+        val data = byteArrayOf(0x20, 0x05)
+        assertEquals(ChargeState.Unknown, BatteryLevelStatusParser.parseChargeState(data))
+    }
+
+    @Test
     fun `status present with level and charge level and charge type before status offsets correctly`() {
         // flags: bit6 Battery Level (1B) + bit3 Charge Level (2B) + bit4 Charge Type (1B) + bit5 Status (1B)
         // = 0x40 | 0x08 | 0x10 | 0x20 = 0x78
