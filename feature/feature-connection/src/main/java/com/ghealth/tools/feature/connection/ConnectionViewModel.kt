@@ -583,34 +583,35 @@ class ConnectionViewModel @Inject constructor(
             )
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val isOnline = configPathProvider.isOnlineMode.first()
-            val configDir = if (isOnline) {
-                configPathProvider.getApplicationScanDir()
-            } else {
-                File(baseDir, "application/config/$chip")
-            }
             val configs = mutableListOf<ConfigFileInfo>()
             try {
+                val isOnline = configPathProvider.isOnlineMode.first()
+                val configDir = if (isOnline) {
+                    val projectName = userPreferences.selectedProjectName.first()
+                    if (projectName.isNullOrBlank()) {
+                        throw IllegalStateException("未选择项目")
+                    }
+                    // 当前项目独有目录，与同步层 getApplicationConfigDir("", projectName) 完全一致，不会读到其他项目
+                    configPathProvider.getApplicationConfigDir("", projectName)
+                } else {
+                    File(baseDir, "application/config/$chip")
+                }
                 if (configDir.exists()) {
                     configDir.listFiles()
-                        ?.filter { it.isDirectory }
-                        ?.forEach { projectDir ->
-                            projectDir.listFiles()
-                                ?.filter { f -> f.isFile && (f.name.endsWith(".config") || f.name.endsWith(".ini")) }
-                                ?.forEach { file ->
-                                    configs.add(
-                                        ConfigFileInfo(
-                                            fileName = file.name,
-                                            displayPath = "${projectDir.name}/${file.name}",
-                                            fullPath = file,
-                                            chipName = chip
-                                        )
-                                    )
-                                }
+                        ?.filter { f -> f.isFile && (f.name.endsWith(".config") || f.name.endsWith(".ini")) }
+                        ?.forEach { file ->
+                            configs.add(
+                                ConfigFileInfo(
+                                    fileName = file.name,
+                                    displayPath = file.name,
+                                    fullPath = file,
+                                    chipName = chip
+                                )
+                            )
                         }
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Failed to load config files from ${configDir.path}")
+                Timber.e(e, "Failed to load register config files (chip=$chip)")
             }
             withContext(Dispatchers.Main) {
                 _uiState.update {
@@ -618,7 +619,7 @@ class ConnectionViewModel @Inject constructor(
                         registerConfigDownloadState = it.registerConfigDownloadState.copy(
                             status = if (configs.isEmpty()) DownloadStatus.ERROR else DownloadStatus.CONFIG_READY,
                             availableConfigs = configs.sortedBy { c -> c.displayPath },
-                            error = if (configs.isEmpty()) "未在 ${configDir.path} 找到配置文件" else null
+                            error = if (configs.isEmpty()) "当前项目未找到寄存器配置文件" else null
                         )
                     )
                 }
