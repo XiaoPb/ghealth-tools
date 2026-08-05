@@ -129,6 +129,15 @@ class BleConnectionManager @Inject constructor(
 
     // 缓存每个设备写入特征值所支持的 WriteType，自动适配 write / writeWithoutResponse
     private val writeTypeByAddress = Collections.synchronizedMap(mutableMapOf<String, WriteType>())
+
+    @OptIn(ExperimentalUuidApi::class)
+    private val writeServiceUuidByAddress = Collections.synchronizedMap(mutableMapOf<String, Uuid>())
+
+    @OptIn(ExperimentalUuidApi::class)
+    private fun clearWriteServiceUuid(address: String) {
+        writeServiceUuidByAddress.remove(address)
+    }
+
     val devices: StateFlow<Map<String, ConnectedDevice>> = _devices.asStateFlow()
 
     private val _dataFlow = MutableSharedFlow<Pair<String, ParseResult>>(
@@ -465,90 +474,97 @@ class BleConnectionManager @Inject constructor(
 
         when (role) {
             DeviceRole.MASTER, DeviceRole.SLAVE -> {
-                val serviceUuidStr = blePreferences.serviceUuid.first()
-                val serviceUuid = Uuid.parse(serviceUuidStr)
                 val writeUuidStr = blePreferences.writeCharUuid.first()
                 val writeUuid = Uuid.parse(writeUuidStr)
                 val notifyUuidStr = blePreferences.notifyCharUuid.first()
                 val notifyUuid = Uuid.parse(notifyUuidStr)
 
-                val service = services.find { it.serviceUuid == serviceUuid }
-
-                if (service == null) {
-                    Timber.e("Service not found: $serviceUuidStr")
-                    emitConnectionError(address, ConnectionError.ServiceNotFound)
-                    disconnectAfterFailure(address)
-                    return
+                // 服务 UUID 不再参与匹配：把所有已发现服务的特征拍平后按特征 UUID 查找。
+                val refs = services.flatMap { service ->
+                    service.characteristics.map { char ->
+                        DiscoveredCharacteristicRef(
+                            serviceUuid = service.serviceUuid,
+                            characteristicUuid = char.characteristicUuid,
+                        )
+                    }
                 }
 
-                val writeCharacteristic = service.characteristics.find { it.characteristicUuid == writeUuid }
+                when (val result = CharacteristicMatcher.match(refs, writeUuid, notifyUuid)) {
+                    is CharacteristicMatcher.Result.WriteNotFound -> {
+                        Timber.e("Write characteristic not found in any service: $writeUuidStr")
+                        emitConnectionError(address, ConnectionError.WriteCharacteristicNotFound)
+                        disconnectAfterFailure(address)
+                        return
+                    }
+                    is CharacteristicMatcher.Result.NotifyNotFound -> {
+                        Timber.e("Notify characteristic not found in any service: $notifyUuidStr")
+                        emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
+                        disconnectAfterFailure(address)
+                        return
+                    }
+                    is CharacteristicMatcher.Result.Matched -> {
+                        val writeService = services.first { it.serviceUuid == result.writeServiceUuid }
+                        val writeCharacteristic = writeService.characteristics
+                            .first { it.characteristicUuid == writeUuid }
 
-                if (writeCharacteristic == null) {
-                    Timber.e("Write characteristic not found: $writeUuidStr")
-                    emitConnectionError(address, ConnectionError.WriteCharacteristicNotFound)
-                    disconnectAfterFailure(address)
-                    return
-                }
-
-                // 根据写入特征值属性自动选择 WriteType：
-                // 优先 WithResponse（更可靠），回退 WithoutResponse（write no response）
-                val writeProps = writeCharacteristic.properties.value
-                val supportsWriteWithResponse = (writeProps and PROP_WRITE) != 0
-                val supportsWriteWithoutResponse = (writeProps and PROP_WRITE_NO_RESPONSE) != 0
-                if (!supportsWriteWithResponse && !supportsWriteWithoutResponse) {
-                    Timber.e("Write characteristic $writeUuidStr has no write property: props=0x${writeProps.toString(16)}")
-                    emitConnectionError(address, ConnectionError.WriteCharacteristicNotFound)
-                    disconnectAfterFailure(address)
-                    return
-                }
-                val writeType = if (supportsWriteWithResponse) WriteType.WithResponse else WriteType.WithoutResponse
-                writeTypeByAddress[address] = writeType
-                Timber.i("Write characteristic $writeUuidStr props=0x${writeProps.toString(16)} using writeType=$writeType")
-
-                val notifyCharacteristic = service.characteristics.find { it.characteristicUuid == notifyUuid }
-
-                if (notifyCharacteristic == null) {
-                    Timber.e("Notify characteristic not found: $notifyUuidStr")
-                    emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
-                    disconnectAfterFailure(address)
-                    return
-                }
-
-                Timber.d("Notify characteristic properties: ${notifyCharacteristic.properties}")
-
-                val notifyChar = characteristicOf(
-                    service = serviceUuid,
-                    characteristic = notifyUuid
-                )
-
-                try {
-                    peripheral.observe(notifyChar)
-                        .onEach { data ->
-                            Timber.d("Notify received ${data.size} bytes from $address")
-                            onDataReceived(address, data)
+                        // 根据写入特征值属性自动选择 WriteType：
+                        // 优先 WithResponse（更可靠），回退 WithoutResponse（write no response）
+                        val writeProps = writeCharacteristic.properties.value
+                        val supportsWriteWithResponse = (writeProps and PROP_WRITE) != 0
+                        val supportsWriteWithoutResponse = (writeProps and PROP_WRITE_NO_RESPONSE) != 0
+                        if (!supportsWriteWithResponse && !supportsWriteWithoutResponse) {
+                            Timber.e("Write characteristic $writeUuidStr has no write property: props=0x${writeProps.toString(16)}")
+                            emitConnectionError(address, ConnectionError.WriteCharacteristicNotFound)
+                            disconnectAfterFailure(address)
+                            return
                         }
-                        .onCompletion { cause ->
-                            if (cause != null) {
-                                Timber.w("Notify observation completed with error: $cause")
-                            } else {
-                                Timber.d("Notify observation completed for $address")
-                            }
-                        }
-                        .launchIn(scope)
-                    Timber.i("Subscribed to notify characteristic $notifyUuidStr for $address")
-                } catch (e: NoSuchElementException) {
-                    Timber.e(e, "Notify characteristic does not support notify/indicate: $notifyUuidStr")
-                    emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
-                    disconnectAfterFailure(address)
-                    return
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to observe notify characteristic: $notifyUuidStr")
-                    emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
-                    disconnectAfterFailure(address)
-                    return
-                }
+                        val writeType = if (supportsWriteWithResponse) WriteType.WithResponse else WriteType.WithoutResponse
+                        writeTypeByAddress[address] = writeType
+                        // 记录写入特征实际所属服务 UUID，供 writeToDevice 构建 characteristicOf 使用
+                        // （配置的 serviceUuid 可能与设备实际服务不一致）。
+                        writeServiceUuidByAddress[address] = result.writeServiceUuid
+                        Timber.i("Write characteristic $writeUuidStr in service ${result.writeServiceUuid} props=0x${writeProps.toString(16)} using writeType=$writeType")
 
-                Timber.i("Device $address validated with custom service")
+                        val notifyService = services.first { it.serviceUuid == result.notifyServiceUuid }
+                        val notifyCharacteristic = notifyService.characteristics
+                            .first { it.characteristicUuid == notifyUuid }
+                        Timber.d("Notify characteristic properties: ${notifyCharacteristic.properties}")
+
+                        val notifyChar = characteristicOf(
+                            service = result.notifyServiceUuid,
+                            characteristic = notifyUuid
+                        )
+
+                        try {
+                            peripheral.observe(notifyChar)
+                                .onEach { data ->
+                                    Timber.d("Notify received ${data.size} bytes from $address")
+                                    onDataReceived(address, data)
+                                }
+                                .onCompletion { cause ->
+                                    if (cause != null) {
+                                        Timber.w("Notify observation completed with error: $cause")
+                                    } else {
+                                        Timber.d("Notify observation completed for $address")
+                                    }
+                                }
+                                .launchIn(scope)
+                            Timber.i("Subscribed to notify characteristic $notifyUuidStr (service ${result.notifyServiceUuid}) for $address")
+                        } catch (e: NoSuchElementException) {
+                            Timber.e(e, "Notify characteristic does not support notify/indicate: $notifyUuidStr")
+                            emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
+                            disconnectAfterFailure(address)
+                            return
+                        } catch (e: Exception) {
+                            Timber.e(e, "Failed to observe notify characteristic: $notifyUuidStr")
+                            emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
+                            disconnectAfterFailure(address)
+                            return
+                        }
+
+                        Timber.i("Device $address validated (write service=${result.writeServiceUuid}, notify service=${result.notifyServiceUuid})")
+                    }
+                }
             }
             DeviceRole.COMPARE -> {
                 val heartRateService = services.find { it.serviceUuid == BleUuids.HEART_RATE_SERVICE_UUID }
@@ -642,10 +658,17 @@ class BleConnectionManager @Inject constructor(
     private suspend fun writeToDevice(address: String, data: ByteArray) {
         val gHealthPeripheral = peripherals[address] ?: return
 
-        val serviceUuidStr = blePreferences.serviceUuid.first()
-        val serviceUuid = Uuid.parse(serviceUuidStr)
         val writeUuidStr = blePreferences.writeCharUuid.first()
         val writeUuid = Uuid.parse(writeUuidStr)
+
+        // 使用 validateServices 中记录的、写入特征实际所属服务 UUID。
+        // 服务 UUID 不再要求与配置一致；若无缓存（异常路径）则回退到配置值以防崩溃。
+        val serviceUuid = writeServiceUuidByAddress[address]
+            ?: run {
+                val configured = blePreferences.serviceUuid.first()
+                Timber.w("No cached write service UUID for $address, falling back to configured $configured")
+                Uuid.parse(configured)
+            }
 
         val writeChar = characteristicOf(
             service = serviceUuid,
@@ -758,6 +781,7 @@ class BleConnectionManager @Inject constructor(
         val device = _devices.value[address]
         peripherals.remove(address)
         writeTypeByAddress.remove(address)
+        clearWriteServiceUuid(address)
         _devices.value = _devices.value - address
         
         if (device?.role == DeviceRole.COMPARE) {
@@ -813,6 +837,7 @@ class BleConnectionManager @Inject constructor(
         Timber.i("DFU notifyDfuReconnect: $oldAddress -> $newAddress")
         peripherals.remove(oldAddress)
         writeTypeByAddress.remove(oldAddress)
+        clearWriteServiceUuid(oldAddress)
         val oldDevice = _devices.value[oldAddress]
         val role = oldDevice?.role ?: DeviceRole.MASTER
         val deviceType = oldDevice?.deviceType ?: DeviceType.GH3036
