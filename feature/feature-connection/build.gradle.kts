@@ -7,6 +7,10 @@ plugins {
 android {
     namespace = "com.ghealth.tools.feature.connection"
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     testOptions {
         unitTests.all {
             it.useJUnitPlatform()

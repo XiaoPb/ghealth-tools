@@ -70,8 +70,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -107,9 +107,21 @@ fun ConnectionScreen(
     val isLandscape = windowSizeClass.shouldUseLandscapeLayout
 
     if (isLandscape) {
-        ConnectionScreenLandscape(viewModel, state, onFactoryTest, onOtaUpgrade)
+        ConnectionScreenLandscape(
+            viewModel,
+            state,
+            onFactoryTest,
+            onOtaUpgrade,
+            onToggleMockBatteryPreview = viewModel::toggleMockBatteryPreview
+        )
     } else {
-        ConnectionScreenCompact(viewModel, state, onFactoryTest, onOtaUpgrade)
+        ConnectionScreenCompact(
+            viewModel,
+            state,
+            onFactoryTest,
+            onOtaUpgrade,
+            onToggleMockBatteryPreview = viewModel::toggleMockBatteryPreview
+        )
     }
 }
 
@@ -120,6 +132,7 @@ private fun ConnectionScreenLandscape(
     state: ConnectionUiState,
     onFactoryTest: () -> Unit = {},
     onOtaUpgrade: () -> Unit = {},
+    onToggleMockBatteryPreview: () -> Unit = {},
 ) {
     var showCommandPanel by remember { mutableStateOf(false) }
 
@@ -137,6 +150,7 @@ private fun ConnectionScreenLandscape(
                 onCommand = { showCommandPanel = true },
                 onFactoryTest = onFactoryTest,
                 onOtaUpgrade = onOtaUpgrade,
+                onToggleMockBatteryPreview = onToggleMockBatteryPreview,
             )
         }
 
@@ -244,6 +258,7 @@ private fun ConnectionScreenCompact(
     state: ConnectionUiState,
     onFactoryTest: () -> Unit = {},
     onOtaUpgrade: () -> Unit = {},
+    onToggleMockBatteryPreview: () -> Unit = {},
 ) {
     val navController = rememberNavController()
 
@@ -276,6 +291,7 @@ private fun ConnectionScreenCompact(
                         onCommand = { navController.navigate(CommandRoutes.COMMAND_PANEL) },
                         onFactoryTest = onFactoryTest,
                         onOtaUpgrade = onOtaUpgrade,
+                        onToggleMockBatteryPreview = onToggleMockBatteryPreview,
                     )
                 }
             }
@@ -365,6 +381,7 @@ private fun MainMenuContent(
     onCommand: () -> Unit,
     onFactoryTest: () -> Unit = {},
     onOtaUpgrade: () -> Unit = {},
+    onToggleMockBatteryPreview: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -373,6 +390,12 @@ private fun MainMenuContent(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (BuildConfig.DEBUG) {
+            TextButton(onClick = onToggleMockBatteryPreview) {
+                Text(if (state.isMockPreview) "清除预览（调试）" else "预览电池（调试）")
+            }
+        }
+
         DeviceStatusCard(
             devices = state.connectedDevices.values.toList(),
             masterFirmwareVersion = state.masterFirmwareVersion,

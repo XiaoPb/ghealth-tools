@@ -84,6 +84,7 @@ data class ConnectionUiState(
     val registerConfigDownloadState: RegisterConfigDownloadState = RegisterConfigDownloadState(),
     val masterFirmwareVersion: String? = null,
     val batteryStatusByAddress: Map<String, BatteryStatus> = emptyMap(),
+    val isMockPreview: Boolean = false,
 )
 
 @HiltViewModel
@@ -104,10 +105,13 @@ class ConnectionViewModel @Inject constructor(
     private var scanJob: Job? = null
     // 主设备版本读取在途协程；断联或重连时取消，避免陈旧结果覆盖版本缓存
     private var versionFetchJob: Job? = null
+    /** 调试预览模式标记：为 true 时屏蔽真实设备/电池流，避免空数据覆盖模拟数据。 */
+    private var mockPreviewMode = false
 
     init {
         viewModelScope.launch {
             connectionManager.devices.collect { devices ->
+                if (mockPreviewMode) return@collect
                 val previousDevices = _uiState.value.connectedDevices
 
                 val newMaster = devices.entries.find { 
@@ -199,6 +203,7 @@ class ConnectionViewModel @Inject constructor(
 
         viewModelScope.launch {
             connectionManager.batteryStatus.collect { batteryByAddress ->
+                if (mockPreviewMode) return@collect
                 _uiState.update { it.copy(batteryStatusByAddress = batteryByAddress) }
             }
         }
@@ -222,6 +227,61 @@ class ConnectionViewModel @Inject constructor(
             isBluetoothEnabled = isBtEnabled,
             hasPermissions = hasPerm
         )}
+    }
+
+    /** 调试预览：注入模拟设备与电池数据，用于无真机时在模拟器验证 UI。仅由调试按钮触发。 */
+    fun toggleMockBatteryPreview() {
+        if (mockPreviewMode) {
+            mockPreviewMode = false
+            _uiState.update {
+                it.copy(
+                    connectedDevices = emptyMap(),
+                    batteryStatusByAddress = emptyMap(),
+                    isMockPreview = false,
+                )
+            }
+            return
+        }
+        mockPreviewMode = true
+        val mockDevices = listOf(
+            ConnectedDevice(
+                address = "AA:BB:CC:00:00:01",
+                name = "Master 设备（模拟）",
+                role = DeviceRole.MASTER,
+                state = ConnectionState.CONNECTED,
+            ),
+            ConnectedDevice(
+                address = "AA:BB:CC:00:00:02",
+                name = "Slave 设备（模拟）",
+                role = DeviceRole.SLAVE,
+                state = ConnectionState.CONNECTED,
+            ),
+            ConnectedDevice(
+                address = "AA:BB:CC:00:00:03",
+                name = "Compare 设备（模拟）",
+                role = DeviceRole.COMPARE,
+                state = ConnectionState.CONNECTED,
+            ),
+            ConnectedDevice(
+                address = "AA:BB:CC:00:00:04",
+                name = "满电设备（模拟）",
+                role = DeviceRole.MASTER,
+                state = ConnectionState.CONNECTED,
+            ),
+        )
+        val mockBattery = mapOf(
+            "AA:BB:CC:00:00:01" to BatteryStatus(level = 85),
+            "AA:BB:CC:00:00:02" to BatteryStatus(level = 10),
+            "AA:BB:CC:00:00:03" to BatteryStatus(level = 60, chargeState = BatteryStatus.ChargeState.Charging),
+            "AA:BB:CC:00:00:04" to BatteryStatus(level = 100, chargeState = BatteryStatus.ChargeState.Full),
+        )
+        _uiState.update {
+            it.copy(
+                connectedDevices = mockDevices.associateBy { it.address },
+                batteryStatusByAddress = mockBattery,
+                isMockPreview = true,
+            )
+        }
     }
 
     fun startScan(role: DeviceRole) {
