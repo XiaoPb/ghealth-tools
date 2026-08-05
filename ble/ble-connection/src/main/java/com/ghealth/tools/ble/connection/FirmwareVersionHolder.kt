@@ -1,6 +1,20 @@
 package com.ghealth.tools.ble.connection
 
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_GET_VERSION
 import com.ghealth.tools.ble.protocol.gh3036.parseGh3036VersionString
+import com.ghealth.tools.core.model.ConnectionState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import timber.log.Timber
+import javax.inject.Inject
+import javax.inject.Singleton
 
 data class FirmwareVersionState(
     val version: String? = null,
@@ -9,6 +23,8 @@ data class FirmwareVersionState(
 
 internal const val VER_TYPE_BLE: Byte = 0x09
 internal const val VER_TYPE_FW: Byte = 0x01
+private const val VERSION_FETCH_DELAY_MS = 5_000L
+private const val VERSION_READ_TIMEOUT_MS = 3_000L
 
 /**
  * 解析固件版本：优先 BLE 版本(0x09)，失败回退固件版本(0x01)，两者都失败返回 null。
@@ -30,4 +46,72 @@ internal suspend fun resolveFirmwareVersion(
         if (parsed != "no_ver") return parsed
     }
     return null
+}
+
+/**
+ * 主设备固件版本共享状态持有者（@Singleton）。
+ *
+ * - 单一数据源：连接页与设置页共享同一份版本状态，避免重复下发 BLE 版本读取命令。
+ * - 获取策略：优先 BLE 版本(0x09)，失败回退固件版本(0x01)，两者都失败置为 null（UI 不显示）。
+ * - 生命周期：内部订阅 [BleConnectionManager.devices]，主设备 CONNECTED 后延迟 5 秒读取，
+ *   主设备断开时取消在途读取并清空状态。
+ */
+@Singleton
+class FirmwareVersionHolder @Inject constructor(
+    private val connectionManager: BleConnectionManager,
+    private val scope: CoroutineScope,
+) {
+    private val _state = MutableStateFlow(FirmwareVersionState())
+    val state: StateFlow<FirmwareVersionState> = _state.asStateFlow()
+
+    private var fetchJob: Job? = null
+    private var currentMasterAddress: String? = null
+
+    init {
+        scope.launch {
+            connectionManager.devices.collect { devices ->
+                val master = devices.values.find {
+                    it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED
+                }
+                if (master != null && master.address != currentMasterAddress) {
+                    currentMasterAddress = master.address
+                    scheduleFetch(master.address)
+                } else if (master == null && currentMasterAddress != null) {
+                    fetchJob?.cancel()
+                    fetchJob = null
+                    currentMasterAddress = null
+                    _state.value = FirmwareVersionState()
+                }
+            }
+        }
+    }
+
+    private fun scheduleFetch(address: String) {
+        fetchJob?.cancel()
+        _state.update { it.copy(isReading = true, version = null) }
+        fetchJob = scope.launch {
+            delay(VERSION_FETCH_DELAY_MS)
+            if (!isStillCurrentMaster(address)) return@launch
+            val sendCmd: suspend (Byte) -> ByteArray? = { verType ->
+                try {
+                    withTimeoutOrNull(VERSION_READ_TIMEOUT_MS) {
+                        connectionManager.sendCommand(address, KEY_GH3X_GET_VERSION, byteArrayOf(verType))
+                    }?.getOrNull()
+                } catch (e: Exception) {
+                    Timber.w(e, "Version read exception for $address (verType=0x%02X)".format(verType))
+                    null
+                }
+            }
+            val version = resolveFirmwareVersion(sendCmd)
+            if (isStillCurrentMaster(address)) {
+                _state.update { it.copy(version = version, isReading = false) }
+                Timber.d("Firmware version for $address: $version")
+            }
+        }
+    }
+
+    private fun isStillCurrentMaster(address: String): Boolean {
+        val device = connectionManager.devices.value[address] ?: return false
+        return device.role == DeviceRole.MASTER && device.state == ConnectionState.CONNECTED
+    }
 }
