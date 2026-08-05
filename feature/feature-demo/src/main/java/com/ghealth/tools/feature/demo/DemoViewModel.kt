@@ -120,6 +120,8 @@ class DemoViewModel @Inject constructor(
     private val lastAlgoResultsByRole = mutableMapOf<FunctionMode, MutableMap<DeviceRole, AlgorithmResult>>()
     // ADT IDLE 回退：按 role 记录上一次非 IDLE 的 wearEvent，用于 IDLE 帧显示补偿
     private val lastNonIdleWearByRole = mutableMapOf<DeviceRole, Int>()
+    // ADT detStatus UNKNOWN 回退：按 role 记录上一次非 UNKNOWN 的 detStatus
+    private val lastNonUnknownDetByRole = mutableMapOf<DeviceRole, Int>()
 
     init {
         viewModelScope.launch {
@@ -169,6 +171,7 @@ class DemoViewModel @Inject constructor(
                 if (!hasSlave) {
                     lastAlgoResultsByRole.values.forEach { it.remove(DeviceRole.SLAVE) }
                     lastNonIdleWearByRole.remove(DeviceRole.SLAVE)
+                    lastNonUnknownDetByRole.remove(DeviceRole.SLAVE)
                 }
                 _uiState.update { state ->
                     val selectedFunc = state.selectedFunction
@@ -191,6 +194,7 @@ class DemoViewModel @Inject constructor(
         algoNonZeroSeen.clear()
         lastAlgoResultsByRole.clear()
         lastNonIdleWearByRole.clear()
+        lastNonUnknownDetByRole.clear()
     }
 
     fun selectFunction(function: FunctionMode) {
@@ -323,7 +327,7 @@ class DemoViewModel @Inject constructor(
         val roleResults = lastAlgoResultsByRole.getOrPut(funcMode) { mutableMapOf() }
         val newResult = parseAlgorithmResult(funcMode, frame.algoData)
         // ADT: wearEvent 为 IDLE 时回退到上一个非 IDLE 事件，保持界面持续显示有效佩戴状态
-        val effectiveResult = applyLastNonIdleWear(role, newResult)
+        val effectiveResult = applyAdtStateFallback(role, newResult)
         if (effectiveResult.hasData) {
             roleResults[role] = effectiveResult
         }
@@ -377,15 +381,20 @@ class DemoViewModel @Inject constructor(
     }
 
     /**
-     * ADT 佩戴事件 IDLE 回退：当 [result] 为 ADT 且 wearEvent == IDLE 时，
-     * 用该 role 上一次非 IDLE 的 wearEvent 替换，便于界面持续显示有效状态。
-     * 非 IDLE 帧更新历史；非 ADT 结果原样返回。
+     * ADT 状态回退：对 wearEvent IDLE 与 detStatus UNKNOWN 分别用该 role 的历史值补偿显示，
+     * 避免界面在有效状态与默认状态间频繁闪烁。非 IDLE/UNKNOWN 帧更新历史。
      */
-    private fun applyLastNonIdleWear(role: DeviceRole, result: AlgorithmResult): AlgorithmResult {
+    private fun applyAdtStateFallback(role: DeviceRole, result: AlgorithmResult): AlgorithmResult {
         if (result !is AlgorithmResult.ADT) return result
-        val (newLast, effectiveWear) = AdtWearStateReducer.reduce(lastNonIdleWearByRole[role], result.wearEvent)
-        if (newLast != null) lastNonIdleWearByRole[role] = newLast
-        return if (effectiveWear == result.wearEvent) result else result.copy(wearEvent = effectiveWear)
+        // wearEvent IDLE 回退
+        val (newLastWear, effectiveWear) = AdtWearStateReducer.reduce(lastNonIdleWearByRole[role], result.wearEvent)
+        if (newLastWear != null) lastNonIdleWearByRole[role] = newLastWear
+        // detStatus UNKNOWN 回退
+        val (newLastDet, effectiveDet) = AdtWearStateReducer.reduceDetState(lastNonUnknownDetByRole[role], result.detStatus)
+        if (newLastDet != null) lastNonUnknownDetByRole[role] = newLastDet
+        val wearChanged = effectiveWear != result.wearEvent
+        val detChanged = effectiveDet != result.detStatus
+        return if (wearChanged || detChanged) result.copy(wearEvent = effectiveWear, detStatus = effectiveDet) else result
     }
 
     private fun detectChipType() {
