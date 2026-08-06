@@ -37,7 +37,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val DEFAULT_BASE_URL = "https://api.health.xiaopb.cn:8861/api/"
+    private const val DEFAULT_BASE_URL = "https://api.xiaopb.cn/api/"
     private const val GITHUB_BASE_URL = "https://api.github.com/"
     private const val CONNECT_TIMEOUT = 3L
     private const val READ_TIMEOUT = 3L
