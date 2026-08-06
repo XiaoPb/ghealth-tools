@@ -5,6 +5,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlin.coroutines.cancellation.CancellationException
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -142,5 +143,46 @@ class DisconnectCoordinatorTest {
         assertEquals(true, firstResult)
         assertEquals(1, confirmed)
         assertEquals(1, fake.disconnectCount)
+    }
+
+    @Test
+    fun `cancellation propagates and releases single-flight lock`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val fake = FakePeripheral(disconnectGate = gate).apply { markConnected() }
+        val coordinator = DisconnectCoordinator(disconnectTimeoutMs = 5_000)
+        var confirmed = 0
+        var cancelled = false
+
+        val job = launch {
+            try {
+                coordinator.disconnect(
+                    address = fake.identifier,
+                    peripheral = fake,
+                    markDisconnecting = {},
+                    onConfirmedDisconnected = { confirmed++ },
+                    onDisconnectFailed = {},
+                )
+            } catch (e: CancellationException) {
+                cancelled = true
+                throw e
+            }
+        }
+        runCurrent() // 挂起到 disconnectGate
+        job.cancel()
+        job.join()
+
+        assertTrue(cancelled)
+
+        // 单飞锁已释放：下一次 disconnect 应正常执行并确认断开。
+        gate.complete(Unit)
+        val result = coordinator.disconnect(
+            address = fake.identifier,
+            peripheral = fake,
+            markDisconnecting = {},
+            onConfirmedDisconnected = { confirmed++ },
+            onDisconnectFailed = {},
+        )
+        assertTrue(result)
+        assertEquals(1, confirmed)
     }
 }
