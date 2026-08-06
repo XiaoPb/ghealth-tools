@@ -630,7 +630,11 @@ private fun DeviceStatusCard(
                             BatteryIndicator(status = battery)
                             Spacer(modifier = Modifier.width(12.dp))
                         }
-                        StatusBadge(status = device.state.toUiStatus())
+                        val deviceStatus = device.state.toUiStatus()
+                        StatusBadge(
+                            status = deviceStatus,
+                            label = if (deviceStatus == ConnectionStatus.Disconnecting) "断开中" else null
+                        )
                     }
                 }
             }
@@ -888,7 +892,8 @@ private fun getRssiColor(rssi: Int) = when {
 private fun ConnectionState.toUiStatus(): ConnectionStatus = when (this) {
     ConnectionState.CONNECTED -> ConnectionStatus.Connected
     ConnectionState.CONNECTING -> ConnectionStatus.Connecting
-    ConnectionState.DISCONNECTED, ConnectionState.DISCONNECTING -> ConnectionStatus.Disconnected
+    ConnectionState.DISCONNECTING -> ConnectionStatus.Disconnecting
+    ConnectionState.DISCONNECTED -> ConnectionStatus.Disconnected
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

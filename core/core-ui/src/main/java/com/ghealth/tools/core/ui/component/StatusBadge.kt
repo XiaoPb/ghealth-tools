@@ -20,7 +20,7 @@ import com.ghealth.tools.core.ui.theme.StatusConnecting
 import com.ghealth.tools.core.ui.theme.StatusDisconnected
 
 enum class ConnectionStatus {
-    Connected, Connecting, Disconnected
+    Connected, Connecting, Disconnecting, Disconnected
 }
 
 @Composable
@@ -31,7 +31,7 @@ fun StatusBadge(
 ) {
     val color = when (status) {
         ConnectionStatus.Connected -> StatusConnected
-        ConnectionStatus.Connecting -> StatusConnecting
+        ConnectionStatus.Connecting, ConnectionStatus.Disconnecting -> StatusConnecting
         ConnectionStatus.Disconnected -> StatusDisconnected
     }
 
