@@ -331,6 +331,7 @@ class BleConnectionManager @Inject constructor(
             if (!suppressError) {
                 emitConnectionError(address, ConnectionError.ConnectionFailed(constraint.getMessage()))
             }
+            connectingPeripherals.remove(address)
             return
         }
 
@@ -791,7 +792,6 @@ class BleConnectionManager @Inject constructor(
                     connectJobs.remove(address)?.cancel()
                     val inFlightPeripheral = connectingPeripherals.remove(address)
                     if (inFlightPeripheral != null) {
-                        suppressDisconnectErrorAddresses.add(address)
                         try {
                             inFlightPeripheral.close()
                         } catch (e: Exception) {
@@ -975,18 +975,19 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun onDeviceDisconnected(address: String, disconnectedPeripheral: Peripheral? = null) {
+        val slot = peripherals[address]
         // 竞态防护：若 peripherals 中已换成更新的 peripheral（期间发生重连），本次断连事件属于旧连接，
         // 不应移除新连接的状态与条目。
-        if (disconnectedPeripheral != null) {
-            val currentPeripheral = peripherals[address]?.peripheral
-            if (currentPeripheral != null && currentPeripheral !== disconnectedPeripheral) {
-                Timber.i("Ignoring stale disconnect for $address: newer connection owns the slot")
-                return
-            }
+        if (disconnectedPeripheral != null && slot != null && slot.peripheral !== disconnectedPeripheral) {
+            Timber.i("Ignoring stale disconnect for $address: newer connection owns the slot")
+            return
         }
         val device = _devices.value[address]
         val newConnectInFlight = connectingPeripherals.containsKey(address)
-        peripherals.remove(address)
+        // 仅当 slot 仍是本次断连的 peripheral 时才移除，避免并发完成的新连接被误删。
+        if (slot != null) {
+            peripherals.remove(address, slot)
+        }
         writeTypeByAddress.remove(address)
         clearWriteServiceUuid(address)
         _batteryStatus.update { it - address }
