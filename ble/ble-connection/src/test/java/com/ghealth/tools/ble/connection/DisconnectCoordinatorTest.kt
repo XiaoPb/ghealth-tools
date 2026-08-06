@@ -111,9 +111,10 @@ class DisconnectCoordinatorTest {
         val fake = FakePeripheral(disconnectGate = gate).apply { markConnected() }
         val coordinator = DisconnectCoordinator(disconnectTimeoutMs = 5_000)
         var confirmed = 0
+        var firstResult = false
 
         val firstJob = launch {
-            coordinator.disconnect(
+            firstResult = coordinator.disconnect(
                 address = fake.identifier,
                 peripheral = fake,
                 markDisconnecting = {},
@@ -123,20 +124,22 @@ class DisconnectCoordinatorTest {
         }
         runCurrent() // 让第一个调用运行到挂起在 disconnectGate 上
 
-        // 第二个调用应被单飞拦截，立即返回、不触发任何回调、不重复 disconnect
-        coordinator.disconnect(
+        // 第二个调用应被单飞拦截，返回 false、不触发任何回调、不重复 disconnect
+        val secondResult = coordinator.disconnect(
             address = fake.identifier,
             peripheral = fake,
             markDisconnecting = {},
             onConfirmedDisconnected = { confirmed++ },
             onDisconnectFailed = {},
         )
+        assertEquals(false, secondResult)
         assertEquals(0, confirmed)
         assertEquals(1, fake.disconnectCount)
 
         gate.complete(Unit)
         firstJob.join()
 
+        assertEquals(true, firstResult)
         assertEquals(1, confirmed)
         assertEquals(1, fake.disconnectCount)
     }

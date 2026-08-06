@@ -27,6 +27,7 @@ import com.juul.kable.write
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +36,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onCompletion
@@ -187,6 +187,8 @@ class BleConnectionManager @Inject constructor(
     private val peripherals = mutableMapOf<String, GHealthPeripheral>()
     private val userDisconnectingAddresses = Collections.synchronizedSet(mutableSetOf<String>())
     private val suppressDisconnectErrorAddresses = Collections.synchronizedSet(mutableSetOf<String>())
+    private val connectJobs = mutableMapOf<String, Job>()
+    private val disconnectCoordinator = DisconnectCoordinator(disconnectTimeoutMs = DISCONNECT_TIMEOUT_MS)
 
     fun getDeviceState(address: String): ConnectionState {
         return _devices.value[address]?.state ?: ConnectionState.DISCONNECTED
@@ -235,7 +237,7 @@ class BleConnectionManager @Inject constructor(
 
         val advertisement = bleScanner.getCachedAdvertisement(address)
         if (advertisement != null) {
-            scope.launch {
+            val job = scope.launch {
                 try {
                     val peripheral = Peripheral(advertisement) {
                         logging { level = Logging.Level.Events }
@@ -249,6 +251,8 @@ class BleConnectionManager @Inject constructor(
                     emitConnectionError(address, ConnectionError.ConnectionFailed("创建设备连接失败: ${e.message}"))
                 }
             }
+            connectJobs[address] = job
+            job.invokeOnCompletion { connectJobs.remove(address, job) }
         } else {
             Timber.w("No advertisement cached for address: $address")
             emitConnectionError(address, ConnectionError.ConnectionFailed("Device not found in scan results"))
@@ -258,7 +262,7 @@ class BleConnectionManager @Inject constructor(
     fun autoConnect(address: String, name: String?, suppressError: Boolean = false) {
         val targetAddress = address.uppercase()
         Timber.d("Auto-connect: scanning for $targetAddress")
-        scope.launch {
+        val job = scope.launch {
             val advertisement = withTimeoutOrNull(15_000L) {
                 Scanner {
                     logging { level = Logging.Level.Warnings }
@@ -279,6 +283,8 @@ class BleConnectionManager @Inject constructor(
                 Timber.w(e, "Auto-connect: failed to connect to $targetAddress")
             }
         }
+        connectJobs[targetAddress] = job
+        job.invokeOnCompletion { connectJobs.remove(targetAddress, job) }
     }
 
     /**
@@ -304,6 +310,9 @@ class BleConnectionManager @Inject constructor(
     @OptIn(ExperimentalUuidApi::class)
     suspend fun connect(peripheral: Peripheral, role: DeviceRole, suppressError: Boolean = false) {
         val address = peripheral.identifier.toString()
+        // 清除上一轮断连遗留的标记，避免误伤本轮连接的意外断链判定。
+        userDisconnectingAddresses.remove(address)
+        suppressDisconnectErrorAddresses.remove(address)
 
         val constraint = checkConnectionConstraint(role)
         if (constraint !is ConnectionConstraint.Success) {
@@ -753,9 +762,18 @@ class BleConnectionManager @Inject constructor(
     }
 
     fun disconnectAll() {
-        peripherals.keys.toList().forEach { address ->
+        val addresses = _devices.value.keys.toList()
+        Timber.i("Disconnect all requested for ${addresses.size} device(s): $addresses")
+        addresses.forEach { address ->
             scope.launch {
-                disconnect(address)
+                if (peripherals.containsKey(address)) {
+                    disconnect(address)
+                } else {
+                    // 仍在 CONNECTING（尚未写入 peripherals）的设备：取消连接任务并移除条目。
+                    connectJobs.remove(address)?.cancel()
+                    _devices.value = _devices.value - address
+                    Timber.i("Cancelled connecting device: $address")
+                }
             }
         }
     }
@@ -861,47 +879,41 @@ class BleConnectionManager @Inject constructor(
         val gHealthPeripheral = peripherals[address] ?: return
         if (userInitiated) {
             Timber.i("User disconnect start: $address")
+            // 同时加入两个标记：state 收集器先消费 userDisconnectingAddresses；
+            // 若收集器晚于本次断连收尾，则由 suppressDisconnectErrorAddresses 兜底抑制错误弹窗。
             userDisconnectingAddresses.add(address)
+            suppressDisconnectErrorAddresses.add(address)
         } else {
             Timber.d("Disconnecting after failure: $address")
         }
         gHealthPeripheral.executor?.reset()
-        updateDeviceState(address, ConnectionState.DISCONNECTING)
-
-        try {
-            gHealthPeripheral.peripheral.disconnect()
-            val disconnected = withTimeoutOrNull(DISCONNECT_TIMEOUT_MS) {
-                gHealthPeripheral.peripheral.state
-                    .filterIsInstance<State.Disconnected>()
-                    .first()
-            }
-            if (disconnected == null) {
-                Timber.w("Disconnect timeout fallback for $address after ${DISCONNECT_TIMEOUT_MS}ms")
+        val ranDisconnect = disconnectCoordinator.disconnect(
+            address = address,
+            peripheral = gHealthPeripheral.peripheral,
+            markDisconnecting = { updateDeviceState(address, ConnectionState.DISCONNECTING) },
+            onConfirmedDisconnected = ::onDeviceDisconnected,
+            onDisconnectFailed = {
                 if (userInitiated) {
-                    suppressDisconnectErrorAddresses.add(address)
+                    emitConnectionError(
+                        address,
+                        ConnectionError.ConnectionFailed(errorMessage = "断开失败，设备仍处于连接状态")
+                    )
                 }
-                onDeviceDisconnected(address)
-            } else {
-                Timber.i("State disconnected received for $address: status=${disconnected.status}")
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "Error disconnecting from $address")
-            onDeviceDisconnected(address)
-        } finally {
+            },
+        )
+        // 仅当本次调用真正执行了断连时才兜底 close；被单飞跳过的重复调用由执行者负责收尾，
+        // 避免 close() 与正在进行的 disconnect() 竞态。
+        if (ranDisconnect) {
             try {
-                Timber.d("Close after disconnected for $address")
                 gHealthPeripheral.peripheral.close()
             } catch (e: Exception) {
                 Timber.w(e, "Error closing peripheral for $address")
-            } finally {
-                if (userInitiated && _devices.value.containsKey(address)) {
-                    userDisconnectingAddresses.remove(address)
-                }
             }
         }
     }
 
     private fun onDeviceDisconnected(address: String) {
+        connectJobs.remove(address)
         val device = _devices.value[address]
         peripherals.remove(address)
         writeTypeByAddress.remove(address)

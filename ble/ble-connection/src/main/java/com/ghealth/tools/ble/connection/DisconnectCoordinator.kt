@@ -2,6 +2,7 @@ package com.ghealth.tools.ble.connection
 
 import com.juul.kable.Peripheral
 import com.juul.kable.State
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -16,6 +17,9 @@ import java.util.Collections
  * - 确认制：只有确认 peripheral 状态为 [State.Disconnected] 才回调 [onConfirmedDisconnected]；
  *   否则先 [Peripheral.close] 触发 Kable 兜底清理，再确认一次；仍失败才回调 [onDisconnectFailed]。
  * - 协调器从不「假装」断开：是否从设备列表移除由回调方决定。
+ *
+ * 返回契约：返回 true 表示本次调用实际执行了断连流程，调用方负责收尾（兜底 close）；
+ * 返回 false 表示被单飞拦截、跳过重复调用，由正在执行的那次调用负责收尾。
  */
 internal class DisconnectCoordinator(
     private val disconnectTimeoutMs: Long = DEFAULT_DISCONNECT_TIMEOUT_MS,
@@ -29,23 +33,25 @@ internal class DisconnectCoordinator(
         markDisconnecting: (String) -> Unit,
         onConfirmedDisconnected: (String) -> Unit,
         onDisconnectFailed: (String) -> Unit,
-    ) {
+    ): Boolean {
         if (!disconnectingAddresses.add(address)) {
             Timber.i("Disconnect already in progress for $address, skipping duplicate")
-            return
+            return false
         }
-        markDisconnecting(address)
 
         try {
+            markDisconnecting(address)
             try {
                 peripheral.disconnect()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "Error disconnecting from $address")
             }
 
             if (awaitDisconnected(address, peripheral)) {
                 onConfirmedDisconnected(address)
-                return
+                return true
             }
 
             Timber.w("Disconnect timed out for $address, state=${peripheral.state.value}")
@@ -61,6 +67,7 @@ internal class DisconnectCoordinator(
                 Timber.e("Disconnect FAILED for $address, state=${peripheral.state.value}")
                 onDisconnectFailed(address)
             }
+            return true
         } finally {
             disconnectingAddresses.remove(address)
         }
