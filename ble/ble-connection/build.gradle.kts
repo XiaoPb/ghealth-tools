@@ -28,4 +28,5 @@ dependencies {
 
     testImplementation(libs.junit5)
     testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.coroutines.test)
 }
