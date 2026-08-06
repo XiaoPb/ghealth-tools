@@ -26,6 +26,7 @@ import com.juul.kable.logs.Logging
 import com.juul.kable.write
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -246,6 +247,8 @@ class BleConnectionManager @Inject constructor(
                         }
                     }
                     connect(peripheral, role)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to create peripheral for $address")
                     emitConnectionError(address, ConnectionError.ConnectionFailed("创建设备连接失败: ${e.message}"))
@@ -343,6 +346,8 @@ class BleConnectionManager @Inject constructor(
                 lastException = null
                 disconnectStatus = null
                 break
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 lastException = e
                 Timber.w(e, "Connection attempt $attempt/$MAX_CONNECT_RETRIES failed for $address")
