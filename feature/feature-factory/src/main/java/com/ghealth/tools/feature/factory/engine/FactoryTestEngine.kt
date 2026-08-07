@@ -479,8 +479,16 @@ class FactoryTestEngine @Inject constructor(
             if (computed == null) {
                 onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
                     "${testType.displayName}: 未采集到 TEST1 原始数据，App 端计算失败"))
-                onEvent(TestEngineEvent.TestCompleted(testType, emptyList()))
-                return emptyList()
+                val failed = TestResult(
+                    testType = testType,
+                    channelIndex = 0,
+                    value = 0,
+                    unit = testDef.unit,
+                    threshold = "-",
+                    passed = false
+                )
+                onEvent(TestEngineEvent.TestCompleted(testType, listOf(failed)))
+                return listOf(failed)
             }
             onEvent(TestEngineEvent.TestCompleted(testType, computed))
             return computed
