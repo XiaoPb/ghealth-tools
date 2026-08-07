@@ -1,5 +1,6 @@
 package com.ghealth.tools.feature.connection
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +51,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ghealth.tools.ble.protocol.gh3036.CommandGroup
@@ -116,9 +119,17 @@ fun CommandPanelScreen(
     onLoadRegisterConfigs: (String) -> Unit = {},
     onSelectRegisterConfigFile: (ConfigFileInfo) -> Unit = {},
     onExecuteRegisterConfigDownload: () -> Unit = {},
-    onResetRegisterConfigDownload: () -> Unit = {}
+    onResetRegisterConfigDownload: () -> Unit = {},
+    commandErrorToast: CommandErrorToast? = null,
+    onCommandErrorToastShown: () -> Unit = {}
 ) {
     var expandedKey by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    LaunchedEffect(commandErrorToast?.id) {
+        val toast = commandErrorToast ?: return@LaunchedEffect
+        Toast.makeText(context, toast.message, Toast.LENGTH_LONG).show()
+        onCommandErrorToastShown()
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(

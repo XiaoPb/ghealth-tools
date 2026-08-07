@@ -176,7 +176,9 @@ private fun ConnectionScreenLandscape(
                         onLoadRegisterConfigs = viewModel::loadRegisterConfigFiles,
                         onSelectRegisterConfigFile = viewModel::selectRegisterConfigFile,
                         onExecuteRegisterConfigDownload = viewModel::executeRegisterConfigDownload,
-                        onResetRegisterConfigDownload = viewModel::resetRegisterConfigDownload
+                        onResetRegisterConfigDownload = viewModel::resetRegisterConfigDownload,
+                        commandErrorToast = state.commandErrorToast,
+                        onCommandErrorToastShown = viewModel::dismissCommandErrorToast,
                     )
                 }
                 else -> {
@@ -356,7 +358,9 @@ private fun ConnectionScreenCompact(
                 onLoadRegisterConfigs = viewModel::loadRegisterConfigFiles,
                 onSelectRegisterConfigFile = viewModel::selectRegisterConfigFile,
                 onExecuteRegisterConfigDownload = viewModel::executeRegisterConfigDownload,
-                onResetRegisterConfigDownload = viewModel::resetRegisterConfigDownload
+                onResetRegisterConfigDownload = viewModel::resetRegisterConfigDownload,
+                commandErrorToast = state.commandErrorToast,
+                onCommandErrorToastShown = viewModel::dismissCommandErrorToast,
             )
         }
     }
