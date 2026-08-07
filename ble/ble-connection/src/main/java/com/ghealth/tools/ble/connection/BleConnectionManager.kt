@@ -191,6 +191,7 @@ class BleConnectionManager @Inject constructor(
     private val suppressDisconnectErrorAddresses = Collections.synchronizedSet(mutableSetOf<String>())
     private val connectJobs = ConcurrentHashMap<String, Job>()
     private val connectingPeripherals = ConcurrentHashMap<String, Peripheral>()
+    private val connectSingleFlight = ConnectSingleFlight()
     private val disconnectCoordinator = DisconnectCoordinator(disconnectTimeoutMs = DISCONNECT_TIMEOUT_MS)
 
     fun getDeviceState(address: String): ConnectionState {
@@ -231,6 +232,10 @@ class BleConnectionManager @Inject constructor(
 
     @OptIn(ExperimentalUuidApi::class)
     fun connect(address: String, name: String?, role: DeviceRole) {
+        if (connectSingleFlight.isActive(address)) {
+            Timber.w("Connect skipped for $address: already connecting/connected")
+            return
+        }
         val constraint = checkConnectionConstraint(role)
         if (constraint !is ConnectionConstraint.Success) {
             Timber.w("Connection constraint violated: $constraint")
@@ -266,6 +271,10 @@ class BleConnectionManager @Inject constructor(
 
     fun autoConnect(address: String, name: String?, suppressError: Boolean = false) {
         val targetAddress = address.uppercase()
+        if (connectSingleFlight.isActive(targetAddress)) {
+            Timber.w("Auto-connect skipped for $targetAddress: already connecting/connected")
+            return
+        }
         Timber.d("Auto-connect: scanning for $targetAddress")
         val job = scope.launch {
             val advertisement = withTimeoutOrNull(15_000L) {
@@ -319,6 +328,10 @@ class BleConnectionManager @Inject constructor(
     @OptIn(ExperimentalUuidApi::class)
     suspend fun connect(peripheral: Peripheral, role: DeviceRole, suppressError: Boolean = false) {
         val address = peripheral.identifier.toString()
+        if (!connectSingleFlight.tryAcquire(address)) {
+            Timber.w("Connect skipped for $address: already connecting/connected")
+            return
+        }
         // 清除上一轮断连遗留的标记，避免误伤本轮连接的意外断链判定。
         userDisconnectingAddresses.remove(address)
         suppressDisconnectErrorAddresses.remove(address)
@@ -332,6 +345,7 @@ class BleConnectionManager @Inject constructor(
                 emitConnectionError(address, ConnectionError.ConnectionFailed(constraint.getMessage()))
             }
             connectingPeripherals.remove(address)
+            connectSingleFlight.release(address)
             return
         }
 
@@ -357,6 +371,7 @@ class BleConnectionManager @Inject constructor(
                 break
             } catch (e: CancellationException) {
                 connectingPeripherals.remove(address)
+                connectSingleFlight.release(address)
                 throw e
             } catch (e: Exception) {
                 lastException = e
@@ -380,6 +395,7 @@ class BleConnectionManager @Inject constructor(
             }
             connectingPeripherals.remove(address)
             updateDeviceState(address, ConnectionState.DISCONNECTED)
+            connectSingleFlight.release(address)
             return
         }
 
@@ -1002,6 +1018,7 @@ class BleConnectionManager @Inject constructor(
             _devices.value = _devices.value - address
             Timber.d("Device disconnected and removed: $address")
         }
+        connectSingleFlight.release(address)
     }
 
     private val _dfuState = MutableStateFlow<DfuConnectionState>(DfuConnectionState.Idle)
