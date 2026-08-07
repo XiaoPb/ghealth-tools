@@ -192,6 +192,7 @@ class BleConnectionManager @Inject constructor(
     private val connectJobs = ConcurrentHashMap<String, Job>()
     private val connectingPeripherals = ConcurrentHashMap<String, Peripheral>()
     private val connectSingleFlight = ConnectSingleFlight()
+    private val notifySubscriptions = NotifySubscriptionGuard()
     private val disconnectCoordinator = DisconnectCoordinator(disconnectTimeoutMs = DISCONNECT_TIMEOUT_MS)
 
     fun getDeviceState(address: String): ConnectionState {
@@ -701,6 +702,11 @@ class BleConnectionManager @Inject constructor(
                             characteristic = notifyUuid
                         )
 
+                        if (!notifySubscriptions.tryRegister(address)) {
+                            Timber.w("Notify already subscribed for $address, skipping duplicate subscription")
+                            return
+                        }
+
                         try {
                             peripheral.observe(notifyChar)
                                 .onEach { data ->
@@ -1020,6 +1026,7 @@ class BleConnectionManager @Inject constructor(
         }
         // 槽位按归属释放：过期断连回调（owner 已被新连接替换）自动忽略，不误释放新连接槽位。
         disconnectedPeripheral?.let { connectSingleFlight.release(address, it) }
+        notifySubscriptions.unregister(address)
     }
 
     private val _dfuState = MutableStateFlow<DfuConnectionState>(DfuConnectionState.Idle)
