@@ -38,7 +38,9 @@ enum class LogLevel { INFO, WARN, ERROR }
 
 @Singleton
 class FactoryTestEngine @Inject constructor(
-    private val connectionManager: BleConnectionManager
+    private val connectionManager: BleConnectionManager,
+    private val rawDataCollector: TestRawDataCollector,
+    private val appSideEvaluator: AppSideTestEvaluator
 ) {
 
     private val environmentResumeMutex = Mutex(locked = true)
@@ -417,48 +419,71 @@ class FactoryTestEngine @Inject constructor(
             return null
         }
 
-        // Start function TEST1
+        // Start function TEST1，同时采集 TEST1 原始帧（F_GetMode 无数据时 App 端计算回退用）
         val test1FuncMode = getTest1FuncMode(chip)
-        val startFuncResult = sendSimpleCommand(
-            deviceAddress, KEY_GH3X_SW_FUNCTION_CMD,
-            Package.packU32(test1FuncMode) + Package.packU8(0)
-        )
-        if (startFuncResult.isFailure) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: SwFunctionCmd(start) 失败"))
-            return null
-        }
+        rawDataCollector.start(deviceAddress)
+        var getResult: Result<ByteArray>? = null
+        var collected = CollectedRawData.EMPTY
+        try {
+            val startFuncResult = sendSimpleCommand(
+                deviceAddress, KEY_GH3X_SW_FUNCTION_CMD,
+                Package.packU32(test1FuncMode) + Package.packU8(0)
+            )
+            if (startFuncResult.isFailure) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: SwFunctionCmd(start) 失败"))
+                return null
+            }
 
-        // Wait 3 seconds
-        delay(3000)
+            // Wait 3 seconds
+            delay(3000)
 
-        // Stop function TEST1
-        val stopFuncResult = sendSimpleCommand(
-            deviceAddress, KEY_GH3X_SW_FUNCTION_CMD,
-            Package.packU32(test1FuncMode) + Package.packU8(1)
-        )
-        if (stopFuncResult.isFailure) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN, "${testType.displayName}: SwFunctionCmd(stop) 失败"))
-        }
+            // Stop function TEST1
+            val stopFuncResult = sendSimpleCommand(
+                deviceAddress, KEY_GH3X_SW_FUNCTION_CMD,
+                Package.packU32(test1FuncMode) + Package.packU8(1)
+            )
+            if (stopFuncResult.isFailure) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.WARN, "${testType.displayName}: SwFunctionCmd(stop) 失败"))
+            }
 
-        // F_GetMode
-        val getResult = sendSimpleCommand(
-            deviceAddress, KEY_F_GET_MODE,
-            Package.packU8(testType.mode.toByte())
-        )
-        if (getResult.isFailure) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_GetMode 失败"))
-            return null
+            // F_GetMode
+            getResult = sendSimpleCommand(
+                deviceAddress, KEY_F_GET_MODE,
+                Package.packU8(testType.mode.toByte())
+            )
+            if (getResult.isFailure) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_GetMode 失败"))
+                return null
+            }
+        } finally {
+            collected = rawDataCollector.stop()
         }
 
         // Evaluate results
-        val channelValues = parseU16ArrayResponse(getResult.getOrThrow())
+        val channelValues = parseU16ArrayResponse(getResult!!.getOrThrow())
         val actualChannels = channelValues.size
         val maxChannels = testDef.channels
 
         if (actualChannels == 0) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN, "${testType.displayName}: 设备未返回通道数据"))
-            onEvent(TestEngineEvent.TestCompleted(testType, emptyList()))
-            return emptyList()
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                "${testType.displayName}: 设备未返回产测数据，切换为 App 端计算"))
+            val logBuffer = mutableListOf<Pair<LogLevel, String>>()
+            val computed = appSideEvaluator.evaluate(
+                testType = testType,
+                testDef = testDef,
+                data = collected,
+                chip = chip,
+                log = { level, message -> logBuffer.add(level to message) }
+            )
+            logBuffer.forEach { (level, message) -> onEvent(TestEngineEvent.LogMessage(level, message)) }
+            if (computed == null) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                    "${testType.displayName}: 未采集到 TEST1 原始数据，App 端计算失败"))
+                onEvent(TestEngineEvent.TestCompleted(testType, emptyList()))
+                return emptyList()
+            }
+            onEvent(TestEngineEvent.TestCompleted(testType, computed))
+            return computed
         }
 
         if (actualChannels < maxChannels) {
