@@ -67,4 +67,11 @@ class ConfigGroupingTest {
         assertFalse(groups.first().showHeader)
         assertEquals(1, groups.first().configs.size)
     }
+
+    @Test
+    fun `empty input produces no groups`() {
+        val groups = groupConfigsForDisplay(emptyList())
+
+        assertTrue(groups.isEmpty())
+    }
 }

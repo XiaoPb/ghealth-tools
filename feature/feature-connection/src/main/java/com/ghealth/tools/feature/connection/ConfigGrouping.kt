@@ -15,6 +15,8 @@ internal data class ConfigGroup(
  * 在线模式 displayPath 只有文件名（无 "/"），每个文件自成一组且组名与文件名相同，
  * 此时渲染标题会让每个配置文件显示两次，因此 showHeader = false。
  * 离线模式 displayPath 为 "项目名/文件名"，组名是真实目录前缀，需要标题。
+ * 单分组（grouped.size == 1）时假定调用方在弹窗标题区展示组名，故 showHeader = false；
+ * 即 grouped.size > 1 这半条件是弹窗展示约定，不是数据可推导的规则。
  */
 internal fun groupConfigsForDisplay(configs: List<ConfigFileInfo>): List<ConfigGroup> {
     val grouped = configs.groupBy { it.displayPath.substringBefore("/") }
