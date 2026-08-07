@@ -80,6 +80,8 @@ data class CommandExecutionState(
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
         other as CommandExecutionState
+        if (isExecuting != other.isExecuting) return false
+        if (error != other.error) return false
         if (commandKey != other.commandKey) return false
         if (result != null) {
             if (other.result == null) return false
@@ -88,7 +90,13 @@ data class CommandExecutionState(
         return true
     }
 
-    override fun hashCode(): Int = 31 * commandKey.hashCode() + (result?.contentHashCode() ?: 0)
+    override fun hashCode(): Int {
+        var hash = commandKey.hashCode()
+        hash = 31 * hash + (result?.contentHashCode() ?: 0)
+        hash = 31 * hash + (error?.hashCode() ?: 0)
+        hash = 31 * hash + isExecuting.hashCode()
+        return hash
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
