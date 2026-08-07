@@ -72,6 +72,24 @@ class FirmwareVersionResolverTest {
         assertNull(result)
     }
 
+    @Test
+    fun `0x09 响应为 NUL 空字符时回退到 0x01`() = runBlocking {
+        val calls = mutableListOf<Byte>()
+        val fetchRaw: suspend (Byte) -> ByteArray? = { verType ->
+            calls.add(verType)
+            when (verType) {
+                0x09.toByte() -> byteArrayOf(0x01, 0x00, 0x00) // 空版本（NUL）-> parseGh3036VersionString 返回 "no_ver"
+                0x01.toByte() -> encodeVersion("FW_2.0")
+                else -> null
+            }
+        }
+
+        val result = resolveFirmwareVersion(fetchRaw)
+
+        assertEquals("FW_2.0", result)
+        assertEquals(listOf<Byte>(0x09.toByte(), 0x01.toByte()), calls)
+    }
+
     /** 构造 GH3X_GetVersion 响应字节：[len_lo, len_hi, ...UTF-8 字节]，与 parseGh3036VersionString 约定一致。 */
     private fun encodeVersion(text: String): ByteArray {
         val bytes = text.toByteArray(Charsets.UTF_8)

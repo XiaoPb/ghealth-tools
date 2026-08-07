@@ -45,6 +45,27 @@ class Gh3036VersionTest {
     }
 
     @Test
+    fun `parse returns no_ver when payload is NUL only`() {
+        // len=1，payload=0x00（设备返回空版本缓冲区，等价于空字符串）
+        val data = byteArrayOf(0x01, 0x00, 0x00)
+        assertEquals("no_ver", parseGh3036VersionString(data))
+    }
+
+    @Test
+    fun `parse returns no_ver when payload is NULs and whitespace`() {
+        // "\u0000 \u0000"
+        val data = byteArrayOf(0x03, 0x00, 0x00, 0x20, 0x00)
+        assertEquals("no_ver", parseGh3036VersionString(data))
+    }
+
+    @Test
+    fun `parse trims trailing NUL bytes`() {
+        // "1.0\0" -> "1.0"
+        val data = byteArrayOf(0x04, 0x00, 0x31, 0x2E, 0x30, 0x00)
+        assertEquals("1.0", parseGh3036VersionString(data))
+    }
+
+    @Test
     fun `parse interprets length as little-endian`() {
         // len=3 LE = [0x03, 0x00]；若误用 BE 则 len=768 越界返回 no_ver，可区分方向
         val data = byteArrayOf(0x03, 0x00, 0x41, 0x42, 0x43)  // "ABC"
