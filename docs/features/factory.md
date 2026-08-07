@@ -142,7 +142,9 @@ FactoryViewModel.startTest(testName)
 | `led_current_ma` | number | 无 | LED 电流 mA，缺省从 AGC 帧读取 |
 | `sample_rate_hz` | number | 100 | 采样率，用于 0.5Hz 高通滤波系数 |
 
-计算值以 `TestResult.computedValue` 输出到界面与 CSV；单通道无原始数据时该通道标记 FAIL 并记录 WARN 日志；整个测试窗口未采集到任何原始数据时记录 ERROR 日志且该项无结果（不会产生 FAIL 项，需人工确认）。
+计算值以 `TestResult.computedValue` 输出到界面与 CSV；单通道无原始数据时该通道标记 FAIL 并记录 WARN 日志；整个测试窗口未采集到任何原始数据时记录 ERROR 日志并产出 1 个合成 FAIL 结果（`value=0`），整次产测判定 FAIL，不再误判 PASS。
+
+**CHIP_INIT（芯片初始化）**：`F_GetMode` 无数据时改为寄存器读写校验通信——写入 `{0x0020, 0x2919}`（FIFO_WATER_LINE:25, RG_FIFO_READ_INT_TIMER:0.4s，取自 GH3036 产测配置）并回读，一致则 PASS（通信正常），写入/读取失败或回读不一致则 FAIL；校验寄存器为引擎常量（`CHIP_COMM_CHECK_REG_ADDR` / `CHIP_COMM_CHECK_REG_VALUE`），其它芯片如需调整可修改常量。
 
 ### 4.3 日志记录
 
