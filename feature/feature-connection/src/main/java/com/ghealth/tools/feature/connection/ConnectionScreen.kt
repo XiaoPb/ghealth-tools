@@ -917,7 +917,7 @@ private fun AppConfigDialog(
     val selectedConfig = downloadState.selectedConfig
 
     val groupedConfigs = remember(configs) {
-        configs.groupBy { it.displayPath.substringBefore("/") }
+        groupConfigsForDisplay(configs)
     }
 
     AlertDialog(
@@ -931,7 +931,7 @@ private fun AppConfigDialog(
                     style = MaterialTheme.typography.titleLarge
                 )
                 if (groupedConfigs.size == 1) {
-                    val projectName = groupedConfigs.keys.first()
+                    val projectName = groupedConfigs.first().name
                     Text(
                         text = "$projectName - ${chipName.uppercase()}",
                         style = MaterialTheme.typography.bodySmall,
@@ -996,11 +996,11 @@ private fun AppConfigDialog(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            groupedConfigs.forEach { (projectName, projectConfigs) ->
-                                if (groupedConfigs.size > 1) {
-                                    item(key = "header_$projectName") {
+                            groupedConfigs.forEach { group ->
+                                if (group.showHeader) {
+                                    item(key = "header_${group.name}") {
                                         Text(
-                                            text = projectName,
+                                            text = group.name,
                                             style = MaterialTheme.typography.labelLarge,
                                             color = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.padding(
@@ -1011,7 +1011,7 @@ private fun AppConfigDialog(
                                         )
                                     }
                                 }
-                                items(projectConfigs, key = { it.displayPath }) { info ->
+                                items(group.configs, key = { it.displayPath }) { info ->
                                     val isSelected = info == selectedConfig
                                     ConfigFileItem(
                                         fileName = info.fileName,
