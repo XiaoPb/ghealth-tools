@@ -14,6 +14,7 @@ import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import com.ghealth.tools.ble.protocol.rpccore.Package
 import com.ghealth.tools.feature.factory.model.FactoryConfig
 import com.ghealth.tools.feature.factory.model.RegisterConfig
+import com.ghealth.tools.feature.factory.model.TestDef
 import com.ghealth.tools.feature.factory.model.RegEntry
 import com.ghealth.tools.feature.factory.model.TestResult
 import com.ghealth.tools.feature.factory.model.TestType
@@ -35,6 +36,12 @@ sealed class TestEngineEvent {
 
     data class SequenceFailed(val error: String) : TestEngineEvent()
 }
+
+/** CHIP_INIT 单测执行结果 + 是否触发 App 端全局回退。 */
+private data class SingleTestOutcome(
+    val results: List<TestResult>?,
+    val fallbackTriggered: Boolean = false
+)
 
 enum class LogLevel { INFO, WARN, ERROR }
 
@@ -65,6 +72,7 @@ class FactoryTestEngine @Inject constructor(
         val totalSteps = computeTotalSteps(factoryConfig)
         var currentStep = 0
         val allResults = mutableMapOf<TestType, List<TestResult>>()
+        var appSideFallback = false
 
         try {
             // Step 1: Enter factory mode
@@ -85,10 +93,16 @@ class FactoryTestEngine @Inject constructor(
             onEvent(TestEngineEvent.LogMessage(LogLevel.INFO, "已进入MCU在线模式"))
 
             // Step 2: CHIP_INIT
-            val chipInitResults = runSingleTest(
+            val chipInitOutcome = runSingleTest(
                 deviceAddress, chip, factoryConfig, TestType.CHIP_INIT,
                 registerConfigs, onEvent, currentStep, totalSteps
             )
+            if (chipInitOutcome.fallbackTriggered) {
+                appSideFallback = true
+                onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                    "检测到对端无产测逻辑，后续测试切换为 App 端计算"))
+            }
+            val chipInitResults = chipInitOutcome.results
             if (chipInitResults != null) {
                 currentStep++
                 allResults[TestType.CHIP_INIT] = chipInitResults
@@ -97,7 +111,7 @@ class FactoryTestEngine @Inject constructor(
             // Step 3: CHIP_UID
             if (factoryConfig.tests["chip_uid"]?.enabled != false) {
                 val chipUidResults = runUidTest(
-                    deviceAddress, chip, onEvent, currentStep, totalSteps
+                    deviceAddress, chip, appSideFallback, onEvent, currentStep, totalSteps
                 )
                 if (chipUidResults != null) {
                     currentStep++
@@ -116,7 +130,7 @@ class FactoryTestEngine @Inject constructor(
                 val results = runHardwareTest(
                     deviceAddress, chip, factoryConfig, testType,
                     registerConfigs[testType.name.lowercase()],
-                    onEvent, currentStep, totalSteps
+                    appSideFallback, onEvent, currentStep, totalSteps
                 )
                 if (results != null) {
                     allResults[testType] = results
@@ -184,16 +198,16 @@ class FactoryTestEngine @Inject constructor(
         onEvent: suspend (TestEngineEvent) -> Unit,
         stepIndex: Int,
         totalSteps: Int
-    ): List<TestResult>? {
+    ): SingleTestOutcome {
         val testKey = testType.name.lowercase()
-        val testDef = factoryConfig.tests[testKey] ?: return null
-        if (!testDef.enabled) return null
+        val testDef = factoryConfig.tests[testKey] ?: return SingleTestOutcome(null)
+        if (!testDef.enabled) return SingleTestOutcome(null)
 
         onEvent(TestEngineEvent.StepStarted(testType.displayName))
         onEvent(TestEngineEvent.Progress(stepIndex, totalSteps))
         onEvent(TestEngineEvent.LogMessage(LogLevel.INFO, "开始: ${testType.displayName}"))
 
-        val results = mutableListOf<TestResult>()
+        var fallbackTriggered = false
 
         // F_SetMode
         val setResult = sendSimpleCommand(
@@ -201,90 +215,93 @@ class FactoryTestEngine @Inject constructor(
             Package.packU8(testType.mode.toByte())
         )
         if (setResult.isFailure) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_SetMode 失败"))
-            return null
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                "${testType.displayName}: F_SetMode 失败，切换为 App 端计算模式"))
+            fallbackTriggered = true
+        } else {
+            delay(500)
+
+            // F_GetMode
+            val getResult = sendSimpleCommand(
+                deviceAddress, KEY_F_GET_MODE,
+                Package.packU8(testType.mode.toByte())
+            )
+            if (getResult.isFailure) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                    "${testType.displayName}: F_GetMode 失败，切换为 App 端计算模式"))
+                fallbackTriggered = true
+            } else {
+                val channelValues = parseU16ArrayResponse(getResult.getOrThrow())
+                val actualChannels = channelValues.size
+                val maxChannels = testDef.channels
+
+                if (actualChannels == 0) {
+                    onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                        "${testType.displayName}: 设备未返回通道数据，触发全局 App 端回退"))
+                    fallbackTriggered = true
+                } else {
+                    if (actualChannels < maxChannels) {
+                        onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+                            "${testType.displayName}: 配置最大${maxChannels}通道，设备返回${actualChannels}通道，以实际通道为准"))
+                    } else if (actualChannels > maxChannels) {
+                        onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                            "${testType.displayName}: 配置最大${maxChannels}通道，设备实际返回${actualChannels}通道"))
+                    }
+
+                    val thresholdDef = testDef.globalThreshold
+                    val results = mutableListOf<TestResult>()
+                    for (ch in 0 until actualChannels) {
+                        val value = channelValues[ch]
+                        val passed = if (thresholdDef != null) {
+                            ThresholdOperator.fromKey(thresholdDef.operator).evaluate(value, thresholdDef)
+                        } else true
+                        results.add(
+                            TestResult(
+                                testType = testType,
+                                channelIndex = ch,
+                                value = value,
+                                unit = testDef.unit,
+                                threshold = if (thresholdDef != null)
+                                    ThresholdOperator.fromKey(thresholdDef.operator).formatThreshold(thresholdDef)
+                                else "-",
+                                passed = passed
+                            )
+                        )
+                    }
+                    val passCount = results.count { it.passed }
+                    onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+                        "${testType.displayName}: $passCount/${results.size} 通道通过"))
+                    onEvent(TestEngineEvent.TestCompleted(testType, results))
+                    return SingleTestOutcome(results, fallbackTriggered = false)
+                }
+            }
         }
 
-        delay(500)
-
-        // F_GetMode
-        val getResult = sendSimpleCommand(
-            deviceAddress, KEY_F_GET_MODE,
-            Package.packU8(testType.mode.toByte())
+        // 回退触发：寄存器读写校验判定 CHIP_INIT，避免空窗口
+        val readBack = verifyChipCommunication(deviceAddress, onEvent)
+        val passed = readBack == CHIP_COMM_CHECK_REG_VALUE
+        val result = TestResult(
+            testType = testType,
+            channelIndex = 0,
+            value = if (passed) readBack ?: 0 else 0,
+            unit = testDef.unit,
+            threshold = if (readBack == null) "-" else "=0x%04X".format(CHIP_COMM_CHECK_REG_VALUE),
+            passed = passed,
+            displayValue = readBack?.let { "0x%04X".format(it) }
         )
-        if (getResult.isFailure) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_GetMode 失败"))
-            return null
-        }
-
-        val channelValues = parseU16ArrayResponse(getResult.getOrThrow())
-        val actualChannels = channelValues.size
-        val maxChannels = testDef.channels
-
-        if (actualChannels == 0) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                "${testType.displayName}: 设备未返回通道数据，尝试寄存器读写校验通信"))
-            val readBack = verifyChipCommunication(deviceAddress, onEvent)
-            val passed = readBack == CHIP_COMM_CHECK_REG_VALUE
-            val result = TestResult(
-                testType = testType,
-                channelIndex = 0,
-                value = if (passed) readBack ?: 0 else 0,
-                unit = testDef.unit,
-                threshold = if (readBack == null) "-" else "=0x%04X".format(CHIP_COMM_CHECK_REG_VALUE),
-                passed = passed,
-                displayValue = readBack?.let { "0x%04X".format(it) }
-            )
-            onEvent(TestEngineEvent.LogMessage(
-                if (passed) LogLevel.INFO else LogLevel.ERROR,
-                "${testType.displayName}: 寄存器读写校验${if (passed) "通过" else "失败"}" +
-                    (if (readBack == null) "（写入或回读失败）" else "（回读0x%04X，期望0x%04X）".format(readBack, CHIP_COMM_CHECK_REG_VALUE))
-            ))
-            onEvent(TestEngineEvent.TestCompleted(testType, listOf(result)))
-            return listOf(result)
-        }
-
-        if (actualChannels < maxChannels) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
-                "${testType.displayName}: 配置最大${maxChannels}通道，设备返回${actualChannels}通道，以实际通道为准"))
-        } else if (actualChannels > maxChannels) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                "${testType.displayName}: 配置最大${maxChannels}通道，设备实际返回${actualChannels}通道"))
-        }
-
-        val thresholdDef = testDef.globalThreshold
-
-        for (ch in 0 until actualChannels) {
-            val value = channelValues[ch]
-            val passed = if (thresholdDef != null) {
-                ThresholdOperator.fromKey(thresholdDef.operator).evaluate(value, thresholdDef)
-            } else true
-
-            results.add(
-                TestResult(
-                    testType = testType,
-                    channelIndex = ch,
-                    value = value,
-                    unit = testDef.unit,
-                    threshold = if (thresholdDef != null)
-                        ThresholdOperator.fromKey(thresholdDef.operator).formatThreshold(thresholdDef)
-                    else "-",
-                    passed = passed
-                )
-            )
-        }
-
-        val passCount = results.count { it.passed }
-        onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
-            "${testType.displayName}: $passCount/${results.size} 通道通过"))
-
-        onEvent(TestEngineEvent.TestCompleted(testType, results))
-        return results
+        onEvent(TestEngineEvent.LogMessage(
+            if (passed) LogLevel.INFO else LogLevel.ERROR,
+            "${testType.displayName}: 寄存器读写校验${if (passed) "通过" else "失败"}" +
+                (if (readBack == null) "（写入或回读失败）" else "（回读0x%04X，期望0x%04X）".format(readBack, CHIP_COMM_CHECK_REG_VALUE))
+        ))
+        onEvent(TestEngineEvent.TestCompleted(testType, listOf(result)))
+        return SingleTestOutcome(listOf(result), fallbackTriggered = true)
     }
 
     private suspend fun runUidTest(
         deviceAddress: String,
         chip: String,
+        appSideFallback: Boolean,
         onEvent: suspend (TestEngineEvent) -> Unit,
         stepIndex: Int,
         totalSteps: Int
@@ -292,44 +309,52 @@ class FactoryTestEngine @Inject constructor(
         val testType = TestType.CHIP_UID
         onEvent(TestEngineEvent.StepStarted(testType.displayName))
         onEvent(TestEngineEvent.Progress(stepIndex, totalSteps))
-        onEvent(TestEngineEvent.LogMessage(LogLevel.INFO, "开始: ${testType.displayName}"))
+        onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+            "开始: ${testType.displayName}" + if (appSideFallback) "（App 端计算模式）" else ""))
 
-        // F_SetMode
-        val setResult = sendSimpleCommand(
-            deviceAddress, KEY_F_SET_MODE,
-            Package.packU8(testType.mode.toByte())
-        )
-        if (setResult.isSuccess) {
-            delay(500)
-        }
-
-        // F_GetMode — 产测命令读不到数据时（对端无产测逻辑），改用上位机寄存器指令读取 eFuse
-        val getResult = sendSimpleCommand(
-            deviceAddress, KEY_F_GET_MODE,
-            Package.packU8(testType.mode.toByte())
-        )
         val rawBytes: ByteArray
-        if (setResult.isFailure) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                "${testType.displayName}: F_SetMode 失败，改用上位机寄存器指令读取 eFuse"))
+        if (appSideFallback) {
+            // 回退模式：跳过 F_SetMode/F_GetMode，直接读 eFuse
+            onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+                "${testType.displayName}: App 端计算模式，直接读取 eFuse"))
             rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
-        } else if (getResult.isSuccess) {
-            val u16Values = parseU16ArrayResponse(getResult.getOrThrow())
-            if (u16Values.size >= 16) {
-                rawBytes = ByteArray(u16Values.size * 2)
-                for (i in u16Values.indices) {
-                    rawBytes[i * 2] = (u16Values[i] and 0xFF).toByte()
-                    rawBytes[i * 2 + 1] = ((u16Values[i] shr 8) and 0xFF).toByte()
+        } else {
+            // F_SetMode
+            val setResult = sendSimpleCommand(
+                deviceAddress, KEY_F_SET_MODE,
+                Package.packU8(testType.mode.toByte())
+            )
+            if (setResult.isSuccess) {
+                delay(500)
+            }
+
+            // F_GetMode — 产测命令读不到数据时（对端无产测逻辑），改用上位机寄存器指令读取 eFuse
+            val getResult = sendSimpleCommand(
+                deviceAddress, KEY_F_GET_MODE,
+                Package.packU8(testType.mode.toByte())
+            )
+            if (setResult.isFailure) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                    "${testType.displayName}: F_SetMode 失败，改用上位机寄存器指令读取 eFuse"))
+                rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
+            } else if (getResult.isSuccess) {
+                val u16Values = parseU16ArrayResponse(getResult.getOrThrow())
+                if (u16Values.size >= 16) {
+                    rawBytes = ByteArray(u16Values.size * 2)
+                    for (i in u16Values.indices) {
+                        rawBytes[i * 2] = (u16Values[i] and 0xFF).toByte()
+                        rawBytes[i * 2 + 1] = ((u16Values[i] shr 8) and 0xFF).toByte()
+                    }
+                } else {
+                    onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                        "${testType.displayName}: F_GetMode 返回 ${u16Values.size * 2} 字节，不足32字节，改用上位机寄存器指令读取 eFuse"))
+                    rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
                 }
             } else {
                 onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                    "${testType.displayName}: F_GetMode 返回 ${u16Values.size * 2} 字节，不足32字节，改用上位机寄存器指令读取 eFuse"))
+                    "${testType.displayName}: F_GetMode 失败，改用上位机寄存器指令读取 eFuse"))
                 rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
             }
-        } else {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                "${testType.displayName}: F_GetMode 失败，改用上位机寄存器指令读取 eFuse"))
-            rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
         }
 
         // Two 128-bit UUIDs
@@ -418,6 +443,7 @@ class FactoryTestEngine @Inject constructor(
         factoryConfig: FactoryConfig,
         testType: TestType,
         registerConfig: RegisterConfig?,
+        appSideFallback: Boolean,
         onEvent: suspend (TestEngineEvent) -> Unit,
         stepIndex: Int,
         totalSteps: Int
@@ -428,7 +454,8 @@ class FactoryTestEngine @Inject constructor(
 
         onEvent(TestEngineEvent.StepStarted(testType.displayName))
         onEvent(TestEngineEvent.Progress(stepIndex, totalSteps))
-        onEvent(TestEngineEvent.LogMessage(LogLevel.INFO, "开始: ${testType.displayName}"))
+        onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+            "开始: ${testType.displayName}" + if (appSideFallback) "（App 端计算模式）" else ""))
 
         // registerConfig is optional but preferred; warn if missing
         if (registerConfig == null || registerConfig.registers.isEmpty()) {
@@ -436,14 +463,16 @@ class FactoryTestEngine @Inject constructor(
                 "${testType.displayName}: 无寄存器配置文件，F_GetMode 可能因未提前配置寄存器而返回异常值"))
         }
 
-        // F_SetMode
-        val setResult = sendSimpleCommand(
-            deviceAddress, KEY_F_SET_MODE,
-            Package.packU8(testType.mode.toByte())
-        )
-        if (setResult.isFailure) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_SetMode 失败"))
-            return null
+        // F_SetMode —— App 端计算模式下跳过（对端无产测逻辑）
+        if (!appSideFallback) {
+            val setResult = sendSimpleCommand(
+                deviceAddress, KEY_F_SET_MODE,
+                Package.packU8(testType.mode.toByte())
+            )
+            if (setResult.isFailure) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_SetMode 失败"))
+                return null
+            }
         }
 
         // download_config stage 0
@@ -507,52 +536,34 @@ class FactoryTestEngine @Inject constructor(
                 onEvent(TestEngineEvent.LogMessage(LogLevel.WARN, "${testType.displayName}: SwFunctionCmd(stop) 失败"))
             }
 
-            // F_GetMode
-            getResult = sendSimpleCommand(
-                deviceAddress, KEY_F_GET_MODE,
-                Package.packU8(testType.mode.toByte())
-            )
-            if (getResult.isFailure) {
-                onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_GetMode 失败"))
-                return null
+            // F_GetMode —— App 端计算模式下跳过
+            if (!appSideFallback) {
+                getResult = sendSimpleCommand(
+                    deviceAddress, KEY_F_GET_MODE,
+                    Package.packU8(testType.mode.toByte())
+                )
+                if (getResult.isFailure) {
+                    onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_GetMode 失败"))
+                    return null
+                }
             }
         } finally {
             collected = rawDataCollector.stop()
         }
 
         // Evaluate results
+        if (appSideFallback) {
+            return evaluateAppSide(testType, testDef, collected, chip,
+                "App 端计算模式，跳过 F_GetMode 直接计算", onEvent)
+        }
+
         val channelValues = parseU16ArrayResponse(getResult!!.getOrThrow())
         val actualChannels = channelValues.size
         val maxChannels = testDef.channels
 
         if (actualChannels == 0) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                "${testType.displayName}: 设备未返回产测数据，切换为 App 端计算"))
-            val logBuffer = mutableListOf<Pair<LogLevel, String>>()
-            val computed = appSideEvaluator.evaluate(
-                testType = testType,
-                testDef = testDef,
-                data = collected,
-                chip = chip,
-                log = { level, message -> logBuffer.add(level to message) }
-            )
-            logBuffer.forEach { (level, message) -> onEvent(TestEngineEvent.LogMessage(level, message)) }
-            if (computed == null) {
-                onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
-                    "${testType.displayName}: 未采集到 TEST1 原始数据，App 端计算失败"))
-                val failed = TestResult(
-                    testType = testType,
-                    channelIndex = 0,
-                    value = 0,
-                    unit = testDef.unit,
-                    threshold = "-",
-                    passed = false
-                )
-                onEvent(TestEngineEvent.TestCompleted(testType, listOf(failed)))
-                return listOf(failed)
-            }
-            onEvent(TestEngineEvent.TestCompleted(testType, computed))
-            return computed
+            return evaluateAppSide(testType, testDef, collected, chip,
+                "设备未返回产测数据，切换为 App 端计算", onEvent)
         }
 
         if (actualChannels < maxChannels) {
@@ -592,6 +603,43 @@ class FactoryTestEngine @Inject constructor(
 
         onEvent(TestEngineEvent.TestCompleted(testType, results))
         return results
+    }
+
+    /** App 端计算并上报；未采集到数据时产出合成 FAIL。reason 用于 LOG 前缀。 */
+    private suspend fun evaluateAppSide(
+        testType: TestType,
+        testDef: TestDef,
+        data: CollectedRawData,
+        chip: String,
+        reason: String,
+        onEvent: suspend (TestEngineEvent) -> Unit
+    ): List<TestResult> {
+        onEvent(TestEngineEvent.LogMessage(LogLevel.WARN, "${testType.displayName}: $reason"))
+        val logBuffer = mutableListOf<Pair<LogLevel, String>>()
+        val computed = appSideEvaluator.evaluate(
+            testType = testType,
+            testDef = testDef,
+            data = data,
+            chip = chip,
+            log = { level, message -> logBuffer.add(level to message) }
+        )
+        logBuffer.forEach { (level, message) -> onEvent(TestEngineEvent.LogMessage(level, message)) }
+        if (computed == null) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                "${testType.displayName}: 未采集到 TEST1 原始数据，App 端计算失败"))
+            val failed = TestResult(
+                testType = testType,
+                channelIndex = 0,
+                value = 0,
+                unit = testDef.unit,
+                threshold = "-",
+                passed = false
+            )
+            onEvent(TestEngineEvent.TestCompleted(testType, listOf(failed)))
+            return listOf(failed)
+        }
+        onEvent(TestEngineEvent.TestCompleted(testType, computed))
+        return computed
     }
 
     private suspend fun sendSimpleCommand(

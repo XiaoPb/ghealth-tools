@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.factory.engine
 
 import com.ghealth.tools.ble.connection.BleConnectionManager
+import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_GET_MODE
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_SET_MODE
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
@@ -481,5 +482,133 @@ class FactoryTestEngineTest {
         assertEquals("30303030-3030-3030-3030-303030303030", completed.results[0].displayValue)
         val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
         assertTrue(sequence.overallPassed)
+    }
+
+    private val chipInitPlusBaseNoiseConfig = FactoryConfig(
+        project = "test",
+        tests = mapOf(
+            "chip_init" to TestDef(
+                enabled = true,
+                mode = TestType.CHIP_INIT.mode,
+                channels = 1,
+                unit = "status"
+            ),
+            "base_noise" to baseNoiseDef
+        )
+    )
+
+    @Test
+    fun `CHIP_INIT 空数据触发全局回退后硬件测试直接 App 端计算且不再尝试 F_GetMode`() = runTest {
+        val manager = defaultManager()
+        // 寄存器校验回读一致，CHIP_INIT 判定 PASS，保证 sequence.overallPassed
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+        val computed = listOf(
+            TestResult(
+                testType = TestType.BASE_NOISE,
+                channelIndex = 0,
+                value = 152,
+                unit = "dB",
+                threshold = "-",
+                passed = true
+            )
+        )
+        every { evaluator.evaluate(any(), any(), any(), any(), any()) } returns computed
+
+        val events = runSequence(newEngine(manager, collector, evaluator), config = chipInitPlusBaseNoiseConfig)
+
+        // F_GetMode 只应被调用 1 次（CHIP_INIT 那次）；base_noise 不再尝试
+        coVerify(exactly = 1) { manager.sendCommand(any(), KEY_F_GET_MODE, any()) }
+        // F_SetMode 也只应被调用 1 次（CHIP_INIT 那次）
+        coVerify(exactly = 1) { manager.sendCommand(any(), KEY_F_SET_MODE, any()) }
+        // base_noise 仍执行 download_config(0)/(1)
+        coVerify(exactly = 2) { manager.sendCommand(any(), KEY_DOWNLOAD_CONFIG, any()) }
+        verify(exactly = 1) { evaluator.evaluate(any(), any(), any(), any(), any()) }
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.BASE_NOISE }
+        assertEquals(computed, completed.results)
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertTrue(sequence.overallPassed)
+    }
+
+    @Test
+    fun `全局回退后 CHIP_UID 跳过 F_SetMode 直接读 eFuse`() = runTest {
+        val manager = defaultManager()
+        // 寄存器校验回读一致，CHIP_INIT 判定 PASS，保证 sequence.overallPassed
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+        val efuse = mockk<EfuseReader>()
+        coEvery { efuse.readAll(any()) } returns ByteArray(32) { 0x30 }
+        val engine = FactoryTestEngine(manager, collector, evaluator, efuse)
+
+        val chipInitOnlyConfig = FactoryConfig(
+            project = "test",
+            tests = mapOf(
+                "chip_init" to TestDef(
+                    enabled = true,
+                    mode = TestType.CHIP_INIT.mode,
+                    channels = 1,
+                    unit = "status"
+                )
+            )
+        )
+        val events = runSequence(engine, config = chipInitOnlyConfig)
+
+        coVerify(exactly = 1) { efuse.readAll("AA:BB") }
+        // 仅 CHIP_INIT 尝试过 F_SetMode/F_GetMode，CHIP_UID 直接读 eFuse
+        coVerify(exactly = 1) { manager.sendCommand(any(), KEY_F_SET_MODE, any()) }
+        coVerify(exactly = 1) { manager.sendCommand(any(), KEY_F_GET_MODE, any()) }
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.CHIP_UID }
+        assertEquals(2, completed.results.size)
+        assertTrue(completed.results.all { it.passed })
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertTrue(sequence.overallPassed)
+    }
+
+    @Test
+    fun `CHIP_INIT F_GetMode 失败时触发回退并走寄存器校验判定`() = runTest {
+        val manager = defaultManager()
+        coEvery { manager.sendCommand(any(), KEY_F_GET_MODE, any()) } returns
+            Result.failure(IllegalStateException("get failed"))
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(newEngine(manager, collector, evaluator), config = chipInitConfig)
+
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.CHIP_INIT }
+        assertTrue(completed.results.single().passed)
+        assertTrue(
+            events.filterIsInstance<TestEngineEvent.LogMessage>()
+                .any { it.level == LogLevel.WARN && it.message.contains("切换为 App 端计算") }
+        )
+    }
+
+    @Test
+    fun `回退模式下硬件测试未采集到数据则合成 FAIL`() = runTest {
+        val manager = defaultManager()
+        // 寄存器校验回读一致，CHIP_INIT 判定 PASS，FAIL 归属仅来自 BASE_NOISE
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = defaultCollector() // stop() 返回 EMPTY
+        val evaluator = mockk<AppSideTestEvaluator>()
+        // strict mockk 对未 stub 的调用会抛 "no answer found"，显式返回 null 以触发合成 FAIL
+        every { evaluator.evaluate(any(), any(), any(), any(), any()) } returns null
+
+        val events = runSequence(newEngine(manager, collector, evaluator), config = chipInitPlusBaseNoiseConfig)
+
+        coVerify(exactly = 1) { manager.sendCommand(any(), KEY_F_GET_MODE, any()) }
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.BASE_NOISE }
+        assertTrue(completed.results.all { !it.passed })
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertEquals(listOf(TestType.BASE_NOISE.errorBase), sequence.errorCodes)
     }
 }
