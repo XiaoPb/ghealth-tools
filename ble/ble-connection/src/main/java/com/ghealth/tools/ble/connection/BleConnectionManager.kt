@@ -400,10 +400,19 @@ class BleConnectionManager @Inject constructor(
             return
         }
 
-        val (executor, deviceType) = when (role) {
-            DeviceRole.MASTER -> createExecutor(address)
-            DeviceRole.SLAVE -> createExecutor(address)
-            DeviceRole.COMPARE -> null to DeviceType.GH3036
+        val (executor, deviceType) = try {
+            when (role) {
+                DeviceRole.MASTER -> createExecutor(address)
+                DeviceRole.SLAVE -> createExecutor(address)
+                DeviceRole.COMPARE -> null to DeviceType.GH3036
+            }
+        } catch (e: CancellationException) {
+            // createExecutor 含挂起点（blePreferences.effectiveChip.first()），连接任务若在此被取消
+            // （如 disconnectAll 取消 connectJobs），state 收集器尚未注册、不会有 Disconnected 事件触发
+            // onDeviceDisconnected 释放，必须在此释放单飞槽位，否则该地址会被永久拦截。
+            connectingPeripherals.remove(address)
+            connectSingleFlight.release(address, peripheral)
+            throw e
         }
 
         val gHealthPeripheral = GHealthPeripheral(
