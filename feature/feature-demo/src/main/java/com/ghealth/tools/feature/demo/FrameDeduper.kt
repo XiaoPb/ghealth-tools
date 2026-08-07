@@ -10,6 +10,8 @@ import com.ghealth.tools.core.model.FunctionMode
  * 设备每次通知携带最近 5 帧窗口、相邻窗口重叠 2~3 帧，重发帧的
  * (frameCnt, timestamp) 与首次出现时完全相同；正常新帧二者唯一，
  * 因此不会误杀帧号回绕/重置的合法新帧。
+ *
+ * 注意：此类非线程安全，调用方需保证单线程访问（当前由 ghFrameFlow 的 Main 收集器串行调用）。
  */
 class FrameDeduper(private val recentSize: Int = 16) {
     private val recentByKey =
@@ -37,5 +39,10 @@ class FrameDeduper(private val recentSize: Int = 16) {
 
     fun clear() {
         recentByKey.clear()
+    }
+
+    /** 设备断开/移除后清理该地址的所有去重状态，避免旧窗口误杀重连设备的合法新帧。 */
+    fun removeAddress(address: String) {
+        recentByKey.keys.removeAll { key -> key.first == address }
     }
 }

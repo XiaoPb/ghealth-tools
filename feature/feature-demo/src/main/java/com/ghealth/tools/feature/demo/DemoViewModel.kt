@@ -156,6 +156,7 @@ class DemoViewModel @Inject constructor(
 
     private val buffers = FunctionDataBuffers(BUFFER_CAPACITY)
     private val frameDeduper = FrameDeduper()
+    private var lastDevicesSnapshot: Map<String, ConnectedDevice> = emptyMap()
     private var autoRecordingStopped = false
     private val lastColumnValues = mutableMapOf<FunctionMode, MutableMap<String, Any?>>()
     private val algoNonZeroSeen = mutableMapOf<String, Boolean>()
@@ -206,6 +207,9 @@ class DemoViewModel @Inject constructor(
         }
         viewModelScope.launch {
             connectionManager.devices.collect { devices ->
+                val removedAddresses = lastDevicesSnapshot.keys - devices.keys
+                removedAddresses.forEach { frameDeduper.removeAddress(it) }
+                lastDevicesSnapshot = devices
                 if (devices.isEmpty()) {
                     autoRecordingStopped = false
                 }

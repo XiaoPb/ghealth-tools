@@ -70,4 +70,16 @@ class FrameDeduperTest {
         deduper.clear()
         assertFalse(deduper.isDuplicate("AA", FunctionMode.TEST1, frameCnt = 1, timestamp = 1000L))
     }
+
+    @Test
+    fun `removeAddress prunes dedup state for that device only`() {
+        val deduper = FrameDeduper()
+        assertFalse(deduper.isDuplicate("AA", FunctionMode.TEST1, 1, 1000L))
+        assertFalse(deduper.isDuplicate("BB", FunctionMode.TEST1, 1, 1000L))
+        deduper.removeAddress("AA")
+        // AA 的状态被清理：再次出现相同帧不再是重复
+        assertFalse(deduper.isDuplicate("AA", FunctionMode.TEST1, 1, 1000L))
+        // BB 不受影响
+        assertTrue(deduper.isDuplicate("BB", FunctionMode.TEST1, 1, 1000L))
+    }
 }
