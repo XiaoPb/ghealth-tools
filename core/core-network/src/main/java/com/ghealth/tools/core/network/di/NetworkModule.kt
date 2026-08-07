@@ -38,12 +38,14 @@ import javax.inject.Singleton
 object NetworkModule {
 
     private const val DEFAULT_BASE_URL = "https://api.xiaopb.cn/api/"
+    private const val PRIMARY_AUTH_BASE_URL = "https://api.health.xiaopb.cn:8861/api/"
     private const val GITHUB_BASE_URL = "https://api.github.com/"
     private const val CONNECT_TIMEOUT = 3L
     private const val READ_TIMEOUT = 3L
     private const val WRITE_TIMEOUT = 30L
     private const val GITHUB_CONNECT_TIMEOUT = 15L
     private const val GITHUB_READ_TIMEOUT = 15L
+    private const val PRIMARY_AUTH_TIMEOUT = 3L
 
     @Provides
     @Singleton
@@ -123,7 +125,22 @@ object NetworkModule {
         authAuthenticator: AuthAuthenticator,
         dns: Dns
     ): OkHttpClient {
-        val loggingInterceptor = HttpLoggingInterceptor(
+        val loggingInterceptor = createApiLoggingInterceptor()
+
+        return OkHttpClient.Builder()
+            .dns(dns)
+            .addInterceptor(RetryInterceptor(maxRetries = 3))
+            .addInterceptor(authInterceptor)
+            .authenticator(authAuthenticator)
+            .addInterceptor(loggingInterceptor)
+            .connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
+            .writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private fun createApiLoggingInterceptor(): HttpLoggingInterceptor {
+        return HttpLoggingInterceptor(
             object : HttpLoggingInterceptor.Logger {
                 override fun log(message: String) {
                     if (message.length > 512) {
@@ -136,17 +153,42 @@ object NetworkModule {
         ).apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
+    }
 
+    @Provides
+    @Singleton
+    @Named("primaryAuthOkHttpClient")
+    fun providePrimaryAuthOkHttpClient(dns: Dns): OkHttpClient {
         return OkHttpClient.Builder()
             .dns(dns)
-            .addInterceptor(RetryInterceptor(maxRetries = 3))
-            .addInterceptor(authInterceptor)
-            .authenticator(authAuthenticator)
-            .addInterceptor(loggingInterceptor)
-            .connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
-            .readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
+            .addInterceptor(createApiLoggingInterceptor())
+            .connectTimeout(PRIMARY_AUTH_TIMEOUT, TimeUnit.SECONDS)
+            .readTimeout(PRIMARY_AUTH_TIMEOUT, TimeUnit.SECONDS)
             .writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)
             .build()
+    }
+
+    @Provides
+    @Singleton
+    @Named("primaryAuthRetrofit")
+    fun providePrimaryAuthRetrofit(
+        @Named("primaryAuthOkHttpClient") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(PRIMARY_AUTH_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    @Named("primaryAuthApi")
+    fun providePrimaryAuthApi(
+        @Named("primaryAuthRetrofit") retrofit: Retrofit
+    ): AuthApi {
+        return retrofit.create(AuthApi::class.java)
     }
 
     @Provides

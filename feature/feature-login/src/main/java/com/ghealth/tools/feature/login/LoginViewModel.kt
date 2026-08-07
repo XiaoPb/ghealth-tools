@@ -7,6 +7,7 @@ import com.ghealth.tools.core.datastore.SavedAccount
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.datastore.UserSessionManager
 import com.ghealth.tools.core.network.ApiErrorParser
+import com.ghealth.tools.core.network.AuthRepository
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
 import com.ghealth.tools.core.network.model.LoginRequest
@@ -35,6 +36,7 @@ data class LoginUiState(
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val authApi: AuthApi,
+    private val authRepository: AuthRepository,
     private val tokenManager: TokenManager,
     private val sessionManager: UserSessionManager,
     private val apiErrorParser: ApiErrorParser,
@@ -115,7 +117,7 @@ class LoginViewModel @Inject constructor(
                     username = state.username.trim(),
                     password = state.password
                 )
-                val response = authApi.login(request)
+                val response = authRepository.login(request)
 
                 if (response.isSuccessful && response.body()?.data != null) {
                     val loginData = response.body()!!.data!!

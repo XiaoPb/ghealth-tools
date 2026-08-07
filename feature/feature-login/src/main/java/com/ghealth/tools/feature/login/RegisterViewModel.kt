@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.network.ApiErrorParser
+import com.ghealth.tools.core.network.AuthRepository
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
 import com.ghealth.tools.core.network.model.LoginRequest
@@ -45,6 +46,7 @@ class RegisterViewModel @Inject constructor(
     private val userPreferences: UserPreferences,
     private val tokenManager: TokenManager,
     private val authApi: AuthApi,
+    private val authRepository: AuthRepository,
     private val apiErrorParser: ApiErrorParser
 ) : ViewModel() {
 
@@ -131,7 +133,7 @@ class RegisterViewModel @Inject constructor(
                 )
 
                 if (response.isSuccessful && response.body()?.data != null) {
-                    val loginResponse = authApi.login(
+                    val loginResponse = authRepository.login(
                         LoginRequest(state.username, state.password)
                     )
 
