@@ -410,40 +410,33 @@ class ConnectionViewModel @Inject constructor(
                         }
                     },
                     onFailure = { error ->
-                        Timber.e(error, "Command execution failed: $key")
-                        val errorMessage = userFriendlyCommandError(error, key)
-                        _uiState.update {
-                            it.copy(
-                                commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
-                                    isExecuting = false,
-                                    error = errorMessage,
-                                    commandKey = key
-                                ))
-                            )
-                        }
-                        showCommandErrorToast(errorMessage)
+                        handleCommandFailure(key, error)
                     }
                 )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Timber.e(e, "Command execution failed: $key")
-                val errorMessage = userFriendlyCommandError(e, key)
-                _uiState.update {
-                    it.copy(
-                        commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
-                            isExecuting = false,
-                            error = errorMessage,
-                            commandKey = key
-                        ))
-                    )
-                }
-                showCommandErrorToast(errorMessage)
+                handleCommandFailure(key, e)
             }
         }
     }
 
     private var commandErrorToastId = 0L
+
+    private fun handleCommandFailure(key: String, error: Throwable) {
+        Timber.e(error, "Command execution failed: $key")
+        val errorMessage = userFriendlyCommandError(error, key)
+        _uiState.update {
+            it.copy(
+                commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
+                    isExecuting = false,
+                    error = errorMessage,
+                    commandKey = key
+                ))
+            )
+        }
+        showCommandErrorToast(errorMessage)
+    }
 
     private fun showCommandErrorToast(message: String) {
         commandErrorToastId += 1

@@ -173,4 +173,60 @@ class ConnectionViewModelTest {
 
         assertEquals(false, viewModel.uiState.value.commandExecutionStates[KEY_F_GET_MODE]?.isExecuting)
     }
+
+    @Test
+    fun `no master connected reports error without sending command`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, _) = createViewModel()
+
+        viewModel.executeCommand(KEY_F_GET_MODE, byteArrayOf(0x01))
+        advanceUntilIdle()
+
+        val executionState = viewModel.uiState.value.commandExecutionStates[KEY_F_GET_MODE]
+        assertNotNull(executionState)
+        assertEquals(false, executionState?.isExecuting)
+        assertEquals("未连接主设备", executionState?.error)
+
+        val toast = viewModel.uiState.value.commandErrorToast
+        assertNotNull(toast)
+        assertEquals("未连接主设备", toast?.message)
+
+        coVerify(exactly = 0) { connectionManager.sendCommand(any(), any(), any()) }
+    }
+
+    @Test
+    fun `thrown exception surfaces user friendly error and toast`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel()
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendCommand(any(), any(), any()) } throws RuntimeException("boom")
+
+        viewModel.executeCommand(KEY_F_GET_MODE, byteArrayOf(0x01))
+        advanceUntilIdle()
+
+        val executionState = viewModel.uiState.value.commandExecutionStates[KEY_F_GET_MODE]
+        assertNotNull(executionState)
+        assertEquals(false, executionState?.isExecuting)
+        assertTrue(executionState?.error?.contains("boom") == true)
+
+        val toast = viewModel.uiState.value.commandErrorToast
+        assertNotNull(toast)
+        assertTrue(toast?.message?.contains("boom") == true)
+    }
+
+    @Test
+    fun `dismissCommandErrorToast clears the toast`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel()
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendCommand(any(), any(), any()) } returns
+            Result.failure(ProtocolError.Timeout)
+
+        viewModel.executeCommand(KEY_F_GET_MODE, byteArrayOf(0x01))
+        advanceUntilIdle()
+        assertNotNull(viewModel.uiState.value.commandErrorToast)
+
+        viewModel.dismissCommandErrorToast()
+
+        assertNull(viewModel.uiState.value.commandErrorToast)
+    }
 }
