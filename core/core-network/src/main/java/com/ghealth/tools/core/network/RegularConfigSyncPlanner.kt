@@ -15,7 +15,7 @@ object RegularConfigSyncPlanner {
         targetDir: File,
         remoteConfigs: List<RegularConfigResponse>
     ): RegularConfigSyncPlan {
-        val validConfigs = remoteConfigs.filter { it.filename.isNotBlank() }
+        val validConfigs = remoteConfigs.filter { it.filename.isNotBlank() && File(it.filename).name == it.filename }
         val remoteNames = validConfigs.map { it.filename }.toSet()
 
         val existingFiles = targetDir.listFiles()?.filter { it.isFile } ?: emptyList()

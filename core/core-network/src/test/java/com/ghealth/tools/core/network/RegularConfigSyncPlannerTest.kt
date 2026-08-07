@@ -130,4 +130,19 @@ class RegularConfigSyncPlannerTest {
         assertEquals(listOf("stale.config"), plan.filesToDelete.map { it.name })
         assertEquals(1, plan.skippedCount)
     }
+
+    @Test
+    fun `rejects non-bare filenames from remote list`() {
+        val plan = RegularConfigSyncPlanner.plan(
+            targetDir,
+            listOf(
+                remoteConfig(1, "../evil.config"),
+                remoteConfig(2, "a/b.config")
+            )
+        )
+
+        assertEquals(0, plan.filesToDownload.size)
+        assertEquals(0, plan.filesToDelete.size)
+        assertEquals(0, plan.skippedCount)
+    }
 }
