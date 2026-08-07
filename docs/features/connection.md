@@ -138,6 +138,12 @@ ConnectionScreen 命令面板 (CommandPanelScreen)
                     └── executor.send(key, format, params)
 ```
 
+### 5.1.1 命令失败处理
+
+- 超时（对端不支持协议/命令、无响应）等失败由 `userFriendlyCommandError()` 映射为中文文案。
+- 失败时 `commandExecutionStates[key]` 立即置为 `isExecuting=false` 并写入 `error`，展开卡片内联展示「执行失败」；同时 `commandErrorToast` 触发 Toast 提示（同一命令重复失败也会重新提示，事件带自增 id）。
+- `executeCommand` 对同一 key 做单飞守卫，执行中重复点击被忽略；命令执行位于 `Dispatchers.IO` 协程，不阻塞主线程。
+
 ### 5.2 常用命令
 
 | 命令 | Key | 说明 |
