@@ -41,6 +41,16 @@
     "ne": "不等于 (!=)",
     "range": "在范围内 (min <= x <= max)，value 格式为 [min, max]"
   },
+  "_compute_reference": {
+    "触发条件": "F_GetMode 返回空通道数据（对端固件未实现产测计算）时，App 采集 TEST1 原始帧自动计算",
+    "compute": {
+      "gain_k": "跨阻增益 kΩ，rawdata 法计算 Ipd 必需（帧内无 Ipd pA 时，不限芯片）",
+      "led_current_ma": "LED 驱动电流 mA；GH3036 系缺省从 AGC 帧 led_current_sum(0.1mA)/10 读取（此项仅回退）；GH3220/GH3300 此项优先（AGC 位域未文档化）",
+      "sample_rate_hz": "采样率 Hz，用于 0.5Hz 高通滤波系数，默认 100"
+    },
+    "计算公式": "见 docs/features/factory.md 4.2.1 节",
+    "芯片参数": "GH3036: full_scale=2^23/offset=0/vref=1.8/tia_ratio=2；GH3220/GH3300: offset=2^23"
+  },
 
   "project": "EXAMPLE-PROJECT-NAME",
   "version": "1.0",
@@ -72,6 +82,7 @@
       "mode": 4,
       "channels": 8,
       "unit": "LSB",
+      "compute": { "sample_rate_hz": 100 },
       "global_threshold": {
         "operator": "le",
         "value": 100
@@ -83,6 +94,7 @@
       "mode": 8,
       "channels": 32,
       "unit": "LSB",
+      "compute": { "sample_rate_hz": 100 },
       "global_threshold": {
         "operator": "le",
         "value": 200
@@ -94,6 +106,7 @@
       "mode": 16,
       "channels": 32,
       "unit": "counts",
+      "compute": { "sample_rate_hz": 100 },
       "global_threshold": {
         "operator": "ge",
         "value": 100
@@ -105,6 +118,7 @@
       "mode": 32,
       "channels": 32,
       "unit": "counts",
+      "compute": { "sample_rate_hz": 100 },
       "global_threshold": {
         "operator": "le",
         "value": 4

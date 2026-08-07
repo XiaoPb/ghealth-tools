@@ -119,6 +119,31 @@ FactoryViewModel.startTest(testName)
         └── 更新 FactoryUiState
 ```
 
+### 4.2.1 App 端计算回退（F_GetMode 无数据）
+
+当硬件测试中 `F_GetMode` 返回空通道数组（对端固件未实现产测计算逻辑）时，App 自动切换到 App 端计算：使用测试窗口内采集到的 TEST1 原始帧（`ghFrameFlow` 的 `rawdata` / `phyValue` / `agcInfo`）按公式计算指标并判定。
+
+**触发条件**：`F_GetMode` 解析出的 U16 通道数组长度为 0。
+
+**计算公式**（来自「PPG数据采集通用公式与配置说明」）：
+
+- Noise（μV）= `σ_filter / full_scale × V_ref × 10^6`，`σ_filter` 为 7 阶 0.5Hz 高通滤波后数据的总体标准差
+- Ipd（nA）= `(rawdata_avg - offset) / full_scale × V_ref × 10^6 / (tia_ratio × G_k)`，帧内存在 `Ipd_pa` 时优先用（GH3036 帧提供）
+- CTR（nA/mA）= `Ipd / Iled`；`Iled`：GH3036 系优先取 AGC 帧 `led_current_sum`(0.1mA)/10（`compute.led_current_ma` 仅回退）；GH3220/GH3300 优先取 `compute.led_current_ma`（AGC 位域未文档化，仅回退并记录 WARN）
+- SNR（dB）= `20·log10((rawdata_avg - offset) / σ_filter)`（仅日志展示）
+
+**芯片参数**：`full_scale=2^23`、`vref=1.8V`、`tia_ratio=2` 为全系通用；`offset`：GH3036 为 0，GH3220/GH3300 为 2^23。
+
+**配置字段**（`factory_config.json` 各测试项 `compute` 块，均选填）：
+
+| 字段 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `gain_k` | number | 无 | 跨阻增益 kΩ；帧内无 Ipd pA 且需 rawdata 法计算时必需（不限芯片） |
+| `led_current_ma` | number | 无 | LED 电流 mA，缺省从 AGC 帧读取 |
+| `sample_rate_hz` | number | 100 | 采样率，用于 0.5Hz 高通滤波系数 |
+
+计算值以 `TestResult.computedValue` 输出到界面与 CSV；单通道无原始数据时该通道标记 FAIL 并记录 WARN 日志；整个测试窗口未采集到任何原始数据时记录 ERROR 日志且该项无结果（不会产生 FAIL 项，需人工确认）。
+
 ### 4.3 日志记录
 
 ```
