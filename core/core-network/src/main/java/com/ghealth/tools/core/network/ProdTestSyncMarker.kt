@@ -49,7 +49,10 @@ class ProdTestSyncMarker private constructor(
         val parent = markerFile.parentFile
         if (state.jsonFileName != File(state.jsonFileName).name) return null
         if (!File(parent, state.jsonFileName).isFile) return null
-        if (state.fileNames.any { name -> !File(parent, name).isFile }) return null
+        if (state.fileNames.any { name ->
+                name != File(name).name || !File(parent, name).isFile
+            }
+        ) return null
         return state
     }
 

@@ -161,4 +161,19 @@ class ProdTestSyncMarkerTest {
 
         assertNull(marker().upToDateState(7, "2026-01-01T00:00:00Z"))
     }
+
+    @Test
+    fun `not up to date when a recorded file name is not bare`() {
+        writeLocalFiles("factory_config.json")
+        writeMarker(
+            ProdTestSyncState(
+                configId = 7,
+                uploadedAt = "2026-01-01T00:00:00Z",
+                jsonFileName = "factory_config.json",
+                fileNames = listOf("factory_config.json", "../outside.config")
+            )
+        )
+
+        assertNull(marker().upToDateState(7, "2026-01-01T00:00:00Z"))
+    }
 }

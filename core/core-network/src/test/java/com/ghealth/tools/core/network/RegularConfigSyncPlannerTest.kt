@@ -145,4 +145,16 @@ class RegularConfigSyncPlannerTest {
         assertEquals(0, plan.filesToDelete.size)
         assertEquals(0, plan.skippedCount)
     }
+
+    @Test
+    fun `rejects dot and dotdot filenames from remote list`() {
+        val plan = RegularConfigSyncPlanner.plan(
+            targetDir,
+            listOf(remoteConfig(1, "."), remoteConfig(2, ".."))
+        )
+
+        assertEquals(0, plan.filesToDownload.size)
+        assertEquals(0, plan.filesToDelete.size)
+        assertEquals(0, plan.skippedCount)
+    }
 }
