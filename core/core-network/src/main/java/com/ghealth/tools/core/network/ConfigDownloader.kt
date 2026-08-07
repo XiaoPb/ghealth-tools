@@ -42,7 +42,28 @@ class ConfigDownloader @Inject constructor(
                 return@withContext Result.success(null)
             }
 
+            val marker = ProdTestSyncMarker.forDir(targetDir)
+            val upToDate = marker.upToDateState(config.id, config.uploadedAt.orEmpty())
+            if (upToDate != null) {
+                Timber.i("Prod-test config unchanged, skipping ZIP download: ${config.projectName}")
+                return@withContext Result.success(File(targetDir, upToDate.jsonFileName))
+            }
+
             val downloadedFile = downloadAndUnzipConfig(config, targetDir)
+            if (downloadedFile != null) {
+                val fileNames = targetDir.listFiles()
+                    ?.filter { it.isFile && it.name != ProdTestSyncMarker.MARKER_FILE_NAME }
+                    ?.map { it.name }
+                    ?: emptyList()
+                marker.write(
+                    ProdTestSyncState(
+                        configId = config.id,
+                        uploadedAt = config.uploadedAt.orEmpty(),
+                        jsonFileName = downloadedFile.name,
+                        fileNames = fileNames
+                    )
+                )
+            }
             Result.success(downloadedFile)
         } catch (e: Exception) {
             Timber.e(e, "Download config failed")
