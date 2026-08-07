@@ -116,4 +116,49 @@ class ProdTestSyncMarkerTest {
 
         assertFalse(File(targetDir, ".prod_test_sync.meta").exists())
     }
+
+    @Test
+    fun `not up to date when configId differs`() {
+        writeLocalFiles("factory_config.json")
+        writeMarker(
+            ProdTestSyncState(
+                configId = 7,
+                uploadedAt = "2026-01-01T00:00:00Z",
+                jsonFileName = "factory_config.json",
+                fileNames = listOf("factory_config.json")
+            )
+        )
+
+        assertNull(marker().upToDateState(8, "2026-01-01T00:00:00Z"))
+    }
+
+    @Test
+    fun `not up to date when jsonFileName does not exist`() {
+        writeLocalFiles("factory_config.json")
+        writeMarker(
+            ProdTestSyncState(
+                configId = 7,
+                uploadedAt = "2026-01-01T00:00:00Z",
+                jsonFileName = "missing.json",
+                fileNames = listOf("factory_config.json")
+            )
+        )
+
+        assertNull(marker().upToDateState(7, "2026-01-01T00:00:00Z"))
+    }
+
+    @Test
+    fun `not up to date when jsonFileName is not a bare file name`() {
+        writeLocalFiles("factory_config.json")
+        writeMarker(
+            ProdTestSyncState(
+                configId = 7,
+                uploadedAt = "2026-01-01T00:00:00Z",
+                jsonFileName = "../outside.json",
+                fileNames = listOf("factory_config.json")
+            )
+        )
+
+        assertNull(marker().upToDateState(7, "2026-01-01T00:00:00Z"))
+    }
 }
