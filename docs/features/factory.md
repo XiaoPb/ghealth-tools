@@ -148,6 +148,10 @@ FactoryViewModel.startTest(testName)
 
 **CHIP_UID（设备UUID）**：`F_GetMode` 无数据或不足 32 字节时（对端无产测逻辑），改用上位机寄存器指令读取 eFuse——按 SDK `gh_efuse_read_single` 流程依次配置 RG_EFUSE_MODE/SEL、打开 RDEN、启动 START、轮询 READ_DONE、读取 4 个 RDATA 寄存器并拼装 64bit，共读 4 段（256bit）拼装 32 字节导出两个 128bit UUID；仅 GH3036 系列芯片支持该回退，eFuse 读取失败或非 GH3036 系列时产出 2 个 FAIL 结果（错误码 0x2001/0x2002），整次产测判 FAIL。
 
+**全局回退**：CHIP_INIT 流程出现 `F_SetMode`/`F_GetMode` 失败或 `F_GetMode` 无数据时（对端无产测逻辑），后续全部测试（CHIP_UID、BASE_NOISE、PPG_NOISE、LPCTR、LPLCTR）直接使用 App 端计算，不再尝试 `F_SetMode`/`F_GetMode`；硬件测试仍执行 `download_config` 与 TEST1 原始帧采集作为 App 端计算输入。非回退模式下各测试保持原行为（设备返回数据用设备数据，单项无数据单项回退）。
+
+**SNR**：`PpgMetricsCalculator.snr` 已实现（`20·log10((rawdata_avg - offset)/σ_filter)`），App 端计算在 PPG_NOISE/BASE_NOISE 通道输出 `Noise=...μV SNR=...dB` 日志；SNR 暂不参与产测判定，后续有实际计划再接入接口。
+
 ### 4.3 日志记录
 
 ```
