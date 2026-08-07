@@ -328,7 +328,7 @@ class BleConnectionManager @Inject constructor(
     @OptIn(ExperimentalUuidApi::class)
     suspend fun connect(peripheral: Peripheral, role: DeviceRole, suppressError: Boolean = false) {
         val address = peripheral.identifier.toString()
-        if (!connectSingleFlight.tryAcquire(address)) {
+        if (!connectSingleFlight.tryAcquire(address, peripheral)) {
             Timber.w("Connect skipped for $address: already connecting/connected")
             return
         }
@@ -345,7 +345,7 @@ class BleConnectionManager @Inject constructor(
                 emitConnectionError(address, ConnectionError.ConnectionFailed(constraint.getMessage()))
             }
             connectingPeripherals.remove(address)
-            connectSingleFlight.release(address)
+            connectSingleFlight.release(address, peripheral)
             return
         }
 
@@ -371,7 +371,7 @@ class BleConnectionManager @Inject constructor(
                 break
             } catch (e: CancellationException) {
                 connectingPeripherals.remove(address)
-                connectSingleFlight.release(address)
+                connectSingleFlight.release(address, peripheral)
                 throw e
             } catch (e: Exception) {
                 lastException = e
@@ -395,7 +395,7 @@ class BleConnectionManager @Inject constructor(
             }
             connectingPeripherals.remove(address)
             updateDeviceState(address, ConnectionState.DISCONNECTED)
-            connectSingleFlight.release(address)
+            connectSingleFlight.release(address, peripheral)
             return
         }
 
@@ -1018,11 +1018,8 @@ class BleConnectionManager @Inject constructor(
             _devices.value = _devices.value - address
             Timber.d("Device disconnected and removed: $address")
         }
-        // 槽位归属：仅当没有新连接在途，或槽位仍属于本次断连的 peripheral 时才释放，
-        // 避免并发断连回调误释放新连接的槽位（否则会出现重复连接/重复订阅）。
-        if (!newConnectInFlight || slot?.peripheral === disconnectedPeripheral) {
-            connectSingleFlight.release(address)
-        }
+        // 槽位按归属释放：过期断连回调（owner 已被新连接替换）自动忽略，不误释放新连接槽位。
+        disconnectedPeripheral?.let { connectSingleFlight.release(address, it) }
     }
 
     private val _dfuState = MutableStateFlow<DfuConnectionState>(DfuConnectionState.Idle)
