@@ -1018,7 +1018,11 @@ class BleConnectionManager @Inject constructor(
             _devices.value = _devices.value - address
             Timber.d("Device disconnected and removed: $address")
         }
-        connectSingleFlight.release(address)
+        // 槽位归属：仅当没有新连接在途，或槽位仍属于本次断连的 peripheral 时才释放，
+        // 避免并发断连回调误释放新连接的槽位（否则会出现重复连接/重复订阅）。
+        if (!newConnectInFlight || slot?.peripheral === disconnectedPeripheral) {
+            connectSingleFlight.release(address)
+        }
     }
 
     private val _dfuState = MutableStateFlow<DfuConnectionState>(DfuConnectionState.Idle)

@@ -46,4 +46,13 @@ class ConnectSingleFlightTest {
         singleFlight.release("AA:BB:CC:DD:EE:FF")
         assertFalse(singleFlight.isActive("AA:BB:CC:DD:EE:FF"))
     }
+
+    @Test
+    fun `double release is idempotent and allows re-acquire`() {
+        val singleFlight = ConnectSingleFlight()
+        assertTrue(singleFlight.tryAcquire("AA:BB:CC:DD:EE:FF"))
+        singleFlight.release("AA:BB:CC:DD:EE:FF")
+        singleFlight.release("AA:BB:CC:DD:EE:FF")
+        assertTrue(singleFlight.tryAcquire("AA:BB:CC:DD:EE:FF"))
+    }
 }
