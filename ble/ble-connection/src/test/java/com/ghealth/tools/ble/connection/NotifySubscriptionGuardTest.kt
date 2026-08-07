@@ -33,4 +33,13 @@ class NotifySubscriptionGuardTest {
         guard.unregister("AA:BB:CC:DD:EE:FF")
         assertTrue(guard.tryRegister("AA:BB:CC:DD:EE:FF"))
     }
+
+    @Test
+    fun `address matching is case insensitive`() {
+        val guard = NotifySubscriptionGuard()
+        assertTrue(guard.tryRegister("AA:BB:CC:DD:EE:FF"))
+        assertFalse(guard.tryRegister("aa:bb:cc:dd:ee:ff"))
+        guard.unregister("aa:bb:cc:dd:ee:ff")
+        assertTrue(guard.tryRegister("AA:BB:CC:DD:EE:FF"))
+    }
 }

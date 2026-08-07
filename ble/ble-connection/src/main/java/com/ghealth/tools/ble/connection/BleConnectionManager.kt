@@ -724,11 +724,13 @@ class BleConnectionManager @Inject constructor(
                             Timber.i("Subscribed to notify characteristic $notifyUuidStr (service ${result.notifyServiceUuid}) for $address")
                         } catch (e: NoSuchElementException) {
                             Timber.e(e, "Notify characteristic does not support notify/indicate: $notifyUuidStr")
+                            notifySubscriptions.unregister(address)
                             emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
                             disconnectAfterFailure(address)
                             return
                         } catch (e: Exception) {
                             Timber.e(e, "Failed to observe notify characteristic: $notifyUuidStr")
+                            notifySubscriptions.unregister(address)
                             emitConnectionError(address, ConnectionError.NotifyCharacteristicNotFound)
                             disconnectAfterFailure(address)
                             return
