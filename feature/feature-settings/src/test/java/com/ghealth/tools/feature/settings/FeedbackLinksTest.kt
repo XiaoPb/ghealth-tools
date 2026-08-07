@@ -30,7 +30,7 @@ class FeedbackLinksTest {
     @Test
     fun `飞书表单地址保持不变`() {
         assertEquals(
-            "https://bcn8ovn2riae.feishu.cn/base/Fpu8b0Ikwa0bnbssYwjc1vvYnYD?from=from_copylink",
+            "https://bcn8ovn2riae.feishu.cn/share/base/form/shrcng4BNicQJWoDADDf4x3j39w",
             FeedbackLinks.FEISHU_FORM_URL
         )
     }

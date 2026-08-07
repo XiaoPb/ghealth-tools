@@ -11,7 +11,7 @@ enum class FeedbackCategory(val label: String, val description: String) {
 object FeedbackLinks {
     const val GITHUB_ISSUES_BASE = "https://github.com/XiaoPb/ghealth-tools/issues/new"
     const val FEISHU_FORM_URL =
-        "https://bcn8ovn2riae.feishu.cn/base/Fpu8b0Ikwa0bnbssYwjc1vvYnYD?from=from_copylink"
+        "https://bcn8ovn2riae.feishu.cn/share/base/form/shrcng4BNicQJWoDADDf4x3j39w"
 
     fun githubIssueUrl(category: FeedbackCategory, appVersion: String): String {
         val title = "[${category.label}] 反馈"
