@@ -19,6 +19,7 @@ object Routes {
         const val DEVICE_INFO = "device_info"
         const val FACTORY = "factory"
         const val OTA = "ota"
+        const val FEEDBACK = "feedback"
     }
 
     fun configUpload(projectId: Int, projectName: String): String =

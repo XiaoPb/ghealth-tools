@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -78,6 +79,7 @@ import com.ghealth.tools.core.ui.theme.ThemeMode
 @Composable
 fun SettingsScreen(
     onNavigateToDeviceinfo: () -> Unit = {},
+    onNavigateToFeedback: () -> Unit = {},
     onSwitchProject: () -> Unit = {},
     onNavigateToProjectManage: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
@@ -416,6 +418,14 @@ fun SettingsScreen(
                     modifier = Modifier.clickable(enabled = !state.isCheckingUpdate) {
                         viewModel.checkForUpdate()
                     },
+                    colors = listItemColors
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                ListItem(
+                    headlineContent = { Text("反馈和建议") },
+                    supportingContent = { Text("提交问题反馈或功能建议") },
+                    leadingContent = { Icon(Icons.Default.Feedback, contentDescription = null) },
+                    modifier = Modifier.clickable { onNavigateToFeedback() },
                     colors = listItemColors
                 )
             }

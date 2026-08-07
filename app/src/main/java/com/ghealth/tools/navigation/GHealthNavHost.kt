@@ -74,6 +74,7 @@ import com.ghealth.tools.feature.login.ProjectSelectionScreen
 import com.ghealth.tools.feature.login.ProjectCreateScreen
 import com.ghealth.tools.feature.login.RegisterScreen
 import com.ghealth.tools.feature.settings.DeviceInfoScreen
+import com.ghealth.tools.feature.settings.FeedbackScreen
 import com.ghealth.tools.feature.settings.SettingsScreen
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.core.model.ConnectionState
@@ -378,6 +379,17 @@ private fun WideMainLayout(
                             }
                         )
                     }
+
+                    Routes.Main.FEEDBACK -> {
+                        GHealthTopAppBar(
+                            title = "反馈和建议",
+                            navigationIcon = {
+                                IconButton(onClick = { navController.popBackStack() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                                }
+                            }
+                        )
+                    }
                     else -> {
                         TopAppBar(
                             title = {
@@ -442,6 +454,9 @@ private fun WideMainLayout(
                         onNavigateToDeviceinfo = {
                             navController.navigate(Routes.Main.DEVICE_INFO)
                         },
+                        onNavigateToFeedback = {
+                            navController.navigate(Routes.Main.FEEDBACK)
+                        },
                         onSwitchProject = onSwitchProject,
                         onNavigateToProjectManage = onNavigateToProjectManage
                     )
@@ -479,6 +494,11 @@ private fun WideMainLayout(
                     OtaScreen(
                         onNavigateBack = { navController.popBackStack() },
                         viewModel = viewModel,
+                    )
+                }
+                composable(Routes.Main.FEEDBACK) {
+                    FeedbackScreen(
+                        onNavigateBack = { navController.popBackStack() }
                     )
                 }
             }
@@ -535,6 +555,17 @@ private fun CompactMainLayout(
                         },
                         actions = {
                             otaViewModel?.let { OtaTopBarMenu(it) }
+                        }
+                    )
+                }
+
+                Routes.Main.FEEDBACK -> {
+                    GHealthTopAppBar(
+                        title = "反馈和建议",
+                        navigationIcon = {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                            }
                         }
                     )
                 }
@@ -632,6 +663,9 @@ private fun CompactMainLayout(
                     onNavigateToDeviceinfo = {
                         navController.navigate(Routes.Main.DEVICE_INFO)
                     },
+                    onNavigateToFeedback = {
+                        navController.navigate(Routes.Main.FEEDBACK)
+                    },
                     onSwitchProject = onSwitchProject,
                     onNavigateToProjectManage = onNavigateToProjectManage
                 )
@@ -669,6 +703,11 @@ private fun CompactMainLayout(
                 OtaScreen(
                     onNavigateBack = { navController.popBackStack() },
                     viewModel = viewModel,
+                )
+            }
+            composable(Routes.Main.FEEDBACK) {
+                FeedbackScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
         }
