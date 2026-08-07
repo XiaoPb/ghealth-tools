@@ -64,24 +64,28 @@ class ConfigDownloader @Inject constructor(
             }
 
             val configs = response.body()!!.data!!
-            if (targetDir.exists()) {
-                targetDir.deleteRecursively()
-            }
             targetDir.mkdirs()
 
-            for (config in configs) {
-                val filename = config.filename
-                if (filename.isBlank()) continue
+            val plan = RegularConfigSyncPlanner.plan(targetDir, configs)
+            for (staleFile in plan.filesToDelete) {
+                staleFile.delete()
+                Timber.d("Removed stale regular config: ${staleFile.name}")
+            }
 
+            for (config in plan.filesToDownload) {
                 try {
-                    val file = File(targetDir, filename)
+                    val file = File(targetDir, config.filename)
                     downloadRegularConfigFile(config.id, file)
-                    Timber.d("Downloaded regular config: $filename")
+                    Timber.d("Downloaded regular config: ${config.filename}")
                 } catch (e: Exception) {
-                    Timber.e(e, "Failed to download regular config: $filename")
+                    Timber.e(e, "Failed to download regular config: ${config.filename}")
                 }
             }
 
+            Timber.i(
+                "Regular config sync done: ${plan.filesToDownload.size} downloaded, " +
+                    "${plan.skippedCount} skipped, ${plan.filesToDelete.size} removed"
+            )
             Result.success(Unit)
         } catch (e: Exception) {
             Timber.e(e, "Download regular configs failed")
