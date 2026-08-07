@@ -5,8 +5,10 @@ import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_GET_MODE
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_SET_MODE
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_READ_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_SW_FUNCTION_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH_SET_WORK_MODE_CMD
+import com.ghealth.tools.ble.protocol.gh3036.CommandPayloadBuilder
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import com.ghealth.tools.ble.protocol.rpccore.Package
@@ -217,9 +219,26 @@ class FactoryTestEngine @Inject constructor(
         val maxChannels = testDef.channels
 
         if (actualChannels == 0) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN, "${testType.displayName}: 设备未返回通道数据"))
-            onEvent(TestEngineEvent.TestCompleted(testType, emptyList()))
-            return emptyList()
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                "${testType.displayName}: 设备未返回通道数据，尝试寄存器读写校验通信"))
+            val readBack = verifyChipCommunication(deviceAddress, onEvent)
+            val passed = readBack == CHIP_COMM_CHECK_REG_VALUE
+            val result = TestResult(
+                testType = testType,
+                channelIndex = 0,
+                value = if (passed) readBack ?: 0 else 0,
+                unit = testDef.unit,
+                threshold = if (readBack == null) "-" else "=0x%04X".format(CHIP_COMM_CHECK_REG_VALUE),
+                passed = passed,
+                displayValue = readBack?.let { "0x%04X".format(it) }
+            )
+            onEvent(TestEngineEvent.LogMessage(
+                if (passed) LogLevel.INFO else LogLevel.ERROR,
+                "${testType.displayName}: 寄存器读写校验${if (passed) "通过" else "失败"}" +
+                    (if (readBack == null) "（写入或回读失败）" else "（回读0x%04X，期望0x%04X）".format(readBack, CHIP_COMM_CHECK_REG_VALUE))
+            ))
+            onEvent(TestEngineEvent.TestCompleted(testType, listOf(result)))
+            return listOf(result)
         }
 
         if (actualChannels < maxChannels) {
@@ -551,10 +570,42 @@ class FactoryTestEngine @Inject constructor(
         }
     }
 
+    /** 写入通信校验寄存器并回读，返回回读值；写入/读取任一步失败返回 null。 */
+    private suspend fun verifyChipCommunication(
+        deviceAddress: String,
+        onEvent: suspend (TestEngineEvent) -> Unit
+    ): Int? {
+        val writeParam = RegisterCommandPayloadBuilder.buildU16ArrayPayload(
+            intArrayOf(CHIP_COMM_CHECK_REG_ADDR, CHIP_COMM_CHECK_REG_VALUE)
+        )
+        val writeResult = sendSimpleCommand(deviceAddress, KEY_GH3X_REGS_LIST_WRITE_CMD, writeParam)
+        if (writeResult.isFailure) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                "${TestType.CHIP_INIT.displayName}: 通信校验寄存器写入失败"))
+            return null
+        }
+        val readParam = CommandPayloadBuilder.buildMultiRegReadParams(
+            CHIP_COMM_CHECK_REG_ADDR.toString(16).padStart(4, '0'), "1"
+        )
+        val readResult = sendSimpleCommand(deviceAddress, KEY_GH3X_REGS_READ_CMD, readParam)
+        if (readResult.isFailure) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                "${TestType.CHIP_INIT.displayName}: 通信校验寄存器读取失败"))
+            return null
+        }
+        return parseU16ArrayResponse(readResult.getOrThrow()).firstOrNull()
+    }
+
     private fun getTest1FuncMode(chip: String): Int {
         val bits = Gh3036CommandMeta.getFuncModeBits(chip)
         val test1Bit = bits.firstOrNull { it.name == "TEST1" } ?: return 0x40
         return 1 shl test1Bit.bit
+    }
+
+    companion object {
+        /** CHIP_INIT 通信校验寄存器（来自 GH3036 产测配置）：FIFO_WATER_LINE:25, RG_FIFO_READ_INT_TIMER:0.4s */
+        const val CHIP_COMM_CHECK_REG_ADDR = 0x0020
+        const val CHIP_COMM_CHECK_REG_VALUE = 0x2919
     }
 
 }

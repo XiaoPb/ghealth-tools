@@ -2,12 +2,16 @@ package com.ghealth.tools.feature.factory.engine
 
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_GET_MODE
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_READ_CMD
+import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import com.ghealth.tools.feature.factory.model.FactoryConfig
 import com.ghealth.tools.feature.factory.model.TestDef
 import com.ghealth.tools.feature.factory.model.TestResult
 import com.ghealth.tools.feature.factory.model.TestType
 import io.mockk.Runs
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -35,6 +39,18 @@ class FactoryTestEngineTest {
         tests = mapOf("base_noise" to baseNoiseDef)
     )
 
+    private val chipInitConfig = FactoryConfig(
+        project = "test",
+        tests = mapOf(
+            "chip_init" to TestDef(
+                enabled = true,
+                mode = TestType.CHIP_INIT.mode,
+                channels = 1,
+                unit = "status"
+            )
+        )
+    )
+
     /** F_GetMode 返回空（长度字段 0），其余命令成功返回空数组。 */
     private fun defaultManager(): BleConnectionManager {
         val manager = mockk<BleConnectionManager>()
@@ -50,12 +66,15 @@ class FactoryTestEngineTest {
         return collector
     }
 
-    private suspend fun runSequence(engine: FactoryTestEngine): List<TestEngineEvent> {
+    private suspend fun runSequence(
+        engine: FactoryTestEngine,
+        config: FactoryConfig = baseNoiseConfig
+    ): List<TestEngineEvent> {
         val events = mutableListOf<TestEngineEvent>()
         engine.runTestSequence(
             deviceAddress = "AA:BB",
             chip = "gh3036",
-            factoryConfig = baseNoiseConfig,
+            factoryConfig = config,
             registerConfigs = emptyMap(),
             onEvent = { events.add(it) }
         )
@@ -139,5 +158,144 @@ class FactoryTestEngineTest {
         assertEquals(0, result.channelIndex)
         val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
         assertTrue(sequence.overallPassed)
+    }
+
+    @Test
+    fun `CHIP_INIT 空数据时寄存器回读一致则 PASS`() = runTest {
+        val manager = defaultManager()
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(
+            FactoryTestEngine(manager, collector, evaluator),
+            config = chipInitConfig
+        )
+
+        coVerify(exactly = 1) {
+            manager.sendCommand(
+                any(),
+                KEY_GH3X_REGS_LIST_WRITE_CMD,
+                RegisterCommandPayloadBuilder.buildU16ArrayPayload(intArrayOf(0x0020, 0x2919))
+            )
+        }
+        coVerify(exactly = 1) {
+            manager.sendCommand(
+                any(),
+                KEY_GH3X_REGS_READ_CMD,
+                byteArrayOf(0x20, 0x00, 0x01, 0x00, 0x00, 0x00)
+            )
+        }
+
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.CHIP_INIT }
+        assertEquals(1, completed.results.size)
+        val result = completed.results.single()
+        assertTrue(result.passed)
+        assertEquals(0x2919, result.value)
+        assertEquals("0x2919", result.displayValue)
+        assertEquals("=0x2919", result.threshold)
+        assertEquals(0, result.channelIndex)
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertTrue(sequence.overallPassed)
+    }
+
+    @Test
+    fun `CHIP_INIT 空数据时寄存器回读不一致则 FAIL`() = runTest {
+        val manager = defaultManager()
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x34, 0x12))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(
+            FactoryTestEngine(manager, collector, evaluator),
+            config = chipInitConfig
+        )
+
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.CHIP_INIT }
+        val result = completed.results.single()
+        assertFalse(result.passed)
+        assertEquals(0, result.value)
+        assertEquals("0x1234", result.displayValue)
+        assertEquals("=0x2919", result.threshold)
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertFalse(sequence.overallPassed)
+        assertEquals(listOf(TestType.CHIP_INIT.errorBase), sequence.errorCodes)
+    }
+
+    @Test
+    fun `CHIP_INIT 空数据时寄存器写入失败则 FAIL`() = runTest {
+        val manager = defaultManager()
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_LIST_WRITE_CMD, any()) } returns
+            Result.failure(IllegalStateException("write failed"))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(
+            FactoryTestEngine(manager, collector, evaluator),
+            config = chipInitConfig
+        )
+
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.CHIP_INIT }
+        val result = completed.results.single()
+        assertFalse(result.passed)
+        assertEquals(0, result.value)
+        assertNull(result.displayValue)
+        assertEquals("-", result.threshold)
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertFalse(sequence.overallPassed)
+        assertEquals(listOf(TestType.CHIP_INIT.errorBase), sequence.errorCodes)
+    }
+
+    @Test
+    fun `CHIP_INIT 空数据时寄存器读取失败则 FAIL`() = runTest {
+        val manager = defaultManager()
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.failure(IllegalStateException("read failed"))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(
+            FactoryTestEngine(manager, collector, evaluator),
+            config = chipInitConfig
+        )
+
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.CHIP_INIT }
+        val result = completed.results.single()
+        assertFalse(result.passed)
+        assertEquals(0, result.value)
+        assertNull(result.displayValue)
+        assertEquals("-", result.threshold)
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertFalse(sequence.overallPassed)
+        assertEquals(listOf(TestType.CHIP_INIT.errorBase), sequence.errorCodes)
+    }
+
+    @Test
+    fun `CHIP_INIT 空数据时寄存器读取成功但响应为空则 FAIL`() = runTest {
+        val manager = defaultManager()
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(
+            FactoryTestEngine(manager, collector, evaluator),
+            config = chipInitConfig
+        )
+
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.CHIP_INIT }
+        val result = completed.results.single()
+        assertFalse(result.passed)
+        assertEquals(0, result.value)
+        assertNull(result.displayValue)
+        assertEquals("-", result.threshold)
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertFalse(sequence.overallPassed)
+        assertEquals(listOf(TestType.CHIP_INIT.errorBase), sequence.errorCodes)
     }
 }
