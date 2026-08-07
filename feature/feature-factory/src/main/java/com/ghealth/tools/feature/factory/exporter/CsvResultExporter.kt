@@ -90,6 +90,10 @@ class CsvResultExporter @Inject constructor() {
 
     private fun getChannelValue(results: List<TestResult>, channel: Int): String {
         val r = results.find { it.channelIndex == channel }
-        return if (r != null) r.value.toString() else "0"
+        return when {
+            r == null -> "0"
+            r.computedValue != null -> TestResult.formatComputed(r.computedValue)
+            else -> r.value.toString()
+        }
     }
 }
