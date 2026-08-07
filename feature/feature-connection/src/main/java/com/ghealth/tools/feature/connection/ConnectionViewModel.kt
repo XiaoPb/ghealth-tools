@@ -22,6 +22,7 @@ import com.ghealth.tools.core.model.WorkMode
 import com.ghealth.tools.feature.factory.model.RegEntry
 import com.ghealth.tools.feature.factory.parser.RegisterConfigParser
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,6 +76,7 @@ data class ConnectionUiState(
     val isBluetoothEnabled: Boolean = true,
     val hasPermissions: Boolean = true,
     val commandExecutionStates: Map<String, CommandExecutionState> = emptyMap(),
+    val commandErrorToast: CommandErrorToast? = null,
     val showTestConfigDialog: Boolean = false,
     val masterDeviceName: String? = null,
     val dataMonitorState: DataMonitorState = DataMonitorState(),
@@ -364,15 +366,22 @@ class ConnectionViewModel @Inject constructor(
             .find { it.value.role == DeviceRole.MASTER }?.key
 
         if (masterAddress == null) {
+            val errorMessage = "未连接主设备"
             _uiState.update {
                 it.copy(
                     commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                         isExecuting = false,
-                        error = "未连接主设备",
+                        error = errorMessage,
                         commandKey = key
                     ))
                 )
             }
+            showCommandErrorToast(errorMessage)
+            return
+        }
+
+        if (_uiState.value.commandExecutionStates[key]?.isExecuting == true) {
+            Timber.w("Command already executing, ignoring duplicate: $key")
             return
         }
 
@@ -402,30 +411,49 @@ class ConnectionViewModel @Inject constructor(
                     },
                     onFailure = { error ->
                         Timber.e(error, "Command execution failed: $key")
+                        val errorMessage = userFriendlyCommandError(error, key)
                         _uiState.update {
                             it.copy(
                                 commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                                     isExecuting = false,
-                                    error = error.message ?: "命令执行失败",
+                                    error = errorMessage,
                                     commandKey = key
                                 ))
                             )
                         }
+                        showCommandErrorToast(errorMessage)
                     }
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "Command execution failed: $key")
+                val errorMessage = userFriendlyCommandError(e, key)
                 _uiState.update {
                     it.copy(
                         commandExecutionStates = it.commandExecutionStates + (key to CommandExecutionState(
                             isExecuting = false,
-                            error = e.message ?: "命令执行失败",
+                            error = errorMessage,
                             commandKey = key
                         ))
                     )
                 }
+                showCommandErrorToast(errorMessage)
             }
         }
+    }
+
+    private var commandErrorToastId = 0L
+
+    private fun showCommandErrorToast(message: String) {
+        commandErrorToastId += 1
+        _uiState.update {
+            it.copy(commandErrorToast = CommandErrorToast(id = commandErrorToastId, message = message))
+        }
+    }
+
+    fun dismissCommandErrorToast() {
+        _uiState.update { it.copy(commandErrorToast = null) }
     }
 
     fun clearCommandResults() {

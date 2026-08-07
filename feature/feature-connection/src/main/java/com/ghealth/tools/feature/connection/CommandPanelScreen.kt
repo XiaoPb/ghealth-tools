@@ -99,6 +99,11 @@ data class CommandExecutionState(
     }
 }
 
+data class CommandErrorToast(
+    val id: Long,
+    val message: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CommandPanelScreen(
