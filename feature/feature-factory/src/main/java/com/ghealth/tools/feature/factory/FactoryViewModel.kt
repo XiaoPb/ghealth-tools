@@ -349,7 +349,7 @@ class FactoryViewModel @Inject constructor(
             deviceAddress = state.deviceAddress,
             results = state.results,
             uuid = uidResults.joinToString("") { it.displayValue ?: "" },
-            chipInitStatus = initResults.firstOrNull()?.value?.toString() ?: ""
+            chipInitStatus = initResults.firstOrNull()?.formattedValue ?: ""
         )
 
         val file = csvExporter.export(summary, baseDir)
