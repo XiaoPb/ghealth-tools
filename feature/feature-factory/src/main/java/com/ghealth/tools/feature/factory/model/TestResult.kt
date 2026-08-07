@@ -1,4 +1,5 @@
 package com.ghealth.tools.feature.factory.model
+import java.util.Locale
 
 enum class TestType(
     val displayName: String,
@@ -26,11 +27,19 @@ data class TestResult(
     val threshold: String,
     val passed: Boolean,
     val errorCode: Int = 0,
-    val displayValue: String? = null
+    val displayValue: String? = null,
+    val computedValue: Double? = null
 ) {
     val errorCodeComputed: Int
         get() = if (passed) 0 else testType.errorBase + channelIndex
 
     val formattedValue: String
-        get() = displayValue ?: value.toString()
+        get() = displayValue ?: computedValue?.let { formatComputed(it) } ?: value.toString()
+
+    companion object {
+        /** 计算值格式化：最多 3 位小数，去掉末尾 0；NaN/Inf 显示 N/A。 */
+        fun formatComputed(value: Double): String =
+            if (value.isNaN() || value.isInfinite()) "N/A"
+            else String.format(Locale.US, "%.3f", value).trimEnd('0').trimEnd('.')
+    }
 }

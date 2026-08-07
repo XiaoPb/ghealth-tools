@@ -1,5 +1,6 @@
 package com.ghealth.tools.feature.factory.model
 
+import java.util.Locale
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
@@ -19,6 +20,19 @@ data class GlobalConfig(
     @Json(name = "fail_action") val failAction: String = "continue"
 )
 
+/**
+ * App 端计算回退配置（F_GetMode 无数据时按公式计算）。
+ */
+@JsonClass(generateAdapter = false)
+data class AppComputeConfig(
+    /** 跨阻增益 kΩ，rawdata 法计算 Ipd（公式1）必需。 */
+    @Json(name = "gain_k") val gainK: Double? = null,
+    /** LED 驱动电流 mA；缺省从 AGC 帧 led_current_sum(0.1mA)/10 读取。 */
+    @Json(name = "led_current_ma") val ledCurrentMa: Double? = null,
+    /** 采样率 Hz，用于 0.5Hz 高通滤波系数，默认 100。 */
+    @Json(name = "sample_rate_hz") val sampleRateHz: Int = 100
+)
+
 @JsonClass(generateAdapter = false)
 data class TestDef(
     val enabled: Boolean = true,
@@ -26,7 +40,8 @@ data class TestDef(
     val mode: Int = 0,
     val channels: Int = 1,
     val unit: String = "",
-    @Json(name = "global_threshold") val globalThreshold: ThresholdDef? = null
+    @Json(name = "global_threshold") val globalThreshold: ThresholdDef? = null,
+    @Json(name = "compute") val compute: AppComputeConfig? = null
 )
 
 @JsonClass(generateAdapter = false)
@@ -52,6 +67,29 @@ data class ThresholdDef(
         val max = when (val v = list[1]) {
             is Double -> v.toInt()
             is Int -> v
+            else -> return null
+        }
+        return min to max
+    }
+
+    fun getSingleValueDouble(): Double? = when (val v = value) {
+        is Double -> v
+        is Int -> v.toDouble()
+        is String -> v.toDoubleOrNull()
+        else -> null
+    }
+
+    fun getRangeDouble(): Pair<Double, Double>? {
+        val list = value as? List<*> ?: return null
+        if (list.size < 2) return null
+        val min = when (val v = list[0]) {
+            is Double -> v
+            is Int -> v.toDouble()
+            else -> return null
+        }
+        val max = when (val v = list[1]) {
+            is Double -> v
+            is Int -> v.toDouble()
             else -> return null
         }
         return min to max
@@ -100,4 +138,29 @@ enum class ThresholdOperator(val key: String, val display: String) {
         }
         else -> "${display}${threshold.getSingleValue() ?: "?"}"
     }
+
+    fun evaluate(value: Double, threshold: ThresholdDef): Boolean = when (this) {
+        LT -> value < (threshold.getSingleValueDouble() ?: return false)
+        LE -> value <= (threshold.getSingleValueDouble() ?: return false)
+        GT -> value > (threshold.getSingleValueDouble() ?: return false)
+        GE -> value >= (threshold.getSingleValueDouble() ?: return false)
+        EQ -> value == (threshold.getSingleValueDouble() ?: return false)
+        NE -> value != (threshold.getSingleValueDouble() ?: return false)
+        RANGE -> {
+            val (min, max) = threshold.getRangeDouble() ?: return false
+            value in min..max
+        }
+    }
+
+    fun formatThresholdDouble(threshold: ThresholdDef): String = when (this) {
+        RANGE -> {
+            val (min, max) = threshold.getRangeDouble() ?: return "?"
+            "${display}[${formatNumber(min)}, ${formatNumber(max)}]"
+        }
+        else -> "${display}${threshold.getSingleValueDouble()?.let { formatNumber(it) } ?: "?"}"
+    }
+
+    private fun formatNumber(value: Double): String =
+        if (value == value.toLong().toDouble()) value.toLong().toString()
+        else String.format(Locale.US, "%.3f", value).trimEnd('0').trimEnd('.')
 }
