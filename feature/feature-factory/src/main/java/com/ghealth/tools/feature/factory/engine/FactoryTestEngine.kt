@@ -42,7 +42,8 @@ enum class LogLevel { INFO, WARN, ERROR }
 class FactoryTestEngine @Inject constructor(
     private val connectionManager: BleConnectionManager,
     private val rawDataCollector: TestRawDataCollector,
-    private val appSideEvaluator: AppSideTestEvaluator
+    private val appSideEvaluator: AppSideTestEvaluator,
+    private val efuseReader: EfuseReader
 ) {
 
     private val environmentResumeMutex = Mutex(locked = true)
@@ -94,13 +95,15 @@ class FactoryTestEngine @Inject constructor(
             } else if (failAction == "abort") return
 
             // Step 3: CHIP_UID
-            val chipUidResults = runUidTest(
-                deviceAddress, onEvent, currentStep, totalSteps
-            )
-            if (chipUidResults != null) {
-                currentStep++
-                allResults[TestType.CHIP_UID] = chipUidResults
-            } else if (failAction == "abort") return
+            if (factoryConfig.tests["chip_uid"]?.enabled != false) {
+                val chipUidResults = runUidTest(
+                    deviceAddress, chip, onEvent, currentStep, totalSteps
+                )
+                if (chipUidResults != null) {
+                    currentStep++
+                    allResults[TestType.CHIP_UID] = chipUidResults
+                } else if (failAction == "abort") return
+            }
 
             // Step 4: Run each hardware test in order
             val hwTestOrder = listOf(TestType.BASE_NOISE, TestType.PPG_NOISE, TestType.LPCTR, TestType.LPLCTR)
@@ -281,6 +284,7 @@ class FactoryTestEngine @Inject constructor(
 
     private suspend fun runUidTest(
         deviceAddress: String,
+        chip: String,
         onEvent: suspend (TestEngineEvent) -> Unit,
         stepIndex: Int,
         totalSteps: Int
@@ -295,35 +299,37 @@ class FactoryTestEngine @Inject constructor(
             deviceAddress, KEY_F_SET_MODE,
             Package.packU8(testType.mode.toByte())
         )
-        if (setResult.isFailure) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_SetMode 失败"))
-            return null
+        if (setResult.isSuccess) {
+            delay(500)
         }
 
-        delay(500)
-
-        // F_GetMode — returns u16 array, each u16 is 2 bytes LE
+        // F_GetMode — 产测命令读不到数据时（对端无产测逻辑），改用上位机寄存器指令读取 eFuse
         val getResult = sendSimpleCommand(
             deviceAddress, KEY_F_GET_MODE,
             Package.packU8(testType.mode.toByte())
         )
-        if (getResult.isFailure) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_GetMode 失败"))
-            return null
-        }
-
-        val u16Values = parseU16ArrayResponse(getResult.getOrThrow())
-        if (u16Values.size < 16) {
+        val rawBytes: ByteArray
+        if (setResult.isFailure) {
             onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                "${testType.displayName}: 预期32字节UUID数据，实际${u16Values.size * 2}字节"))
-            return null
-        }
-
-        // Reconstruct 32 raw bytes from 16 u16 LE values
-        val rawBytes = ByteArray(u16Values.size * 2)
-        for (i in u16Values.indices) {
-            rawBytes[i * 2] = (u16Values[i] and 0xFF).toByte()
-            rawBytes[i * 2 + 1] = ((u16Values[i] shr 8) and 0xFF).toByte()
+                "${testType.displayName}: F_SetMode 失败，改用上位机寄存器指令读取 eFuse"))
+            rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
+        } else if (getResult.isSuccess) {
+            val u16Values = parseU16ArrayResponse(getResult.getOrThrow())
+            if (u16Values.size >= 16) {
+                rawBytes = ByteArray(u16Values.size * 2)
+                for (i in u16Values.indices) {
+                    rawBytes[i * 2] = (u16Values[i] and 0xFF).toByte()
+                    rawBytes[i * 2 + 1] = ((u16Values[i] shr 8) and 0xFF).toByte()
+                }
+            } else {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                    "${testType.displayName}: F_GetMode 返回 ${u16Values.size * 2} 字节，不足32字节，改用上位机寄存器指令读取 eFuse"))
+                rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
+            }
+        } else {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                "${testType.displayName}: F_GetMode 失败，改用上位机寄存器指令读取 eFuse"))
+            rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
         }
 
         // Two 128-bit UUIDs
@@ -363,6 +369,42 @@ class FactoryTestEngine @Inject constructor(
 
         onEvent(TestEngineEvent.TestCompleted(testType, results))
         return results
+    }
+
+    /** 通过上位机寄存器指令读取 eFuse 256bit 作为 UUID 载荷；非 GH3036 系列或读取失败返回 null。 */
+    private suspend fun readUuidFromEfuse(
+        deviceAddress: String,
+        chip: String,
+        onEvent: suspend (TestEngineEvent) -> Unit
+    ): ByteArray? {
+        val normalized = chip.lowercase()
+        if (!normalized.startsWith("gh3036") && !normalized.startsWith("gh3038")) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
+                "${TestType.CHIP_UID.displayName}: 非 GH3036 系列芯片（$chip）暂不支持 eFuse 回退"))
+            return null
+        }
+        val bytes = efuseReader.readAll(deviceAddress)
+        if (bytes == null) {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                "${TestType.CHIP_UID.displayName}: eFuse 读取失败"))
+        } else {
+            onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+                "${TestType.CHIP_UID.displayName}: eFuse 读取成功: ${bytes.joinToString("") { "%02X".format(it) }}"))
+        }
+        return bytes
+    }
+
+    /** eFuse 回退失败时产出 2 个合成 FAIL 结果，避免空窗口静默通过。 */
+    private suspend fun failedUidResults(
+        testType: TestType,
+        onEvent: suspend (TestEngineEvent) -> Unit
+    ): List<TestResult> {
+        val failed = listOf(
+            TestResult(testType = testType, channelIndex = 0, value = 0, unit = "", threshold = "-", passed = false),
+            TestResult(testType = testType, channelIndex = 1, value = 0, unit = "", threshold = "-", passed = false)
+        )
+        onEvent(TestEngineEvent.TestCompleted(testType, failed))
+        return failed
     }
 
     private fun formatUuid128(bytes: ByteArray): String {
