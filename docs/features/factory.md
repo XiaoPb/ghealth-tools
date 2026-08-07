@@ -146,6 +146,8 @@ FactoryViewModel.startTest(testName)
 
 **CHIP_INIT（芯片初始化）**：`F_GetMode` 无数据时改为寄存器读写校验通信——写入 `{0x0020, 0x2919}`（FIFO_WATER_LINE:25, RG_FIFO_READ_INT_TIMER:0.4s，取自 GH3036 产测配置）并回读，一致则 PASS（通信正常），写入/读取失败或回读不一致则 FAIL；校验寄存器为引擎常量（`CHIP_COMM_CHECK_REG_ADDR` / `CHIP_COMM_CHECK_REG_VALUE`），其它芯片如需调整可修改常量。
 
+**CHIP_UID（设备UUID）**：`F_GetMode` 无数据或不足 32 字节时（对端无产测逻辑），改用上位机寄存器指令读取 eFuse——按 SDK `gh_efuse_read_single` 流程依次配置 RG_EFUSE_MODE/SEL、打开 RDEN、启动 START、轮询 READ_DONE、读取 4 个 RDATA 寄存器并拼装 64bit，共读 4 段（256bit）拼装 32 字节导出两个 128bit UUID；仅 GH3036 系列芯片支持该回退，eFuse 读取失败或非 GH3036 系列时产出 2 个 FAIL 结果（错误码 0x2001/0x2002），整次产测判 FAIL。
+
 ### 4.3 日志记录
 
 ```
