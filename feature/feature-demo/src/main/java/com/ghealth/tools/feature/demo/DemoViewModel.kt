@@ -155,6 +155,7 @@ class DemoViewModel @Inject constructor(
     }
 
     private val buffers = FunctionDataBuffers(BUFFER_CAPACITY)
+    private val frameDeduper = FrameDeduper()
     private var autoRecordingStopped = false
     private val lastColumnValues = mutableMapOf<FunctionMode, MutableMap<String, Any?>>()
     private val algoNonZeroSeen = mutableMapOf<String, Boolean>()
@@ -242,6 +243,7 @@ class DemoViewModel @Inject constructor(
     private fun resetAllData() {
         _uiState.update { it.clearReceivedData() }
         buffers.clear()
+        frameDeduper.clear()
         lastColumnValues.clear()
         algoNonZeroSeen.clear()
         lastAlgoResultsByRole.clear()
@@ -371,6 +373,9 @@ class DemoViewModel @Inject constructor(
 
     private fun onFrameReceived(deviceAddress: String, frame: GhFuncFrame) {
         val funcMode = frame.funcId.toFunctionMode() ?: return
+        if (frameDeduper.isDuplicate(deviceAddress, funcMode, frame.frameCnt, frame.timestamp)) {
+            return
+        }
 
         detectChipType()
 
