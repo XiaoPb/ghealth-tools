@@ -46,6 +46,7 @@ class RegularConfigSyncPlannerTest {
         assertEquals(0, plan.filesToDownload.size)
         assertEquals(0, plan.filesToDelete.size)
         assertEquals(1, plan.skippedCount)
+        assertEquals(listOf("gh3036.config"), plan.filesSkipped.map { it.filename })
     }
 
     @Test

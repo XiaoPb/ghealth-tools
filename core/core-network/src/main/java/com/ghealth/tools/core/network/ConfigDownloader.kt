@@ -43,11 +43,24 @@ class ConfigDownloader @Inject constructor(
             }
 
             val marker = ProdTestSyncMarker.forDir(targetDir)
+            val markerState = marker.read()
             val upToDate = marker.upToDateState(config.id, config.uploadedAt.orEmpty())
             if (upToDate != null) {
                 Timber.i("Prod-test config unchanged, skipping ZIP download: ${config.projectName}")
                 return@withContext Result.success(File(targetDir, upToDate.jsonFileName))
             }
+            val recordedFilesPresent = markerState?.let { state ->
+                File(targetDir, state.jsonFileName).isFile &&
+                    state.fileNames.all { name ->
+                        name == File(name).name && File(targetDir, name).isFile
+                    }
+            } ?: false
+            Timber.d(
+                "Prod-test config needs download: ${config.projectName} " +
+                    "(marker=${markerState?.let { "id=${it.configId}, uploadedAt=${it.uploadedAt}" } ?: "absent"}, " +
+                    "recordedFilesPresent=$recordedFilesPresent, " +
+                    "remote=id=${config.id}, uploadedAt=${config.uploadedAt.orEmpty()})"
+            )
 
             val downloadedFile = downloadAndUnzipConfig(config, targetDir)
             if (downloadedFile != null) {
@@ -93,11 +106,19 @@ class ConfigDownloader @Inject constructor(
                 Timber.d("Removed stale regular config: ${staleFile.name}")
             }
 
+            for (config in plan.filesSkipped) {
+                val local = File(targetDir, config.filename)
+                Timber.d(
+                    "Skipped regular config (local=${local.length()}B, remote=${config.fileSize}B): ${config.filename}"
+                )
+            }
             for (config in plan.filesToDownload) {
+                val local = File(targetDir, config.filename)
+                val reason = if (local.isFile) "size mismatch" else "missing locally"
                 try {
                     val file = File(targetDir, config.filename)
                     downloadRegularConfigFile(config.id, file)
-                    Timber.d("Downloaded regular config: ${config.filename}")
+                    Timber.d("Downloaded regular config ($reason): ${config.filename}")
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to download regular config: ${config.filename}")
                 }

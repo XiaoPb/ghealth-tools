@@ -15,6 +15,7 @@
 | `TokenManager` | `TokenManager.kt` | JWT Token 获取与刷新 |
 | `AuthAuthenticator` | `AuthAuthenticator.kt` | OkHttp Authenticator (Token 过期自动刷新) |
 | `AuthInterceptor` | `AuthInterceptor.kt` | OkHttp Interceptor (添加 Authorization Header) |
+| `PrimaryEndpointInterceptor` | `PrimaryEndpointInterceptor.kt` | 业务请求优先主端点（api.health.xiaopb.cn:8861），IOException 时回退转发端点（api.xiaopb.cn） |
 | `NetworkMonitor` | `NetworkMonitor.kt` | 网络连接状态监测 |
 | `ConfigDownloader` | `ConfigDownloader.kt` | 寄存器配置文件下载 |
 | `ConfigSyncManager` | `ConfigSyncManager.kt` | 配置同步到设备 |
@@ -22,6 +23,12 @@
 | `ApiErrorParser` | `ApiErrorParser.kt` | API 错误响应解析 |
 | `ApiModels` | `model/ApiModels.kt` | API 请求/响应数据模型 |
 | `NetworkModule` | `di/NetworkModule.kt` | Hilt DI 配置 |
+
+### 2.1 域名策略
+
+- 登录：`AuthRepository` 优先 `https://api.health.xiaopb.cn:8861/api/`（primary，3s 超时），失败回退 `https://api.xiaopb.cn/api/`。
+- 业务请求（projects、configs、download、upload、token refresh）：经 `PrimaryEndpointInterceptor` 优先走 primary，仅网络层失败（IOException）回退 xiaopb；HTTP 4xx/5xx 不回退。
+- `/api/login/` 不经过拦截器改写，登录回退由 `AuthRepository` 统一处理。
 
 ## 3. 网络层架构
 
