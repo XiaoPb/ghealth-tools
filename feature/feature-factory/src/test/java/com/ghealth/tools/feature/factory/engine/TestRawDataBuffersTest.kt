@@ -103,4 +103,22 @@ class TestRawDataBuffersTest {
         buffers.addFrame(frame(frameCnt = Int.MIN_VALUE))
         assertEquals(2, buffers.lastConsecutiveCount())
     }
+
+    @Test
+    fun `lastConsecutiveCount 重复帧号不视为连续`() {
+        val buffers = TestRawDataBuffers()
+        buffers.addFrame(frame(frameCnt = 5))
+        buffers.addFrame(frame(frameCnt = 5))
+        buffers.addFrame(frame(frameCnt = 5))
+        assertEquals(1, buffers.lastConsecutiveCount())
+    }
+
+    @Test
+    fun `快照 frameCnts 独立于后续采集`() {
+        val buffers = TestRawDataBuffers()
+        buffers.addFrame(frame(frameCnt = 1))
+        val data = buffers.snapshot()
+        buffers.addFrame(frame(frameCnt = 2))
+        assertEquals(listOf(1), data.frameCnts)
+    }
 }
