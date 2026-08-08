@@ -148,7 +148,9 @@ class RpcCore(
         val effectiveFrameIdx = if (frameIdx == LAST_FRAME_INDEX) 0 else frameIdx
 
         try {
-            multiFrameBuffer.addFrame(0, effectiveFrameIdx, data)
+            // 末片（fin=true）不参与 frameIdx 序号校验：单帧消息即为完整消息，
+            // 多帧消息即为最后一片，一律直接拼接后整体投递。
+            multiFrameBuffer.addFrame(0, effectiveFrameIdx, data, isFin)
 
             if (!multiFrameBuffer.isComplete(isFin)) {
                 return
@@ -358,10 +360,16 @@ private class MultiFrameBuffer {
     private val frames = mutableListOf<FrameBuffer>()
     private var expectedFrameIdx: Byte = 0
 
-    fun addFrame(invokeIdx: Byte, frameIdx: Byte, data: ByteArray) {
+    fun addFrame(invokeIdx: Byte, frameIdx: Byte, data: ByteArray, isFin: Boolean = false) {
         if (frames.isNotEmpty() && frames[0].invokeIdx != invokeIdx) {
             frames.clear()
             expectedFrameIdx = 0
+        }
+
+        if (isFin) {
+            frames.add(FrameBuffer(invokeIdx, frameIdx, data))
+            expectedFrameIdx = (expectedFrameIdx + 1).toByte()
+            return
         }
 
         if (frameIdx == expectedFrameIdx) {
