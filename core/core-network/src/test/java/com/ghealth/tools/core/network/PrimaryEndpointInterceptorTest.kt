@@ -69,6 +69,7 @@ class PrimaryEndpointInterceptorTest {
         assertEquals("fallback-ok", response.body?.string())
         assertEquals(1, primary.requestCount)
         assertEquals(1, fallback.requestCount)
+        assertEquals("/api/projects/", fallback.takeRequest().path)
     }
 
     @Test
@@ -100,6 +101,34 @@ class PrimaryEndpointInterceptorTest {
             assertEquals(0, fallback.requestCount)
         } finally {
             other.shutdown()
+        }
+    }
+
+    @Test
+    fun `does not fall back when primary returns an HTTP error`() {
+        primary.enqueue(MockResponse().setResponseCode(500))
+        fallback.enqueue(MockResponse().setResponseCode(200).setBody("fallback-ok"))
+
+        val response = newClient().newCall(
+            Request.Builder().url(fallback.url("/api/projects/")).build()
+        ).execute()
+
+        assertEquals(500, response.code)
+        assertEquals(1, primary.requestCount)
+        assertEquals(0, fallback.requestCount)
+    }
+
+    @Test
+    fun `propagates IOException when primary and fallback both fail`() {
+        primary.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        fallback.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+
+        val call = newClient().newCall(
+            Request.Builder().url(fallback.url("/api/projects/")).build()
+        )
+
+        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException::class.java) {
+            call.execute().close()
         }
     }
 }
