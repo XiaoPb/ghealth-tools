@@ -37,9 +37,9 @@ class AppSideTestEvaluator @Inject constructor() {
         }
 
         val spec = CollectionSpec.resolve(testDef.compute, testType)
-        if (data.frameCnts.size < spec.minNumber) {
+        if (data.frameCnts.size.toLong() < spec.skipNumber.toLong() + spec.minNumber.toLong()) {
             log(LogLevel.ERROR,
-                "${testType.displayName}: 有效帧数不足（${data.frameCnts.size}/${spec.minNumber}），蓝牙连接不稳定或采集过早停止，App端计算失败")
+                "${testType.displayName}: 有效帧数不足（${data.frameCnts.size}/${spec.skipNumber + spec.minNumber}），蓝牙连接不稳定或采集过早停止，App端计算失败")
             return null
         }
 
@@ -58,9 +58,9 @@ class AppSideTestEvaluator @Inject constructor() {
             val computed: Double
             when {
                 testType == TestType.BASE_NOISE || testType == TestType.PPG_NOISE -> {
-                    if (rawSeries == null || rawSeries.isEmpty()) {
+                    if (rawSeries == null || rawSeries.size < spec.minNumber) {
                         results += failedResult(testType, ch, testDef)
-                        log(LogLevel.WARN, "${testType.displayName}: 通道$ch 无原始数据，标记 FAIL")
+                        log(LogLevel.WARN, "${testType.displayName}: 通道$ch 原始数据不足（不足${spec.minNumber}帧），标记 FAIL")
                         continue
                     }
                     // 以均值为滤波器初态，消除直流阶跃瞬态；σ 只统计最后 min_number 帧
@@ -78,16 +78,18 @@ class AppSideTestEvaluator @Inject constructor() {
                 }
                 testType == TestType.LPCTR || testType == TestType.LPLCTR -> {
                     val ipdPaSeries = data.ipdPaByChannel[ch]
-                    val ipdNa = if (!ipdPaSeries.isNullOrEmpty()) {
+                    val ipdNa = if (!ipdPaSeries.isNullOrEmpty() && ipdPaSeries.size >= spec.minNumber) {
                         PpgMetricsCalculator.ipdFromPa(
                             PpgMetricsCalculator.average(
                                 ipdPaSeries.takeLast(spec.minNumber).map { it.toDouble() }.toDoubleArray()
                             )
                         )
-                    } else if (rawSeries != null && rawSeries.isNotEmpty() && compute != null && compute.gainK != null && compute.gainK > 0) {
+                    } else if (rawSeries != null && rawSeries.size >= spec.minNumber && compute != null && compute.gainK != null && compute.gainK > 0) {
                         PpgMetricsCalculator.ipdFromRaw(rawWindowAvg, params, compute.gainK)
                     } else {
-                        val reason = if (rawSeries == null || rawSeries.isEmpty()) "无原始数据"
+                        val reason = if ((ipdPaSeries.isNullOrEmpty() || ipdPaSeries.size < spec.minNumber) &&
+                            (rawSeries == null || rawSeries.size < spec.minNumber)
+                        ) "原始数据不足（不足${spec.minNumber}帧）"
                         else "缺少有效的 compute.gain_k 配置，无法用 rawdata 计算 Ipd"
                         results += failedResult(testType, ch, testDef)
                         log(LogLevel.WARN, "${testType.displayName}: 通道$ch $reason，标记 FAIL")

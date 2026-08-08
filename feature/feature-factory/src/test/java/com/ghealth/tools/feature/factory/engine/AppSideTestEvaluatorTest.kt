@@ -122,10 +122,10 @@ class AppSideTestEvaluatorTest {
     @Test
     fun `噪声数据滤波后标准差为 0 时 FAIL 而非给出 0 噪声`() {
         val data = CollectedRawData(
-            rawdataByChannel = mapOf(0 to List(100) { 8_388_608 }),
+            rawdataByChannel = mapOf(0 to List(300) { 8_388_608 }),
             ipdPaByChannel = emptyMap(),
             ledCurrentSumMaByChannel = emptyMap(),
-            frameCnts = (0 until 100).toList()
+            frameCnts = (0 until 300).toList()
         )
         val results = evaluator.evaluate(TestType.BASE_NOISE, noiseDef, data, "gh3036", ::log)!!
         assertFalse(results[0].passed)
@@ -187,7 +187,7 @@ class AppSideTestEvaluatorTest {
     }
 
     @Test
-    fun `有效帧数不足 min_number 时返回 null`() {
+    fun `有效帧数不足 skip 加 min 时返回 null`() {
         val data = CollectedRawData(
             rawdataByChannel = mapOf(0 to noiseSeries().take(50)),
             ipdPaByChannel = emptyMap(),
@@ -196,5 +196,33 @@ class AppSideTestEvaluatorTest {
         )
         val results = evaluator.evaluate(TestType.BASE_NOISE, noiseDef, data, "gh3036", ::log)
         assertNull(results)
+    }
+
+    @Test
+    fun `有效帧数恰好等于 skip 加 min 时正常评估`() {
+        // 噪声默认 skip=200 min=100，恰好 300 帧：应评估（恒定数据 σ=0 → 通道 FAIL），而非返回 null
+        val data = CollectedRawData(
+            rawdataByChannel = mapOf(0 to List(300) { 8_388_608 }),
+            ipdPaByChannel = emptyMap(),
+            ledCurrentSumMaByChannel = emptyMap(),
+            frameCnts = (0 until 300).toList()
+        )
+        val results = evaluator.evaluate(TestType.BASE_NOISE, noiseDef, data, "gh3036", ::log)
+        assertFalse(results.isNullOrEmpty())
+        assertFalse(results!![0].passed)
+    }
+
+    @Test
+    fun `CTR rawdata 回退只使用最后 min_number 帧`() {
+        // GH3036（offset=0）：前 100 帧 rawdata=0，后 100 帧=2^24；窗口均值 2^24 → Ipd 18000nA → CTR 900；若按全序列均值 2^23 则为 CTR 450
+        val data = CollectedRawData(
+            rawdataByChannel = mapOf(0 to List(100) { 0 } + List(100) { 16_777_216 }),
+            ipdPaByChannel = emptyMap(),
+            ledCurrentSumMaByChannel = mapOf(0 to 20.0),
+            frameCnts = (0 until 200).toList()
+        )
+        val def = ctrDef.copy(compute = AppComputeConfig(gainK = 100.0))
+        val results = evaluator.evaluate(TestType.LPCTR, def, data, "gh3036", ::log)!!
+        assertEquals(900.0, results[0].computedValue!!, 1e-6)
     }
 }
