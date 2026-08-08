@@ -2,7 +2,9 @@ package com.ghealth.tools.core.storage.di
 
 import android.content.Context
 import android.os.Environment
+import com.ghealth.tools.core.storage.AndroidDefaultConfigAssetSource
 import com.ghealth.tools.core.storage.DataRecorder
+import com.ghealth.tools.core.storage.DefaultConfigAssetSource
 import com.ghealth.tools.core.storage.LogManager
 import dagger.Module
 import dagger.Provides
@@ -34,4 +36,10 @@ object StorageModule {
     fun provideLogManager(@Named("storageBaseDir") baseDir: File): LogManager {
         return LogManager(baseDir).also { it.init() }
     }
+
+    @Provides
+    @Singleton
+    fun provideDefaultConfigAssetSource(
+        @ApplicationContext context: Context
+    ): DefaultConfigAssetSource = AndroidDefaultConfigAssetSource(context.assets)
 }

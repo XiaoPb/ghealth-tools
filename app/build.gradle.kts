@@ -68,6 +68,12 @@ android {
         buildConfig = true
     }
 
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(rootProject.file("defaults"))
+        }
+    }
+
     applicationVariants.all {
         outputs.all {
             val outputFileName = "ghealth-tools-${versionName}.apk"

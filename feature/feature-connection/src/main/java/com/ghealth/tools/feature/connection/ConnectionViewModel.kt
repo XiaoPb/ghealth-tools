@@ -633,23 +633,9 @@ class ConnectionViewModel @Inject constructor(
                                 )
                             }
                     } else {
-                        // 离线模式：无 projectName，遍历芯片目录下的项目子目录（保留原行为）
-                        configDir.listFiles()
-                            ?.filter { it.isDirectory }
-                            ?.forEach { projectDir ->
-                                projectDir.listFiles()
-                                    ?.filter { f -> f.isFile && (f.name.endsWith(".config") || f.name.endsWith(".ini")) }
-                                    ?.forEach { file ->
-                                        configs.add(
-                                            ConfigFileInfo(
-                                                fileName = file.name,
-                                                displayPath = "${projectDir.name}/${file.name}",
-                                                fullPath = file,
-                                                chipName = chip
-                                            )
-                                        )
-                                    }
-                            }
+                        // 离线模式：内置默认配置位于 application/config/{chip} 下，
+                        // 同时保留项目子目录扫描（兼容已下载到本地的项目配置）
+                        configs.addAll(scanOfflineAppConfigDir(configDir, chip))
                     }
                 }
             } catch (e: Exception) {
