@@ -50,6 +50,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,6 +74,7 @@ import com.ghealth.tools.core.ui.theme.ButtonShape
 import com.ghealth.tools.core.ui.adaptive.CONTENT_MAX_WIDTH
 import com.ghealth.tools.core.ui.adaptive.isWide
 import com.ghealth.tools.feature.factory.engine.LogLevel
+import com.ghealth.tools.feature.factory.model.ComputeMode
 import com.ghealth.tools.feature.factory.model.TestType
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -359,7 +361,14 @@ private fun ProgressSection(state: FactoryUiState) {
 private fun ResultsSection(state: FactoryUiState) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("测试结果", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("测试结果", style = MaterialTheme.typography.titleMedium)
+                state.computeMode?.let { ComputeModeTag(it) }
+            }
             Spacer(modifier = Modifier.height(8.dp))
 
             state.results.forEach { (testType, channelResults) ->
@@ -371,6 +380,25 @@ private fun ResultsSection(state: FactoryUiState) {
                 Spacer(modifier = Modifier.height(4.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun ComputeModeTag(mode: ComputeMode) {
+    val (label, container, content) = when (mode) {
+        ComputeMode.MCU -> Triple("计算模式：MCU", Color(0xFFE3F2FD), Color(0xFF1565C0))
+        ComputeMode.APP -> Triple("计算模式：APP（对端无产测逻辑）", Color(0xFFFFF3E0), Color(0xFFE65100))
+    }
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = container
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = content,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
     }
 }
 
