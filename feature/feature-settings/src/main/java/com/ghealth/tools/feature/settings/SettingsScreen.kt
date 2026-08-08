@@ -286,6 +286,45 @@ fun SettingsScreen(
 
             SectionHeader("数据与日志")
             SettingsGroupCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    var logLevelExpanded by remember { mutableStateOf(false) }
+
+                    ExposedDropdownMenuBox(
+                        expanded = logLevelExpanded,
+                        onExpandedChange = { logLevelExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = state.appLogLevel.displayName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("保存日志等级") },
+                            supportingText = { Text("仅该等级及更严重的日志写入 app_*.log") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = logLevelExpanded)
+                            },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = logLevelExpanded,
+                            onDismissRequest = { logLevelExpanded = false }
+                        ) {
+                            state.availableLogLevels.forEach { level ->
+                                DropdownMenuItem(
+                                    text = { Text(level.displayName) },
+                                    onClick = {
+                                        viewModel.setLogLevel(level)
+                                        logLevelExpanded = false
+                                    },
+                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                                )
+                            }
+                        }
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 ListItem(
                     headlineContent = { Text("导出日志") },
                     supportingContent = { Text("将日志打包为 ZIP 文件") },
