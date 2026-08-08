@@ -30,10 +30,11 @@ class PrimaryEndpointInterceptorTest {
         fallback.shutdown()
     }
 
-    private fun newClient(): OkHttpClient {
+    private fun newClient(preference: EndpointPreference = FakeEndpointPreference()): OkHttpClient {
         val interceptor = PrimaryEndpointInterceptor(
             primaryBaseUrl = primary.url("/api/"),
-            fallbackBaseUrl = fallback.url("/api/")
+            fallbackBaseUrl = fallback.url("/api/"),
+            endpointPreference = preference
         )
         return OkHttpClient.Builder()
             .addInterceptor(interceptor)
@@ -129,6 +130,56 @@ class PrimaryEndpointInterceptorTest {
 
         org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException::class.java) {
             call.execute().close()
+        }
+    }
+
+    @Test
+    fun `uses primary directly when preference is primary without probing fallback`() {
+        primary.enqueue(MockResponse().setResponseCode(200).setBody("primary-ok"))
+
+        val response = newClient(FakeEndpointPreference(value = true)).newCall(
+            Request.Builder().url(fallback.url("/api/projects/")).build()
+        ).execute()
+
+        assertEquals("primary-ok", response.body?.string())
+        assertEquals(1, primary.requestCount)
+        assertEquals(0, fallback.requestCount)
+    }
+
+    @Test
+    fun `does not fall back to fallback when preference is primary and primary fails`() {
+        primary.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        fallback.enqueue(MockResponse().setResponseCode(200).setBody("fallback-ok"))
+
+        val call = newClient(FakeEndpointPreference(value = true)).newCall(
+            Request.Builder().url(fallback.url("/api/projects/")).build()
+        )
+
+        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException::class.java) {
+            call.execute().close()
+        }
+        assertEquals(0, fallback.requestCount)
+    }
+
+    @Test
+    fun `uses fallback directly when preference is fallback without probing primary`() {
+        fallback.enqueue(MockResponse().setResponseCode(200).setBody("fallback-ok"))
+
+        val response = newClient(FakeEndpointPreference(value = false)).newCall(
+            Request.Builder().url(fallback.url("/api/projects/")).build()
+        ).execute()
+
+        assertEquals("fallback-ok", response.body?.string())
+        assertEquals(0, primary.requestCount)
+        assertEquals(1, fallback.requestCount)
+    }
+
+    private class FakeEndpointPreference(
+        @Volatile var value: Boolean? = null
+    ) : EndpointPreference {
+        override fun usePrimary(): Boolean? = value
+        override suspend fun setUsePrimary(usePrimary: Boolean) {
+            value = usePrimary
         }
     }
 }

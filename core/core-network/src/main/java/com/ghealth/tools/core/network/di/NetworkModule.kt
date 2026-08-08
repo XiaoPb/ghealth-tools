@@ -3,6 +3,7 @@ package com.ghealth.tools.core.network.di
 import android.content.Context
 import com.ghealth.tools.core.network.AuthAuthenticator
 import com.ghealth.tools.core.network.AuthInterceptor
+import com.ghealth.tools.core.network.EndpointPreference
 import com.ghealth.tools.core.network.PrimaryEndpointInterceptor
 import com.ghealth.tools.core.network.RetryInterceptor
 import com.ghealth.tools.core.network.TokenManager
@@ -67,11 +68,13 @@ object NetworkModule {
     @Singleton
     fun providePrimaryEndpointInterceptor(
         @Named("primaryBaseUrl") primaryBaseUrl: String,
-        @Named("baseUrl") fallbackBaseUrl: String
+        @Named("baseUrl") fallbackBaseUrl: String,
+        endpointPreference: EndpointPreference
     ): PrimaryEndpointInterceptor {
         return PrimaryEndpointInterceptor(
             primaryBaseUrl = primaryBaseUrl.toHttpUrl(),
-            fallbackBaseUrl = fallbackBaseUrl.toHttpUrl()
+            fallbackBaseUrl = fallbackBaseUrl.toHttpUrl(),
+            endpointPreference = endpointPreference
         )
     }
 
