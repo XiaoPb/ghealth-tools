@@ -18,11 +18,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.ui.theme.GHealthTheme
 import com.ghealth.tools.core.ui.theme.ThemeMode
+import com.ghealth.tools.feature.settings.UpdateDialog
 import com.ghealth.tools.navigation.GHealthNavHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.SharingStarted
@@ -145,9 +148,32 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val themeMode by themeModeState.collectAsState(initial = ThemeMode.BLUE_500)
-            
+
             GHealthTheme(themeMode = themeMode) {
+                val appUpdateViewModel: AppUpdateViewModel = hiltViewModel()
+                val updateState by appUpdateViewModel.updateDialogState.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    appUpdateViewModel.onMainUiShown()
+                }
+
                 GHealthNavHost()
+
+                if (updateState.showDialog) {
+                    UpdateDialog(
+                        versionName = updateState.versionName,
+                        changelog = updateState.changelog,
+                        isForceUpdate = updateState.isForceUpdate,
+                        useProxyDownload = updateState.useProxyDownload,
+                        onUseProxyChange = appUpdateViewModel::setUseProxyDownload,
+                        onIgnoreUpdate = appUpdateViewModel::ignoreUpdate,
+                        onDownload = {
+                            appUpdateViewModel.openDownloadPage()
+                            appUpdateViewModel.dismissUpdateDialog()
+                        },
+                        onDismiss = appUpdateViewModel::dismissUpdateDialog,
+                    )
+                }
             }
         }
     }
