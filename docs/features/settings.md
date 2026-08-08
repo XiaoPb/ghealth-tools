@@ -249,3 +249,24 @@ class UserPreferences @Inject constructor(
 | 日志导出 | `Dispatchers.IO` | 文件压缩操作 |
 | 版本状态订阅 | `Dispatchers.IO` | `FirmwareVersionHolder` 内部 scope |
 | UI 更新 | Main 线程 | StateFlow collect |
+
+## 11. 版本更新检查
+
+```text
+SettingsScreen → 点击"检查更新"
+  │
+  ├── UpdateChecker.checkForUpdate()
+  │     ├── GitHubApi.getLatestRelease(XiaoPb/ghealth-tools)
+  │     ├── 解析 tag_name → versionCode（vX.Y.Z）
+  │     └── 有更新 → showUpdateDialog = true
+  │
+  ▼
+UpdateDialog（下载方式单选，默认勾选"代理下载"）
+  ├── 代理下载 → https://gh-proxy.com/ + APK browser_download_url
+  └── GitHub 下载 → 当前流程（打开 release 页面 html_url）
+  │
+  └── 前往下载 → UpdateDownloadLinks.effectiveDownloadUrl(useProxy, directUrl, proxyUrl)
+        └── UpdateChecker.openDownloadUrl(选中地址)
+```
+
+代理前缀常量位于 `UpdateDownloadLinks.PROXY_PREFIX`；代理地址基于 release APK asset 的 `browser_download_url` 拼接，无 APK asset 时回退 release 页面地址。
