@@ -49,9 +49,16 @@ class ConfigDownloader @Inject constructor(
                 Timber.i("Prod-test config unchanged, skipping ZIP download: ${config.projectName}")
                 return@withContext Result.success(File(targetDir, upToDate.jsonFileName))
             }
+            val recordedFilesPresent = markerState?.let { state ->
+                File(targetDir, state.jsonFileName).isFile &&
+                    state.fileNames.all { name ->
+                        name == File(name).name && File(targetDir, name).isFile
+                    }
+            } ?: false
             Timber.d(
                 "Prod-test config needs download: ${config.projectName} " +
                     "(marker=${markerState?.let { "id=${it.configId}, uploadedAt=${it.uploadedAt}" } ?: "absent"}, " +
+                    "recordedFilesPresent=$recordedFilesPresent, " +
                     "remote=id=${config.id}, uploadedAt=${config.uploadedAt.orEmpty()})"
             )
 
