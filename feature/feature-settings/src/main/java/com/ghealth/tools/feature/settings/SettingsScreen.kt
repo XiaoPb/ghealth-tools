@@ -435,6 +435,8 @@ fun SettingsScreen(
                     versionName = state.updateVersionName,
                     changelog = state.updateChangelog,
                     isForceUpdate = state.isForceUpdate,
+                    useProxyDownload = state.useProxyDownload,
+                    onUseProxyChange = viewModel::setUseProxyDownload,
                     onDownload = {
                         viewModel.openDownloadPage()
                         viewModel.dismissUpdateDialog()
