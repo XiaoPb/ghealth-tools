@@ -6,8 +6,10 @@ import java.io.File
 data class RegularConfigSyncPlan(
     val filesToDelete: List<File>,
     val filesToDownload: List<RegularConfigResponse>,
-    val skippedCount: Int
-)
+    val filesSkipped: List<RegularConfigResponse>
+) {
+    val skippedCount: Int get() = filesSkipped.size
+}
 
 object RegularConfigSyncPlanner {
 
@@ -30,11 +32,15 @@ object RegularConfigSyncPlanner {
             val local = File(targetDir, config.filename)
             !local.isFile || local.length() != config.fileSize
         }
+        val filesSkipped = validConfigs.filter { config ->
+            val local = File(targetDir, config.filename)
+            local.isFile && local.length() == config.fileSize
+        }
 
         return RegularConfigSyncPlan(
             filesToDelete = filesToDelete,
             filesToDownload = filesToDownload,
-            skippedCount = validConfigs.size - filesToDownload.size
+            filesSkipped = filesSkipped
         )
     }
 }
