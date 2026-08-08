@@ -1,16 +1,21 @@
 package com.ghealth.tools.feature.factory.engine
 
 import com.ghealth.tools.ble.connection.BleConnectionManager
-import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REG_BIT_FIELD_WRITE_CMD
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_READ_CMD
+import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import kotlinx.coroutines.delay
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 上位机侧 GH3036 eFuse 读取：按 SDK `gh_efuse_read_single` 流程，用位域写 + 寄存器读命令
- * 驱动 eFuse 控制器，读取 4 段共 256bit（对应设备 UUID 的 32 字节）。
+ * 上位机侧 GH3036 eFuse 读取：按 SDK `gh_efuse_read_single` 流程，用寄存器整值写
+ * （GH3X_RegsListWriteCmd，通讯校验已验证可用）+ 寄存器读命令驱动 eFuse 控制器，
+ * 读取 4 段共 256bit（对应设备 UUID 的 32 字节）。
+ *
+ * 说明：早期版本使用 GH3X_RegBitFieldWriteCmd 位域写，但实测该固件上位机位域写不生效
+ * （0x0584/0x058A 写 1 后回读仍为 0，完成标志永不置位），故改为读-改-写整值方式。
  */
 @Singleton
 class EfuseReader @Inject constructor(
@@ -20,32 +25,37 @@ class EfuseReader @Inject constructor(
     /** 读取单个 64bit 段（seg 0~3）；任一步失败或超时返回 null。 */
     suspend fun readSegment(deviceAddress: String, seg: Int): Long? {
         if (seg !in 0..3) return null
-        // 步骤1-4：读模式 / 选择段 / 读使能 / 启动
-        Timber.d("EFUSE seg=$seg: 写 mode(0x0580 bit0)=0")
-        if (!bitFieldWrite(deviceAddress, RG_EFUSE_MODE_ADDR, RG_EFUSE_MODE_LSB, RG_EFUSE_MODE_MSB, 0)) {
-            Timber.w("EFUSE seg=$seg: mode 位域写失败")
-            return null
-        }
-        Timber.d("EFUSE seg=$seg: 写 sel(0x0580 bit2-3)=$seg")
-        if (!bitFieldWrite(deviceAddress, RG_EFUSE_SEL_ADDR, RG_EFUSE_SEL_LSB, RG_EFUSE_SEL_MSB, seg)) {
-            Timber.w("EFUSE seg=$seg: sel 位域写失败")
-            return null
-        }
-        Timber.d("EFUSE seg=$seg: 写 rden(0x0584 bit0)=1")
-        if (!bitFieldWrite(deviceAddress, RG_EFUSE_RDEN_ADDR, RG_EFUSE_RDEN_LSB, RG_EFUSE_RDEN_MSB, 1)) {
-            Timber.w("EFUSE seg=$seg: rden 位域写失败")
+
+        // 步骤1-2：读模式 + 选择段（0x0580：mode bit0=0，sel bit2-3=seg），整值读-改-写
+        val modeSel = readReg(deviceAddress, RG_EFUSE_MODE_ADDR) ?: 0
+        val newModeSel = (modeSel and MODE_SEL_KEEP_MASK) or (seg shl RG_EFUSE_SEL_LSB)
+        Timber.d("EFUSE seg=$seg: 写 mode/sel(0x0580)=0x%04X（原值 0x%04X）", newModeSel, modeSel)
+        if (!regWrite(deviceAddress, RG_EFUSE_MODE_ADDR, newModeSel)) {
+            Timber.w("EFUSE seg=$seg: mode/sel 写入失败")
             return null
         }
 
-        // 诊断：回读 clk_en/mode/sel 与 rden，确认时钟使能与位域写是否生效（best-effort，不影响流程）
+        // 步骤3：打开读使能 RDEN=1（0x0584 bit0）
+        val rden = readReg(deviceAddress, RG_EFUSE_RDEN_ADDR) ?: 0
+        val newRden = rden or 1
+        Timber.d("EFUSE seg=$seg: 写 rden(0x0584)=0x%04X（原值 0x%04X）", newRden, rden)
+        if (!regWrite(deviceAddress, RG_EFUSE_RDEN_ADDR, newRden)) {
+            Timber.w("EFUSE seg=$seg: rden 写入失败")
+            return null
+        }
+
+        // 诊断：回读 clk_en/mode/sel 与 rden，确认时钟使能与写入是否生效（best-effort，不影响流程）
         logRegisterReadBack(deviceAddress, seg, "启动前", intArrayOf(
             RG_EFUSE_CLK_EN_ADDR, RG_EFUSE_MODE_ADDR, RG_EFUSE_RDEN_ADDR
         ))
 
-        Timber.d("EFUSE seg=$seg: 写 start(0x058A bit0)=1")
-        if (!bitFieldWrite(deviceAddress, RG_EFUSE_START_ADDR, RG_EFUSE_START_LSB, RG_EFUSE_START_MSB, 1)) {
-            bitFieldWrite(deviceAddress, RG_EFUSE_RDEN_ADDR, RG_EFUSE_RDEN_LSB, RG_EFUSE_RDEN_MSB, 0)
-            Timber.w("EFUSE seg=$seg: start 位域写失败，已复位 rden")
+        // 步骤4：启动读取 START=1（0x058A bit0）
+        val start = readReg(deviceAddress, RG_EFUSE_START_ADDR) ?: 0
+        val newStart = start or 1
+        Timber.d("EFUSE seg=$seg: 写 start(0x058A)=0x%04X（原值 0x%04X）", newStart, start)
+        if (!regWrite(deviceAddress, RG_EFUSE_START_ADDR, newStart)) {
+            regWrite(deviceAddress, RG_EFUSE_RDEN_ADDR, rden)
+            Timber.w("EFUSE seg=$seg: start 写入失败，已复位 rden")
             return null
         }
         logRegisterReadBack(deviceAddress, seg, "启动后", intArrayOf(RG_EFUSE_START_ADDR))
@@ -66,14 +76,14 @@ class EfuseReader @Inject constructor(
             }
         }
         if (!done) {
-            bitFieldWrite(deviceAddress, RG_EFUSE_RDEN_ADDR, RG_EFUSE_RDEN_LSB, RG_EFUSE_RDEN_MSB, 0)
+            regWrite(deviceAddress, RG_EFUSE_RDEN_ADDR, rden)
             Timber.w("EFUSE seg=$seg: 读完成标志未置位（最后值 0x%04X），已复位 rden", lastDoneReg ?: -1)
             return null
         }
 
         // 步骤6：读取 4 个 16bit 数据寄存器
         val values = readRegs(deviceAddress, RG_EFUSE_RDATA_0_ADDR, 4)
-        bitFieldWrite(deviceAddress, RG_EFUSE_RDEN_ADDR, RG_EFUSE_RDEN_LSB, RG_EFUSE_RDEN_MSB, 0)
+        regWrite(deviceAddress, RG_EFUSE_RDEN_ADDR, rden)
         if (values == null || values.size < 4) {
             Timber.w("EFUSE seg=$seg: 数据寄存器读取失败/不足4个: %s",
                 values?.joinToString(", ") { "0x%04X".format(it) } ?: "null")
@@ -107,7 +117,13 @@ class EfuseReader @Inject constructor(
         return bytes
     }
 
-    /** 诊断用：回读指定寄存器并记录值（用于确认位域写是否生效）。 */
+    /** 整值写寄存器（RegsListWriteCmd 已被通讯校验验证可用）。 */
+    private suspend fun regWrite(deviceAddress: String, addr: Int, value: Int): Boolean {
+        val param = RegisterCommandPayloadBuilder.buildU16ArrayPayload(intArrayOf(addr, value))
+        return connectionManager.sendCommand(deviceAddress, KEY_GH3X_REGS_LIST_WRITE_CMD, param).isSuccess
+    }
+
+    /** 诊断用：回读指定寄存器并记录值（用于确认写入是否生效）。 */
     private suspend fun logRegisterReadBack(
         deviceAddress: String,
         seg: Int,
@@ -120,17 +136,6 @@ class EfuseReader @Inject constructor(
             parts += "0x%04X=0x%04X".format(addr, v ?: -1)
         }
         Timber.d("EFUSE seg=$seg: 回读（$label） ${parts.joinToString(", ")}")
-    }
-
-    private suspend fun bitFieldWrite(
-        deviceAddress: String, addr: Int, lsb: Int, msb: Int, value: Int
-    ): Boolean {
-        val param = byteArrayOf(
-            (addr and 0xFF).toByte(), ((addr shr 8) and 0xFF).toByte(),
-            lsb.toByte(), msb.toByte(),
-            (value and 0xFF).toByte(), ((value shr 8) and 0xFF).toByte()
-        )
-        return connectionManager.sendCommand(deviceAddress, KEY_GH3X_REG_BIT_FIELD_WRITE_CMD, param).isSuccess
     }
 
     /** 读取单个寄存器，返回首个 U16 值；失败/空返回 null。 */
@@ -158,21 +163,14 @@ class EfuseReader @Inject constructor(
     companion object {
         // 寄存器定义来自 SDK gh3036_reg.h
         const val RG_EFUSE_CLK_EN_ADDR = 0x000E
-        const val RG_EFUSE_CLK_EN_LSB = 3
         const val RG_EFUSE_MODE_ADDR = 0x0580
-        const val RG_EFUSE_MODE_LSB = 0
-        const val RG_EFUSE_MODE_MSB = 0
-        const val RG_EFUSE_SEL_ADDR = 0x0580
         const val RG_EFUSE_SEL_LSB = 2
-        const val RG_EFUSE_SEL_MSB = 3
         const val RG_EFUSE_RDEN_ADDR = 0x0584
-        const val RG_EFUSE_RDEN_LSB = 0
-        const val RG_EFUSE_RDEN_MSB = 0
         const val RG_EFUSE_START_ADDR = 0x058A
-        const val RG_EFUSE_START_LSB = 0
-        const val RG_EFUSE_START_MSB = 0
         const val RG_EFUSE_READ_DONE_MANUAL_ADDR = 0x05A6
         const val RG_EFUSE_RDATA_0_ADDR = 0x059E
+        /** 0x0580 保留位：bit1（REG_MODE）与 bit4-15；仅清 mode(bit0)/sel(bit2-3) 后写入。 */
+        const val MODE_SEL_KEEP_MASK = 0xFFF2
         const val EFUSE_POLL_INTERVAL_MS = 5
         const val EFUSE_READ_TIMEOUT_MS = 1000
     }
