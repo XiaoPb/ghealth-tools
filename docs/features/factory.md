@@ -123,7 +123,7 @@ FactoryViewModel.startTest(testName)
 
 当硬件测试中 `F_GetMode` 返回空通道数组（对端固件未实现产测计算逻辑）时，App 自动切换到 App 端计算：使用测试窗口内采集到的 TEST1 原始帧（`ghFrameFlow` 的 `rawdata` / `phyValue` / `agcInfo`）按公式计算指标并判定。
 
-**触发条件**：`F_GetMode` 解析出的 U16 通道数组长度为 0。
+**触发条件**：`F_GetMode` 解析出的 U16 通道数组长度为 0（仅 CHIP_INIT 允许触发全局回退；非回退模式下硬件测试 `F_GetMode` 无数据或命令失败直接判定该项 FAIL，不允许中途切换回退）。
 
 **计算公式**（来自「PPG数据采集通用公式与配置说明」）：
 
@@ -152,9 +152,9 @@ FactoryViewModel.startTest(testName)
 
 **CHIP_INIT（芯片初始化）**：`F_GetMode` 无数据时改为寄存器读写校验通信——写入 `{0x0020, 0x2919}`（FIFO_WATER_LINE:25, RG_FIFO_READ_INT_TIMER:0.4s，取自 GH3036 产测配置）并回读，一致则 PASS（通信正常），写入/读取失败或回读不一致则 FAIL；校验寄存器为引擎常量（`CHIP_COMM_CHECK_REG_ADDR` / `CHIP_COMM_CHECK_REG_VALUE`），其它芯片如需调整可修改常量。
 
-**CHIP_UID（设备UUID）**：`F_GetMode` 无数据或不足 32 字节时（对端无产测逻辑），改用上位机寄存器指令读取 eFuse——按 SDK `gh_efuse_read_single` 流程依次配置 RG_EFUSE_MODE/SEL、打开 RDEN、启动 START、轮询 READ_DONE、读取 4 个 RDATA 寄存器并拼装 64bit，共读 4 段（256bit）拼装 32 字节导出两个 128bit UUID；仅 GH3036 系列芯片支持该回退，eFuse 读取失败或非 GH3036 系列时产出 2 个 FAIL 结果（错误码 0x2001/0x2002），整次产测判 FAIL。
+**CHIP_UID（设备UUID）**：回退模式下 `F_GetMode` 无数据或不足 32 字节时，改用上位机寄存器指令读取 eFuse——按 SDK `gh_efuse_read_single` 流程依次配置 RG_EFUSE_MODE/SEL、打开 RDEN、启动 START、轮询 READ_DONE、读取 4 个 RDATA 寄存器并拼装 64bit，共读 4 段（256bit）拼装 32 字节导出两个 128bit UUID；仅 GH3036 系列芯片支持该回退，eFuse 读取失败或非 GH3036 系列时产出 2 个 FAIL 结果（错误码 0x2001/0x2002），整次产测判 FAIL。
 
-**全局回退**：CHIP_INIT 流程出现 `F_SetMode`/`F_GetMode` 失败或 `F_GetMode` 无数据时（对端无产测逻辑），后续全部测试（CHIP_UID、BASE_NOISE、PPG_NOISE、LPCTR、LPLCTR）直接使用 App 端计算，不再尝试 `F_SetMode`/`F_GetMode`；硬件测试仍执行 `download_config` 与 TEST1 原始帧采集作为 App 端计算输入。非回退模式下各测试保持原行为（设备返回数据用设备数据，单项无数据单项回退）。
+**全局回退**：CHIP_INIT 流程出现 `F_SetMode`/`F_GetMode` 失败或 `F_GetMode` 无数据时（对端无产测逻辑），后续全部测试（CHIP_UID、BASE_NOISE、PPG_NOISE、LPCTR、LPLCTR）直接使用 App 端计算，不再尝试 `F_SetMode`/`F_GetMode`；硬件测试仍执行 `download_config` 与 TEST1 原始帧采集作为 App 端计算输入。非回退模式下各测试使用设备返回数据：硬件测试中途 `F_GetMode` 无数据或命令失败、CHIP_UID 中途 `F_SetMode`/`F_GetMode` 失败或返回不足 32 字节，均直接判定该项 FAIL，不允许中途切换回退。结果区顶部显示「计算模式：MCU / APP（对端无产测逻辑）」全局标签（由 CHIP_INIT 判定结果决定，每次运行只显示一种）。
 
 **SNR**：`PpgMetricsCalculator.snr` 已实现（`20·log10((rawdata_avg - offset)/σ_filter)`），App 端计算在 PPG_NOISE/BASE_NOISE 通道输出 `Noise=...μV SNR=...dB` 日志；SNR 暂不参与产测判定，后续有实际计划再接入接口。
 
