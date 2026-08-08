@@ -1,7 +1,6 @@
 package com.ghealth.tools.feature.factory.engine
 
 import com.ghealth.tools.ble.connection.BleConnectionManager
-import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_READ_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
@@ -12,11 +11,12 @@ import javax.inject.Singleton
 
 /**
  * 上位机侧 GH3036 eFuse 读取：按 SDK `gh_efuse_read_single` 流程，用寄存器整值写
- * （GH3X_RegsListWriteCmd，通讯校验已验证可用）+ 寄存器读命令驱动 eFuse 控制器，
- * 读取 4 段共 256bit（对应设备 UUID 的 32 字节）。
+ * （GH3X_RegsWriteCmd）+ 寄存器读命令驱动 eFuse 控制器，读取 4 段共 256bit
+ * （对应设备 UUID 的 32 字节）。
  *
- * 说明：早期版本使用 GH3X_RegBitFieldWriteCmd 位域写，但实测该固件上位机位域写不生效
- * （0x0584/0x058A 写 1 后回读仍为 0，完成标志永不置位），故改为读-改-写整值方式。
+ * 说明：实测该固件对 eFuse 寄存器（0x0580-0x05A6）的写入仅 GH3X_RegsWriteCmd 生效；
+ * GH3X_RegsListWriteCmd / GH3X_RegBitFieldWriteCmd 写后回读仍为原值，故统一采用
+ * 读-改-写整值方式（GH3X_RegsReadCmd + GH3X_RegsWriteCmd）。
  */
 @Singleton
 class EfuseReader @Inject constructor(
@@ -104,11 +104,6 @@ class EfuseReader @Inject constructor(
 
     /** 读取全部 4 段（256bit）为 32 字节（段内小端逐字节）；任一段失败返回 null。 */
     suspend fun readAll(deviceAddress: String): ByteArray? {
-        // 诊断：autoload 完成后 RDATA 是否已含 eFuse 内容（若可读则无需手动读流程）
-        readRegs(deviceAddress, RG_EFUSE_RDATA_0_ADDR, 4)?.let { rdata ->
-            Timber.d("EFUSE readAll: 直接读 RDATA(0x059E..) = %s",
-                rdata.joinToString(", ") { "0x%04X".format(it) })
-        }
         val bytes = ByteArray(32)
         for (seg in 0..3) {
             val v = readSegment(deviceAddress, seg) ?: run {
@@ -123,15 +118,10 @@ class EfuseReader @Inject constructor(
         return bytes
     }
 
-    /** 整值写寄存器：尝试 RegsListWriteCmd 与 RegsWriteCmd 两种命令并回读，用于排查固件写保护。 */
+    /** 整值写寄存器：使用 GH3X_RegsWriteCmd（实测该固件仅此命令对 eFuse 寄存器生效）。 */
     private suspend fun regWrite(deviceAddress: String, addr: Int, value: Int): Boolean {
         val param = RegisterCommandPayloadBuilder.buildU16ArrayPayload(intArrayOf(addr, value))
-        val listOk = connectionManager.sendCommand(deviceAddress, KEY_GH3X_REGS_LIST_WRITE_CMD, param).isSuccess
-        val writeOk = connectionManager.sendCommand(deviceAddress, KEY_GH3X_REGS_WRITE_CMD, param).isSuccess
-        val readBack = readReg(deviceAddress, addr)
-        Timber.d("EFUSE: 写 0x%04X=0x%04X 回读=0x%04X（RegsListWrite=$listOk, RegsWrite=$writeOk）",
-            addr, value, readBack ?: -1)
-        return listOk || writeOk
+        return connectionManager.sendCommand(deviceAddress, KEY_GH3X_REGS_WRITE_CMD, param).isSuccess
     }
 
     /** 诊断用：回读指定寄存器并记录值（用于确认写入是否生效）。 */
