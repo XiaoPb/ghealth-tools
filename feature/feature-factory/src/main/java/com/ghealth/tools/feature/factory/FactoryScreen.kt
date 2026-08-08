@@ -205,6 +205,19 @@ fun FactoryScreen(
             )
         }
 
+        if (state.showBluetoothUnstableDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissBluetoothUnstableDialog() },
+                title = { Text("蓝牙连接不稳定") },
+                text = { Text("数据采集超时，蓝牙连接不稳定，请检查设备连接后重试。本次测试项已判定 FAIL。") },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismissBluetoothUnstableDialog() }) {
+                        Text("确定")
+                    }
+                }
+            )
+        }
+
         state.errorMessage?.let { error ->
             AlertDialog(
                 onDismissRequest = { viewModel.dismissError() },

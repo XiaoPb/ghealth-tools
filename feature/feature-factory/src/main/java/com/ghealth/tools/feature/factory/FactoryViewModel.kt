@@ -307,6 +307,9 @@ class FactoryViewModel @Inject constructor(
             is TestEngineEvent.ShowEnvironmentSwitchDialog -> {
                 _uiState.update { it.copy(showEnvironmentSwitchDialog = true) }
             }
+            is TestEngineEvent.ShowBluetoothUnstableDialog -> {
+                _uiState.update { it.copy(showBluetoothUnstableDialog = true) }
+            }
             is TestEngineEvent.SequenceCompleted -> {
                 _uiState.update {
                     it.copy(
@@ -332,6 +335,11 @@ class FactoryViewModel @Inject constructor(
     fun dismissEnvironmentDialog() {
         _uiState.update { it.copy(showEnvironmentSwitchDialog = false) }
         testEngine.resumeAfterEnvironmentSwitch()
+    }
+
+    /** 蓝牙不稳定提示为一次性非阻塞提示，关闭不影响测试流程。 */
+    fun dismissBluetoothUnstableDialog() {
+        _uiState.update { it.copy(showBluetoothUnstableDialog = false) }
     }
 
     fun dismissError() {

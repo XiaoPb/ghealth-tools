@@ -49,6 +49,7 @@ data class FactoryUiState(
 
     // Dismissable dialogs
     val showEnvironmentSwitchDialog: Boolean = false,
+    val showBluetoothUnstableDialog: Boolean = false,
     val exportedFilePath: String? = null,
     val errorMessage: String? = null
 )
