@@ -153,6 +153,13 @@ MAIN ──(底部导航栏 / 侧边导航栏)──
 | core-storage | `di/StorageModule.kt` | `LogManager`, `CsvWriter`, `RecordingManager` |
 | ble-connection | `di/BleModule.kt` | `BleConnectionManager`, `CoroutineScope` |
 
+### 6.1 默认配置打包
+
+APK 内置默认配置位于仓库根目录 `defaults/`（`application/config/{chip}/...`、
+`factory/config/{chip}/{project-name}/...`），由 `app/build.gradle.kts` 的 assets 源目录打包进 APK；
+`DefaultConfigInstaller`（core-storage）在应用启动时解压到 `GHealthTools/application/config/` 与
+`GHealthTools/factory/config/`，用于离线登录支持。
+
 ## 7. 数据流总览
 
 ```

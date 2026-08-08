@@ -62,6 +62,10 @@ LoginScreen → onOfflineMode()
   └── 导航到 MAIN 主界面
 ```
 
+**默认配置：** 应用启动时 `DefaultConfigInstaller` 会把 APK 内置默认配置解压到
+`GHealthTools/application/config/{chip}/` 与 `GHealthTools/factory/config/{chip}/{project-name}/`，
+离线选择芯片后即可直接使用默认应用配置与产测配置，无需联网。
+
 ### 3.3 自动登录
 
 ```

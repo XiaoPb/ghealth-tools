@@ -11,15 +11,14 @@
 | `FactoryViewModel` | `FactoryViewModel.kt` | 测试流程控制、配置加载、结果汇总 |
 | `FactoryScreen` | `FactoryScreen.kt` | 产测界面（项目选择、测试执行、结果展示） |
 | `factory_config.json` | assets/ | 测试项目配置定义 |
-| `.config` 文件 | assets/factory/ | 各测试项的寄存器配置 |
+| `.config` 文件 | defaults/factory/config/ | 各测试项的寄存器配置 |
 
 ## 3. 配置结构
 
 ### 3.1 配置文件位置
 
 ```
-feature/feature-factory/src/main/assets/factory/
-├── factory_config_sample.json          # 配置模板
+defaults/factory/config/
 ├── gh3036/
 │   └── L-EVK-T2-GH3038Q/
 │       ├── factory_config.json          # 测试项目定义
@@ -29,8 +28,7 @@ feature/feature-factory/src/main/assets/factory/
 │       └── PPG_Noise_TEST1_100Hz_0327.config
 └── gh3220/
     └── HR_SPO2_NADT_ADT_V4200/
-        ├── HR_SPO2_NADT_ADT_V4200.ini   # 寄存器配置
-        └── factory_config.json
+        └── HR_SPO2_NADT_ADT_V4200.ini   # 寄存器配置
 ```
 
 ### 3.2 factory_config.json 结构
@@ -223,3 +221,13 @@ FactoryViewModel.exportResults()
 | 寄存器写入失败 | 记录日志，标记测试失败 |
 | 测试超时 | 设置超时 (如 30s)，超时后标记失败 |
 | 数值超出阈值 | 标记 FAIL + 高亮显示 |
+
+## 8. 资源文件部署
+
+默认配置源目录为仓库根 `defaults/`（`app/build.gradle.kts` 注册为 assets 源目录，自动打包进 APK）：
+- `application/config/{chip}/*.config|ini`：芯片级默认应用配置
+- `factory/config/{chip}/{project-name}/*.config`：产测默认配置
+
+应用启动时 `DefaultConfigInstaller`（core-storage）把 APK assets 中的 `application/config`、`factory/config`
+解压到 `GHealthTools/application/config/`、`GHealthTools/factory/config/`，已存在文件跳过（不覆盖用户配置）。
+新增默认配置只需按上述格式放入 `defaults/` 即可。
