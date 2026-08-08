@@ -30,7 +30,15 @@ data class AppComputeConfig(
     /** LED 驱动电流 mA；缺省从 AGC 帧 led_current_sum(0.1mA)/10 读取。 */
     @Json(name = "led_current_ma") val ledCurrentMa: Double? = null,
     /** 采样率 Hz，用于 0.5Hz 高通滤波系数，默认 100。 */
-    @Json(name = "sample_rate_hz") val sampleRateHz: Int = 100
+    @Json(name = "sample_rate_hz") val sampleRateHz: Int = 100,
+    /** 采集所需最少帧数（计算窗口 = 最后 min_number 帧）；未配置用默认 100。 */
+    @Json(name = "min_number") val minNumber: Int? = null,
+    /** 跳过帧数（预热）；总帧数 = skip_number + min_number。 */
+    @Json(name = "skip_number") val skipNumber: Int? = null,
+    /** 1=要求末尾 min_number 帧帧号连续；0=不要求。 */
+    @Json(name = "is_continuous") val isContinuous: Int? = null,
+    /** 采集超时 ms。 */
+    @Json(name = "timeout") val timeout: Long? = null
 )
 
 @JsonClass(generateAdapter = false)

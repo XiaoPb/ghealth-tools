@@ -63,4 +63,37 @@ class FactoryComputeConfigTest {
         assertEquals("9000", TestResult.formatComputed(9000.0))
         assertEquals("N/A", TestResult.formatComputed(Double.NaN))
     }
+
+    @Test
+    fun `解析采集参数 min_number skip_number is_continuous timeout`() {
+        val json = """
+        {
+          "project": "P", "chip": "gh3036",
+          "tests": {
+            "base_noise": {
+              "enabled": true, "mode": 4, "channels": 1,
+              "compute": {"min_number": 50, "skip_number": 100, "is_continuous": 1, "timeout": 5000}
+            }
+          }
+        }
+        """.trimIndent()
+        val config = parser.parse(json)
+        val compute = config.tests["base_noise"]!!.compute!!
+        assertEquals(50, compute.minNumber)
+        assertEquals(100, compute.skipNumber)
+        assertEquals(1, compute.isContinuous)
+        assertEquals(5000L, compute.timeout)
+    }
+
+    @Test
+    fun `未配置采集参数时字段为 null`() {
+        val config = parser.parse(
+            """{"project":"P","chip":"gh3036","tests":{"base_noise":{"enabled":true,"mode":4,"channels":1,"compute":{"gain_k":100}}}}"""
+        )
+        val compute = config.tests["base_noise"]!!.compute!!
+        assertNull(compute.minNumber)
+        assertNull(compute.skipNumber)
+        assertNull(compute.isContinuous)
+        assertNull(compute.timeout)
+    }
 }
