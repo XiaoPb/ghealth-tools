@@ -31,6 +31,7 @@ sealed class TestEngineEvent {
     data class TestCompleted(val type: TestType, val results: List<TestResult>) : TestEngineEvent()
     data class LogMessage(val level: LogLevel, val message: String) : TestEngineEvent()
     data object ShowEnvironmentSwitchDialog : TestEngineEvent()
+    data object ShowBluetoothUnstableDialog : TestEngineEvent()
     data class SequenceCompleted(val overallPassed: Boolean, val errorCodes: List<Int>) :
         TestEngineEvent()
 
@@ -73,6 +74,13 @@ class FactoryTestEngine @Inject constructor(
         var currentStep = 0
         val allResults = mutableMapOf<TestType, List<TestResult>>()
         var appSideFallback = false
+        var bluetoothUnstableNoticeShown = false
+        val notifyBluetoothUnstable: suspend () -> Unit = {
+            if (!bluetoothUnstableNoticeShown) {
+                bluetoothUnstableNoticeShown = true
+                onEvent(TestEngineEvent.ShowBluetoothUnstableDialog)
+            }
+        }
 
         try {
             // Step 1: Enter factory mode
@@ -130,7 +138,7 @@ class FactoryTestEngine @Inject constructor(
                 val results = runHardwareTest(
                     deviceAddress, chip, factoryConfig, testType,
                     registerConfigs[testType.name.lowercase()],
-                    appSideFallback, onEvent, currentStep, totalSteps
+                    appSideFallback, notifyBluetoothUnstable, onEvent, currentStep, totalSteps
                 )
                 if (results != null) {
                     allResults[testType] = results
@@ -444,6 +452,7 @@ class FactoryTestEngine @Inject constructor(
         testType: TestType,
         registerConfig: RegisterConfig?,
         appSideFallback: Boolean,
+        notifyBluetoothUnstable: suspend () -> Unit,
         onEvent: suspend (TestEngineEvent) -> Unit,
         stepIndex: Int,
         totalSteps: Int
@@ -524,8 +533,34 @@ class FactoryTestEngine @Inject constructor(
                 return null
             }
 
-            // Wait 3 seconds
-            delay(3000)
+            if (appSideFallback) {
+                // App 端计算模式：按采集参数轮询，满足条件立即停止；超时 → 蓝牙不稳定 FAIL
+                val spec = CollectionSpec.resolve(testDef.compute, testType)
+                var waited = 0L
+                var complete = false
+                while (waited < spec.timeoutMs) {
+                    if (rawDataCollector.isCollectionComplete(spec)) {
+                        complete = true
+                        break
+                    }
+                    delay(COLLECT_POLL_INTERVAL_MS)
+                    waited += COLLECT_POLL_INTERVAL_MS
+                }
+                if (!complete) {
+                    onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                        "${testType.displayName}: 蓝牙连接不稳定，数据采集超时（${spec.timeoutMs}ms），本项判定 FAIL"))
+                    notifyBluetoothUnstable()
+                    sendSimpleCommand(deviceAddress, KEY_GH3X_SW_FUNCTION_CMD,
+                        Package.packU32(test1FuncMode) + Package.packU8(1)) // 尽力停止
+                    collected = rawDataCollector.stop()
+                    val failed = syntheticFail(testType, testDef)
+                    onEvent(TestEngineEvent.TestCompleted(testType, failed))
+                    return failed
+                }
+            } else {
+                // 非回退模式：固定等待 3 秒
+                delay(3000)
+            }
 
             // Stop function TEST1
             val stopFuncResult = sendSimpleCommand(
@@ -627,7 +662,18 @@ class FactoryTestEngine @Inject constructor(
         if (computed == null) {
             onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
                 "${testType.displayName}: 未采集到 TEST1 原始数据，App 端计算失败"))
-            val failed = TestResult(
+            val failed = syntheticFail(testType, testDef)
+            onEvent(TestEngineEvent.TestCompleted(testType, failed))
+            return failed
+        }
+        onEvent(TestEngineEvent.TestCompleted(testType, computed))
+        return computed
+    }
+
+    /** App 端计算不可用时产出合成 FAIL（单通道），避免空窗口静默通过。 */
+    private fun syntheticFail(testType: TestType, testDef: TestDef): List<TestResult> =
+        listOf(
+            TestResult(
                 testType = testType,
                 channelIndex = 0,
                 value = 0,
@@ -635,12 +681,7 @@ class FactoryTestEngine @Inject constructor(
                 threshold = "-",
                 passed = false
             )
-            onEvent(TestEngineEvent.TestCompleted(testType, listOf(failed)))
-            return listOf(failed)
-        }
-        onEvent(TestEngineEvent.TestCompleted(testType, computed))
-        return computed
-    }
+        )
 
     private suspend fun sendSimpleCommand(
         deviceAddress: String,
@@ -696,6 +737,8 @@ class FactoryTestEngine @Inject constructor(
         /** CHIP_INIT 通信校验寄存器（来自 GH3036 产测配置）：FIFO_WATER_LINE:25, RG_FIFO_READ_INT_TIMER:0.4s */
         const val CHIP_COMM_CHECK_REG_ADDR = 0x0020
         const val CHIP_COMM_CHECK_REG_VALUE = 0x2919
+        /** App 端计算采集轮询间隔 ms。 */
+        const val COLLECT_POLL_INTERVAL_MS = 100L
     }
 
 }

@@ -6,7 +6,9 @@ import com.ghealth.tools.ble.protocol.gh3036.KEY_F_GET_MODE
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_SET_MODE
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_READ_CMD
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_SW_FUNCTION_CMD
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
+import com.ghealth.tools.feature.factory.model.AppComputeConfig
 import com.ghealth.tools.feature.factory.model.FactoryConfig
 import com.ghealth.tools.feature.factory.model.TestDef
 import com.ghealth.tools.feature.factory.model.TestResult
@@ -65,6 +67,7 @@ class FactoryTestEngineTest {
         val collector = mockk<TestRawDataCollector>()
         every { collector.start(any()) } just Runs
         every { collector.stop() } returns CollectedRawData.EMPTY
+        every { collector.isCollectionComplete(any()) } returns true
         return collector
     }
 
@@ -610,5 +613,112 @@ class FactoryTestEngineTest {
         assertTrue(completed.results.all { !it.passed })
         val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
         assertEquals(listOf(TestType.BASE_NOISE.errorBase), sequence.errorCodes)
+    }
+
+    private val timeoutNoiseConfig = FactoryConfig(
+        project = "test",
+        tests = mapOf(
+            "chip_init" to TestDef(
+                enabled = true, mode = TestType.CHIP_INIT.mode, channels = 1, unit = "status"
+            ),
+            "base_noise" to TestDef(
+                enabled = true, mode = TestType.BASE_NOISE.mode, channels = 1, unit = "dB",
+                compute = AppComputeConfig(timeout = 300L)
+            )
+        )
+    )
+
+    private val twoTimeoutConfig = FactoryConfig(
+        project = "test",
+        tests = mapOf(
+            "chip_init" to TestDef(
+                enabled = true, mode = TestType.CHIP_INIT.mode, channels = 1, unit = "status"
+            ),
+            "base_noise" to TestDef(
+                enabled = true, mode = TestType.BASE_NOISE.mode, channels = 1, unit = "dB",
+                compute = AppComputeConfig(timeout = 300L)
+            ),
+            "ppg_noise" to TestDef(
+                enabled = true, mode = TestType.PPG_NOISE.mode, channels = 1, unit = "dB",
+                compute = AppComputeConfig(timeout = 300L)
+            )
+        )
+    )
+
+    @Test
+    fun `回退模式采集满足条件时提前停止并 App 端计算`() = runTest {
+        val manager = defaultManager()
+        // 寄存器校验回读一致，CHIP_INIT 判定 PASS
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = mockk<TestRawDataCollector>()
+        every { collector.start(any()) } just Runs
+        every { collector.isCollectionComplete(any()) } returns true
+        every { collector.stop() } returns CollectedRawData(
+            rawdataByChannel = mapOf(0 to List(300) { 8_388_608 }),
+            ipdPaByChannel = emptyMap(),
+            ledCurrentSumMaByChannel = emptyMap(),
+            frameCnts = (0 until 300).toList()
+        )
+        val evaluator = mockk<AppSideTestEvaluator>()
+        every { evaluator.evaluate(any(), any(), any(), any(), any()) } returns listOf(
+            TestResult(TestType.BASE_NOISE, 0, 152, "dB", "-", passed = true)
+        )
+
+        val events = runSequence(newEngine(manager, collector, evaluator), config = chipInitPlusBaseNoiseConfig)
+
+        // BASE_NOISE：SwFunctionCmd(start) + SwFunctionCmd(stop) 各一次
+        coVerify(exactly = 2) { manager.sendCommand(any(), KEY_GH3X_SW_FUNCTION_CMD, any()) }
+        verify(exactly = 1) { collector.isCollectionComplete(any()) }
+        verify(exactly = 1) { evaluator.evaluate(any(), any(), any(), any(), any()) }
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.BASE_NOISE }
+        assertTrue(completed.results.all { it.passed })
+    }
+
+    @Test
+    fun `回退模式采集超时则提示蓝牙不稳定并合成 FAIL`() = runTest {
+        val manager = defaultManager()
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = mockk<TestRawDataCollector>()
+        every { collector.start(any()) } just Runs
+        every { collector.isCollectionComplete(any()) } returns false
+        every { collector.stop() } returns CollectedRawData.EMPTY
+        val evaluator = mockk<AppSideTestEvaluator>()
+        every { evaluator.evaluate(any(), any(), any(), any(), any()) } returns null
+
+        val events = runSequence(newEngine(manager, collector, evaluator), config = timeoutNoiseConfig)
+
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.BASE_NOISE }
+        assertTrue(completed.results.all { !it.passed })
+        assertTrue(
+            events.filterIsInstance<TestEngineEvent.LogMessage>()
+                .any { it.level == LogLevel.ERROR && it.message.contains("蓝牙连接不稳定") }
+        )
+        assertEquals(1, events.filterIsInstance<TestEngineEvent.ShowBluetoothUnstableDialog>().size)
+        // 超时不再调用评估器
+        verify(exactly = 0) { evaluator.evaluate(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `多个测试项超时时仅首次弹出蓝牙不稳定对话框`() = runTest {
+        val manager = defaultManager()
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = mockk<TestRawDataCollector>()
+        every { collector.start(any()) } just Runs
+        every { collector.isCollectionComplete(any()) } returns false
+        every { collector.stop() } returns CollectedRawData.EMPTY
+        val evaluator = mockk<AppSideTestEvaluator>()
+        every { evaluator.evaluate(any(), any(), any(), any(), any()) } returns null
+
+        val events = runSequence(newEngine(manager, collector, evaluator), config = twoTimeoutConfig)
+
+        assertEquals(1, events.filterIsInstance<TestEngineEvent.ShowBluetoothUnstableDialog>().size)
+        val timeouts = events.filterIsInstance<TestEngineEvent.LogMessage>()
+            .count { it.level == LogLevel.ERROR && it.message.contains("蓝牙连接不稳定") }
+        assertEquals(2, timeouts) // base_noise 与 ppg_noise 各超时一次
     }
 }
