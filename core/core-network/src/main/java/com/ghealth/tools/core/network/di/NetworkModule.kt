@@ -113,9 +113,10 @@ object NetworkModule {
     @Singleton
     fun provideAuthAuthenticator(
         tokenManager: TokenManager,
-        @Named("baseUrl") baseUrl: String
+        @Named("baseUrl") baseUrl: String,
+        primaryEndpointInterceptor: PrimaryEndpointInterceptor
     ): AuthAuthenticator {
-        return AuthAuthenticator(tokenManager, baseUrl)
+        return AuthAuthenticator(tokenManager, baseUrl, primaryEndpointInterceptor)
     }
 
     @Provides

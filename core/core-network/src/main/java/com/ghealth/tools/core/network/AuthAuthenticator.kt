@@ -19,7 +19,8 @@ import javax.inject.Singleton
 @Singleton
 class AuthAuthenticator @Inject constructor(
     private val tokenManager: TokenManager,
-    @Named("baseUrl") private val baseUrl: String
+    @Named("baseUrl") private val baseUrl: String,
+    private val primaryEndpointInterceptor: PrimaryEndpointInterceptor
 ) : Authenticator {
 
     @Volatile
@@ -96,6 +97,7 @@ class AuthAuthenticator @Inject constructor(
         }
 
         val client = OkHttpClient.Builder()
+            .addInterceptor(primaryEndpointInterceptor)
             .addInterceptor(loggingInterceptor)
             .build()
 
