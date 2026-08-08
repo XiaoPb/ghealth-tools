@@ -9,6 +9,7 @@ import com.ghealth.tools.core.network.api.ProjectApi
 import com.ghealth.tools.core.network.model.ProjectResponse
 import com.ghealth.tools.core.storage.CsvUploadManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,6 +36,7 @@ class ProjectSelectionViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProjectSelectionUiState())
+    private var loadJob: Job? = null
     val uiState: StateFlow<ProjectSelectionUiState> = _uiState.asStateFlow()
 
     init {
@@ -44,7 +46,11 @@ class ProjectSelectionViewModel @Inject constructor(
     fun loadProjects(forceReload: Boolean = false) {
         val state = _uiState.value
         if (!forceReload && (state.projects.isNotEmpty() || state.isLoading)) return
-        viewModelScope.launch {
+        if (loadJob?.isActive == true) {
+            Timber.d("loadProjects: already loading, ignoring duplicate call")
+            return
+        }
+        loadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val response = projectApi.getProjects()
