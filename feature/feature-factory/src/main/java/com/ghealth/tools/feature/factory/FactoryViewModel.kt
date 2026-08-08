@@ -268,7 +268,8 @@ class FactoryViewModel @Inject constructor(
                     exportedFilePath = null,
                     overallPassed = false,
                     showEnvironmentSwitchDialog = false,
-                    showBluetoothUnstableDialog = false
+                    showBluetoothUnstableDialog = false,
+                    computeMode = null
                 )
             }
 
