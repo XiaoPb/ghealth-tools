@@ -26,5 +26,6 @@ dependencies {
     implementation(libs.timber)
 
     testImplementation(libs.junit5)
+    testImplementation(libs.coroutines.test)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
