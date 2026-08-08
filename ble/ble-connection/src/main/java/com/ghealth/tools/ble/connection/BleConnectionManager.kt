@@ -719,7 +719,7 @@ class BleConnectionManager @Inject constructor(
                         try {
                             peripheral.observe(notifyChar)
                                 .onEach { data ->
-                                    Timber.d("Notify received ${data.size} bytes from $address")
+                                    Timber.v("Notify received ${data.size} bytes from $address")
                                     onDataReceived(address, data)
                                 }
                                 .onCompletion { cause ->
@@ -795,7 +795,7 @@ class BleConnectionManager @Inject constructor(
             val results = executor.process(data)
             for (result in results) {
                 result.onSuccess { parsed ->
-                    Timber.d("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
+                    Timber.v("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
                     _dataFlow.emit(address to parsed)
                 }
                 result.onFailure { error ->
