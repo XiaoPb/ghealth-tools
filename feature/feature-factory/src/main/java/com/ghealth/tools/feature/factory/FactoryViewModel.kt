@@ -70,7 +70,6 @@ class FactoryViewModel @Inject constructor(
                 if (isOnline) {
                     loadOnlineProjects()
                 } else {
-                    copyFactoryConfigsToStorage()
                     loadAllProjects()
                 }
             }
@@ -109,7 +108,7 @@ class FactoryViewModel @Inject constructor(
             val chips = listOf("gh3036", "gh3220", "gh3300")
             for (chip in chips) {
                 try {
-                    val chipDir = "factory/$chip"
+                    val chipDir = "factory/config/$chip"
                     val projectDirs = assetManager.list(chipDir) ?: continue
                     for (projectDir in projectDirs) {
                         if (projectDir.contains(".")) continue // skip files
@@ -171,44 +170,6 @@ class FactoryViewModel @Inject constructor(
             )
         } catch (_: Exception) {
             return null
-        }
-    }
-
-    // ── Copy factory configs to external storage ───────────────────────
-
-    private fun copyFactoryConfigsToStorage() {
-        try {
-            val factoryConfigDir = File(baseDir, "factory/config")
-            val assetManager = application.assets
-            val chips = listOf("gh3036", "gh3220", "gh3300")
-
-            for (chip in chips) {
-                val assetChipDir = "factory/$chip"
-                val projectDirs = assetManager.list(assetChipDir) ?: continue
-                for (projectDir in projectDirs) {
-                    if (projectDir.contains(".")) continue
-                    val assetProjectPath = "$assetChipDir/$projectDir"
-                    val files = assetManager.list(assetProjectPath) ?: continue
-
-                    val targetDir = File(factoryConfigDir, "$chip/$projectDir")
-                    if (!targetDir.exists()) {
-                        targetDir.mkdirs()
-                        for (fileName in files) {
-                            // Only copy .config, .ini, and .json files
-                            if (!fileName.endsWith(".config") && !fileName.endsWith(".ini") && !fileName.endsWith(".json")) continue
-                            val targetFile = File(targetDir, fileName)
-                            if (targetFile.exists()) continue
-                            assetManager.open("$assetProjectPath/$fileName").use { input ->
-                                targetFile.outputStream().use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (_: Exception) {
-            // Non-critical — loading from assets still works
         }
     }
 
