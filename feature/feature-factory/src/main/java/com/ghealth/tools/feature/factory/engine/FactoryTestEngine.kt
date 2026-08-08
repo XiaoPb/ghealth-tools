@@ -552,7 +552,6 @@ class FactoryTestEngine @Inject constructor(
                     notifyBluetoothUnstable()
                     sendSimpleCommand(deviceAddress, KEY_GH3X_SW_FUNCTION_CMD,
                         Package.packU32(test1FuncMode) + Package.packU8(1)) // 尽力停止
-                    collected = rawDataCollector.stop()
                     val failed = syntheticFail(testType, testDef)
                     onEvent(TestEngineEvent.TestCompleted(testType, failed))
                     return failed
@@ -670,7 +669,7 @@ class FactoryTestEngine @Inject constructor(
         return computed
     }
 
-    /** App 端计算不可用时产出合成 FAIL（单通道），避免空窗口静默通过。 */
+    /** App 端计算不可用或采集超时时产出合成 FAIL（单通道），避免空窗口静默通过。 */
     private fun syntheticFail(testType: TestType, testDef: TestDef): List<TestResult> =
         listOf(
             TestResult(

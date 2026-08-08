@@ -120,6 +120,8 @@ class FactoryTestEngineTest {
         val events = runSequence(newEngine(manager, collector, evaluator))
 
         verify(exactly = 1) { evaluator.evaluate(any(), any(), any(), any(), any()) }
+        // 非回退模式不轮询采集完成状态
+        verify(exactly = 0) { collector.isCollectionComplete(any()) }
         val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
             .single { it.type == TestType.BASE_NOISE }
         assertEquals(computed, completed.results)
@@ -671,6 +673,37 @@ class FactoryTestEngineTest {
         coVerify(exactly = 2) { manager.sendCommand(any(), KEY_GH3X_SW_FUNCTION_CMD, any()) }
         verify(exactly = 1) { collector.isCollectionComplete(any()) }
         verify(exactly = 1) { evaluator.evaluate(any(), any(), any(), any(), any()) }
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.BASE_NOISE }
+        assertTrue(completed.results.all { it.passed })
+    }
+
+    @Test
+    fun `回退模式轮询未满足条件时重试直到完成`() = runTest {
+        val manager = defaultManager()
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = mockk<TestRawDataCollector>()
+        every { collector.start(any()) } just Runs
+        var calls = 0
+        every { collector.isCollectionComplete(any()) } answers {
+            calls++
+            calls >= 2
+        }
+        every { collector.stop() } returns CollectedRawData(
+            rawdataByChannel = mapOf(0 to List(300) { 8_388_608 }),
+            ipdPaByChannel = emptyMap(),
+            ledCurrentSumMaByChannel = emptyMap(),
+            frameCnts = (0 until 300).toList()
+        )
+        val evaluator = mockk<AppSideTestEvaluator>()
+        every { evaluator.evaluate(any(), any(), any(), any(), any()) } returns listOf(
+            TestResult(TestType.BASE_NOISE, 0, 152, "dB", "-", passed = true)
+        )
+
+        val events = runSequence(newEngine(manager, collector, evaluator), config = chipInitPlusBaseNoiseConfig)
+
+        verify(exactly = 2) { collector.isCollectionComplete(any()) }
         val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
             .single { it.type == TestType.BASE_NOISE }
         assertTrue(completed.results.all { it.passed })

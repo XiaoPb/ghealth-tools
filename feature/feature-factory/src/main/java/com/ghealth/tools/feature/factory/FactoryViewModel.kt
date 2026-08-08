@@ -266,7 +266,9 @@ class FactoryViewModel @Inject constructor(
                     logMessages = emptyList(),
                     errorMessage = null,
                     exportedFilePath = null,
-                    overallPassed = false
+                    overallPassed = false,
+                    showEnvironmentSwitchDialog = false,
+                    showBluetoothUnstableDialog = false
                 )
             }
 
