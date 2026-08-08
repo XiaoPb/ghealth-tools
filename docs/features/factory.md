@@ -22,10 +22,10 @@ defaults/factory/config/
 ├── gh3036/
 │   └── L-EVK-T2-GH3038Q/
 │       ├── factory_config.json          # 测试项目定义
-│       ├── Base_Noise_TEST1_100Hz_0327.config
-│       ├── LPCTR_TEST1_100Hz_0327.config
-│       ├── LPLCTR_TEST1_100Hz_0327.config
-│       └── PPG_Noise_TEST1_100Hz_0327.config
+│       ├── Base_Noise_TEST1_100Hz_0519.config
+│       ├── LPCTR_TEST1_100Hz_0519.config
+│       ├── LPLCTR_TEST1_100Hz_0519.config
+│       └── PPG_Noise_TEST1_100Hz_0519.config
 └── gh3220/
     └── HR_SPO2_NADT_ADT_V4200/
         └── HR_SPO2_NADT_ADT_V4200.ini   # 寄存器配置
@@ -39,13 +39,13 @@ defaults/factory/config/
         {
             "name": "BaseNoise",
             "displayName": "底噪测试",
-            "configFile": "Base_Noise_TEST1_100Hz_0327.config",
+            "configFile": "Base_Noise_TEST1_100Hz_0519.config",
             "params": { ... }
         },
         {
             "name": "PPGNoise",
             "displayName": "PPG噪声测试",
-            "configFile": "PPG_Noise_TEST1_100Hz_0327.config",
+            "configFile": "PPG_Noise_TEST1_100Hz_0519.config",
             "params": { ... }
         }
     ]
