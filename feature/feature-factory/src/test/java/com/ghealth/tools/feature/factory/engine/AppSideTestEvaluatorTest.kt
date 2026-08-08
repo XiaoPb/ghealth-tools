@@ -225,4 +225,17 @@ class AppSideTestEvaluatorTest {
         val results = evaluator.evaluate(TestType.LPCTR, def, data, "gh3036", ::log)!!
         assertEquals(900.0, results[0].computedValue!!, 1e-6)
     }
+
+    @Test
+    fun `有效帧数在 min 与 skip 加 min 之间时返回 null`() {
+        // 噪声默认 skip=200 min=100：250 帧满足 min 但不足 skip+min，应返回 null
+        val data = CollectedRawData(
+            rawdataByChannel = mapOf(0 to noiseSeries().take(250)),
+            ipdPaByChannel = emptyMap(),
+            ledCurrentSumMaByChannel = emptyMap(),
+            frameCnts = (0 until 250).toList()
+        )
+        val results = evaluator.evaluate(TestType.BASE_NOISE, noiseDef, data, "gh3036", ::log)
+        assertNull(results)
+    }
 }

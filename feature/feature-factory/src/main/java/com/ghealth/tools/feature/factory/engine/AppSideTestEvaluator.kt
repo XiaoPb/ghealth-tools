@@ -39,7 +39,7 @@ class AppSideTestEvaluator @Inject constructor() {
         val spec = CollectionSpec.resolve(testDef.compute, testType)
         if (data.frameCnts.size.toLong() < spec.skipNumber.toLong() + spec.minNumber.toLong()) {
             log(LogLevel.ERROR,
-                "${testType.displayName}: 有效帧数不足（${data.frameCnts.size}/${spec.skipNumber + spec.minNumber}），蓝牙连接不稳定或采集过早停止，App端计算失败")
+                "${testType.displayName}: 有效帧数不足（${data.frameCnts.size}/${spec.skipNumber.toLong() + spec.minNumber.toLong()}），蓝牙连接不稳定或采集过早停止，App端计算失败")
             return null
         }
 
