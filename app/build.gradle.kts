@@ -29,8 +29,8 @@ android {
         applicationId = "com.ghealth.tools"
         minSdk = 24
         targetSdk = 35
-        versionCode = 626
-        versionName = "0.6.26"
+        versionCode = 627
+        versionName = "0.6.27"
     }
 
     signingConfigs {
@@ -112,3 +112,4 @@ dependencies {
 
     implementation(libs.timber)
 }
+
