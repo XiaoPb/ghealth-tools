@@ -252,21 +252,34 @@ class UserPreferences @Inject constructor(
 
 ## 11. 版本更新检查
 
+### 11.1 检查入口
+
 ```text
-SettingsScreen → 点击"检查更新"
-  │
-  ├── UpdateChecker.checkForUpdate()
-  │     ├── GitHubApi.getLatestRelease(XiaoPb/ghealth-tools)
-  │     ├── 解析 tag_name → versionCode（vX.Y.Z）
-  │     └── 有更新 → showUpdateDialog = true
-  │
-  ▼
-UpdateDialog（下载方式单选，默认勾选"代理下载"）
-  ├── 代理下载 → https://gh-proxy.com/ + APK browser_download_url
-  └── GitHub 下载 → 当前流程（打开 release 页面 html_url）
-  │
-  └── 前往下载 → UpdateDownloadLinks.effectiveDownloadUrl(useProxy, directUrl, proxyUrl)
-        └── UpdateChecker.openDownloadUrl(选中地址)
+自动检查（AppUpdateViewModel，respectIgnored = true）
+  ├── 启动进入主界面后自动检查一次
+  └── 每小时 0 分定时检查一次（UpdateScheduler.delayUntilNextHourMillis）
+          │
+          └── UpdateCheckCoordinator.checkForUpdate(respectIgnored)
+                ├── UpdateChecker.checkForUpdate() → GitHubApi.getLatestRelease(XiaoPb/ghealth-tools)
+                ├── 有更新时按 UpdateCheckDecision.shouldShowDialog 判断是否弹窗
+                │     ├── respectIgnored=false（设置页手动检查）→ 总是显示
+                │     └── respectIgnored=true 且 versionCode == 已忽略版本 → 不显示
+                └── 满足条件 → UpdateDialogState.showDialog = true
+
+设置页手动检查（SettingsViewModel.checkForUpdate，respectIgnored = false）
+  └── 有更新总是弹窗（忽略状态不影响手动检查）
 ```
 
-代理前缀常量位于 `UpdateDownloadLinks.PROXY_PREFIX`；代理地址基于 release APK asset 的 `browser_download_url` 拼接，无 APK asset 时回退 release 页面地址。
+### 11.2 更新弹窗
+
+```text
+UpdateDialog（下载方式单选，默认勾选"代理下载"）
+  ├── 代理下载 → https://gh-proxy.com/ + APK browser_download_url
+  ├── GitHub 下载 → 当前流程（打开 release 页面 html_url）
+  ├── 前往下载 → UpdateDownloadLinks.effectiveDownloadUrl(useProxy, directUrl, proxyUrl)
+  │     └── UpdateChecker.openDownloadUrl(选中地址)
+  ├── 忽略更新 → UpdatePreferences.setIgnoredUpdateVersionCode(versionCode)（仅非强制更新显示）
+  └── 稍后再说 → 关闭弹窗，不记录忽略
+```
+
+代理前缀常量位于 `UpdateDownloadLinks.PROXY_PREFIX`；代理地址基于 release APK asset 的 `browser_download_url` 拼接，无 APK asset 时回退 release 页面地址。忽略版本持久化于 `UpdatePreferences`（DataStore `update_prefs`，按 `versionCode` 精确匹配）：忽略后自动检查不再弹对应版本，出现更新的版本时重新弹窗；设置页手动检查始终显示。弹窗由 `MainActivity` 在 Compose 根层统一托管，覆盖所有页面。
