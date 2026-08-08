@@ -843,4 +843,31 @@ class FactoryTestEngineTest {
         assertTrue(completed.results.all { !it.passed })
         assertEquals(listOf(0, 1), completed.results.map { it.channelIndex })
     }
+
+    @Test
+    fun `非回退模式空数据时 0 通道配置也产出至少 1 个 FAIL`() = runTest {
+        val zeroChannelConfig = FactoryConfig(
+            project = "test",
+            tests = mapOf(
+                "base_noise" to TestDef(
+                    enabled = true, mode = TestType.BASE_NOISE.mode, channels = 0, unit = "dB"
+                )
+            )
+        )
+        val manager = defaultManager()
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(
+            newEngine(manager, collector, evaluator),
+            config = zeroChannelConfig
+        )
+
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.BASE_NOISE }
+        assertEquals(1, completed.results.size)
+        assertFalse(completed.results.single().passed)
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertFalse(sequence.overallPassed)
+    }
 }

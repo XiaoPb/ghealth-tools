@@ -684,7 +684,7 @@ class FactoryTestEngine @Inject constructor(
 
     /** 非回退模式中途异常时按配置通道数产出全通道 FAIL，避免空窗口静默跳过。 */
     private fun failedResults(testType: TestType, testDef: TestDef): List<TestResult> =
-        (0 until testDef.channels).map { ch ->
+        (0 until testDef.channels.coerceAtLeast(1)).map { ch ->
             TestResult(
                 testType = testType,
                 channelIndex = ch,
