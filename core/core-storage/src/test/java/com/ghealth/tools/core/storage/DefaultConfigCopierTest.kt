@@ -19,8 +19,13 @@ class DefaultConfigCopierTest {
     /** 用本地临时目录模拟 assets，测试 DefaultConfigCopier 的纯 JVM 逻辑。 */
     private class FileAssetSource(private val root: File) : DefaultConfigAssetSource {
         override fun list(path: String): Array<String>? {
-            val dir = File(root, path)
-            return if (dir.isDirectory) dir.list() else null
+            val file = File(root, path)
+            return when {
+                file.isDirectory -> file.list()
+                // 模拟 Android AssetManager：对文件返回空数组而非 null
+                file.isFile -> emptyArray()
+                else -> null
+            }
         }
 
         override fun open(path: String): java.io.InputStream =
@@ -33,8 +38,13 @@ class DefaultConfigCopierTest {
         private val failPaths: Set<String>
     ) : DefaultConfigAssetSource {
         override fun list(path: String): Array<String>? {
-            val dir = File(root, path)
-            return if (dir.isDirectory) dir.list() else null
+            val file = File(root, path)
+            return when {
+                file.isDirectory -> file.list()
+                // 模拟 Android AssetManager：对文件返回空数组而非 null
+                file.isFile -> emptyArray()
+                else -> null
+            }
         }
 
         override fun open(path: String): java.io.InputStream {
@@ -174,5 +184,18 @@ class DefaultConfigCopierTest {
         assertEquals(1, summary.failedFiles)
         assertTrue(File(baseDir, "application/config/gh3036/v1.2/probe.config").exists())
         assertTrue(File(baseDir, "factory/config/gh3036/factory_config.json").exists())
+    }
+
+    @Test
+    fun `treats entries whose asset list is empty as files like android assetmanager`() {
+        writeAsset("application/config/gh3036/base_noise.config")
+        writeAsset("factory/config/gh3220/HR_SPO2_NADT_ADT_V4200/HR_SPO2_NADT_ADT_V4200.ini")
+
+        val summary = copier().copyTo(baseDir)
+
+        assertEquals(2, summary.copiedFiles)
+        assertEquals(0, summary.failedFiles)
+        assertTrue(File(baseDir, "application/config/gh3036/base_noise.config").isFile)
+        assertTrue(File(baseDir, "factory/config/gh3220/HR_SPO2_NADT_ADT_V4200/HR_SPO2_NADT_ADT_V4200.ini").isFile)
     }
 }

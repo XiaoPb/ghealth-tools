@@ -15,7 +15,7 @@ data class DefaultConfigCopySummary(
  * 将 assets 中 `application/config` 与 `factory/config` 两个根目录下的默认配置
  * 复制到 [baseDir] 的对应目录（`application/config`、`factory/config`），保持相对路径不变。
  *
- * 目录优先判定：条目可被 [DefaultConfigAssetSource.list] 列出时视为子目录递归，否则视为文件。
+ * 目录判定：list 返回非空数组视为子目录递归；返回 null 或空数组（Android AssetManager 对文件返回空数组）均视为文件。
  * 仅复制 .config / .ini / .json 后缀文件（大小写不敏感）。
  * 已存在的目标文件跳过，避免覆盖用户后续下载或修改的配置。
  * 单个文件复制失败只记录失败数，不中断整棵复制树。
@@ -46,7 +46,8 @@ class DefaultConfigCopier(
         targetDir.mkdirs()
         for (entry in entries) {
             val childAssetPath = "$assetPath/$entry"
-            if (assetSource.list(childAssetPath) != null) {
+            val childEntries = assetSource.list(childAssetPath)
+            if (childEntries != null && childEntries.isNotEmpty()) {
                 // 子目录：递归
                 val childResult = copyTree(childAssetPath, File(targetDir, entry))
                 copied += childResult.copiedFiles
