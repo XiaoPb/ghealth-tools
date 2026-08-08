@@ -25,6 +25,7 @@ fun UpdateDialog(
     isForceUpdate: Boolean,
     useProxyDownload: Boolean,
     onUseProxyChange: (Boolean) -> Unit,
+    onIgnoreUpdate: () -> Unit,
     onDownload: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -66,8 +67,13 @@ fun UpdateDialog(
         },
         dismissButton = {
             if (!isForceUpdate) {
-                TextButton(onClick = onDismiss) {
-                    Text("稍后再说")
+                Row {
+                    TextButton(onClick = onIgnoreUpdate) {
+                        Text("忽略更新")
+                    }
+                    TextButton(onClick = onDismiss) {
+                        Text("稍后再说")
+                    }
                 }
             }
         }
