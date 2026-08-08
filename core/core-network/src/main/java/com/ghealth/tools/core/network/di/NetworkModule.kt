@@ -151,6 +151,8 @@ object NetworkModule {
 
         return OkHttpClient.Builder()
             .dns(dns)
+            // Retry 在外层、主端点拦截器在内层：每次重试先试 primary（health），
+            // primary 抛 IOException 时立即回退到原始 fallback（xiaopb）地址。
             .addInterceptor(RetryInterceptor(maxRetries = 3))
             .addInterceptor(primaryEndpointInterceptor)
             .addInterceptor(authInterceptor)
