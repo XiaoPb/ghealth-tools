@@ -27,7 +27,8 @@ class AuthRepositoryTest {
             authApi = fakeAuthApi {
                 fallbackCalls++
                 Response.success(successBody("fallback"))
-            }
+            },
+            endpointPreference = FakeEndpointPreference()
         )
 
         val result = repo.login(loginRequest)
@@ -47,7 +48,8 @@ class AuthRepositoryTest {
             authApi = fakeAuthApi {
                 fallbackCalls++
                 Response.success(successBody("fallback"))
-            }
+            },
+            endpointPreference = FakeEndpointPreference()
         )
 
         val result = repo.login(loginRequest)
@@ -64,7 +66,8 @@ class AuthRepositoryTest {
             authApi = fakeAuthApi {
                 fallbackCalls++
                 Response.success(successBody("fallback"))
-            }
+            },
+            endpointPreference = FakeEndpointPreference()
         )
 
         val result = repo.login(loginRequest)
@@ -83,13 +86,42 @@ class AuthRepositoryTest {
             authApi = fakeAuthApi {
                 fallbackCalls++
                 Response.success(successBody("fallback"))
-            }
+            },
+            endpointPreference = FakeEndpointPreference()
         )
 
         val result = repo.login(loginRequest)
 
         assertEquals(400, result.code())
         assertEquals(0, fallbackCalls)
+    }
+
+    @Test
+    fun `login records primary preference when primary succeeds`() = runTest {
+        val preference = FakeEndpointPreference()
+        val repo = AuthRepository(
+            primaryAuthApi = fakeAuthApi { Response.success(successBody("primary")) },
+            authApi = fakeAuthApi { Response.success(successBody("fallback")) },
+            endpointPreference = preference
+        )
+
+        repo.login(loginRequest)
+
+        assertEquals(true, preference.value)
+    }
+
+    @Test
+    fun `login records fallback preference when primary is unreachable`() = runTest {
+        val preference = FakeEndpointPreference()
+        val repo = AuthRepository(
+            primaryAuthApi = fakeAuthApi { throw IOException("unreachable") },
+            authApi = fakeAuthApi { Response.success(successBody("fallback")) },
+            endpointPreference = preference
+        )
+
+        repo.login(loginRequest)
+
+        assertEquals(false, preference.value)
     }
 
     private fun fakeAuthApi(
@@ -115,5 +147,14 @@ class AuthRepositoryTest {
                 redirectUrl = ""
             )
         )
+    }
+
+    private class FakeEndpointPreference(
+        @Volatile var value: Boolean? = null
+    ) : EndpointPreference {
+        override fun usePrimary(): Boolean? = value
+        override suspend fun setUsePrimary(usePrimary: Boolean) {
+            value = usePrimary
+        }
     }
 }

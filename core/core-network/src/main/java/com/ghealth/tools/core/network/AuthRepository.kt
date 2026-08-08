@@ -15,11 +15,13 @@ import javax.inject.Singleton
 /**
  * 登录认证仓库：优先使用原 API 地址（api.health.xiaopb.cn:8861）登录，
  * 3 秒内无响应或请求失败时回退到转发域名（api.xiaopb.cn），避免登录长时间转圈。
+ * 登录过程中的 primary 探测结果会写入 [EndpointPreference]，供后续所有请求直接使用选定端点。
  */
 @Singleton
 class AuthRepository @Inject constructor(
     @Named("primaryAuthApi") private val primaryAuthApi: AuthApi,
-    private val authApi: AuthApi
+    private val authApi: AuthApi,
+    private val endpointPreference: EndpointPreference
 ) {
 
     suspend fun login(request: LoginRequest): Response<ApiResponse<LoginResponse>> {
@@ -33,6 +35,14 @@ class AuthRepository @Inject constructor(
             Timber.w(e, "Login: primary endpoint failed, falling back to default")
             null
         }
+
+        val usePrimary = primaryResponse != null
+        try {
+            endpointPreference.setUsePrimary(usePrimary)
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to persist endpoint preference")
+        }
+
         if (primaryResponse != null) {
             return primaryResponse
         }
