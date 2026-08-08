@@ -36,4 +36,14 @@ class CollectionSpecTest {
         assertFalse(spec.isContinuous)
         assertEquals(3000L, spec.timeoutMs)
     }
+
+    @Test
+    fun 部分覆盖时其余参数回退到类型默认() {
+        val compute = AppComputeConfig(minNumber = 50)
+        val spec = CollectionSpec.resolve(compute, TestType.BASE_NOISE)
+        assertEquals(50, spec.minNumber)
+        assertEquals(200, spec.skipNumber)
+        assertTrue(spec.isContinuous)
+        assertEquals(10_000L, spec.timeoutMs)
+    }
 }

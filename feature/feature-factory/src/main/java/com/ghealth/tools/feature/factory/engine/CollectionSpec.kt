@@ -25,7 +25,7 @@ data class CollectionSpec(
                 minNumber = compute?.minNumber ?: DEFAULT_MIN_NUMBER,
                 skipNumber = compute?.skipNumber ?: if (isNoise) DEFAULT_SKIP_NOISE else DEFAULT_SKIP_CTR,
                 timeoutMs = compute?.timeout ?: DEFAULT_TIMEOUT_MS,
-                isContinuous = (compute?.isContinuous ?: if (isNoise) 1 else 0) == 1
+                isContinuous = compute?.isContinuous?.let { it == 1 } ?: isNoise
             )
         }
     }
