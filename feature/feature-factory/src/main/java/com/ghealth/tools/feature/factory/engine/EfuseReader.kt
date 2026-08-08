@@ -172,7 +172,7 @@ class EfuseReader @Inject constructor(
         const val RG_EFUSE_RDATA_0_ADDR = 0x059E
         /** 0x0580 保留位：bit1（REG_MODE）与 bit4-15；仅清 mode(bit0)/sel(bit2-3) 后写入。 */
         const val MODE_SEL_KEEP_MASK = 0xFFF2
-        const val EFUSE_POLL_INTERVAL_MS = 5
-        const val EFUSE_READ_TIMEOUT_MS = 1000
+        const val EFUSE_POLL_INTERVAL_MS = 50
+        const val EFUSE_READ_TIMEOUT_MS = 200
     }
 }
