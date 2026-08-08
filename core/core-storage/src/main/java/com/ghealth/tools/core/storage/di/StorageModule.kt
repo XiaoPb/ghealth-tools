@@ -3,6 +3,7 @@ package com.ghealth.tools.core.storage.di
 import android.content.Context
 import android.os.Environment
 import com.ghealth.tools.core.storage.DataRecorder
+import com.ghealth.tools.core.storage.DefaultConfigInstaller
 import com.ghealth.tools.core.storage.LogManager
 import dagger.Module
 import dagger.Provides
@@ -34,4 +35,11 @@ object StorageModule {
     fun provideLogManager(@Named("storageBaseDir") baseDir: File): LogManager {
         return LogManager(baseDir).also { it.init() }
     }
+
+    @Provides
+    @Singleton
+    fun provideDefaultConfigInstaller(
+        @ApplicationContext context: Context,
+        @Named("storageBaseDir") baseDir: File
+    ): DefaultConfigInstaller = DefaultConfigInstaller(context, baseDir)
 }
