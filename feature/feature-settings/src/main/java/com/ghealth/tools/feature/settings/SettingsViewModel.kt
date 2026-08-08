@@ -44,6 +44,8 @@ data class SettingsUiState(
     val updateVersionName: String = "",
     val updateChangelog: String = "",
     val updateDownloadUrl: String = "",
+    val updateProxyDownloadUrl: String = "",
+    val useProxyDownload: Boolean = true,
     val isForceUpdate: Boolean = false,
     val isCheckingUpdate: Boolean = false,
     val isDeviceConnected: Boolean = false,
@@ -255,6 +257,8 @@ class SettingsViewModel @Inject constructor(
                             updateVersionName = result.updateInfo.versionName,
                             updateChangelog = result.updateInfo.changelog,
                             updateDownloadUrl = result.updateInfo.downloadUrl,
+                            updateProxyDownloadUrl = result.updateInfo.proxyDownloadUrl,
+                            useProxyDownload = true,
                             isForceUpdate = result.isForceUpdate,
                         )
                     }
@@ -277,6 +281,10 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setUseProxyDownload(useProxy: Boolean) {
+        _uiState.update { it.copy(useProxyDownload = useProxy) }
+    }
+
     fun dismissUpdateDialog() {
         _uiState.update {
             it.copy(
@@ -284,13 +292,20 @@ class SettingsViewModel @Inject constructor(
                 updateVersionName = "",
                 updateChangelog = "",
                 updateDownloadUrl = "",
+                updateProxyDownloadUrl = "",
+                useProxyDownload = true,
                 isForceUpdate = false,
             )
         }
     }
 
     fun openDownloadPage() {
-        val url = _uiState.value.updateDownloadUrl
+        val state = _uiState.value
+        val url = UpdateDownloadLinks.effectiveDownloadUrl(
+            useProxy = state.useProxyDownload,
+            directUrl = state.updateDownloadUrl,
+            proxyUrl = state.updateProxyDownloadUrl,
+        )
         if (url.isNotEmpty()) {
             updateChecker.openDownloadUrl(url)
         }
