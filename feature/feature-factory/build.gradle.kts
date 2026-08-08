@@ -33,6 +33,7 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     implementation(libs.moshi)
     implementation(libs.kotlin.csv)
+    implementation(libs.timber)
 
     testImplementation(libs.junit5)
     testRuntimeOnly(libs.junit.platform.launcher)

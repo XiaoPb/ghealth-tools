@@ -395,14 +395,15 @@ class FactoryTestEngine @Inject constructor(
                 displayValue = uuid2
             )
         )
-
         val passCount = results.count { it.passed }
         onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
             "${testType.displayName}: $passCount/${results.size} UUID通过"))
-        if (passed1 && passed2) {
-            onEvent(TestEngineEvent.LogMessage(LogLevel.INFO, "UUID1: $uuid1"))
-            onEvent(TestEngineEvent.LogMessage(LogLevel.INFO, "UUID2: $uuid2"))
-        }
+        onEvent(TestEngineEvent.LogMessage(
+            if (passed1) LogLevel.INFO else LogLevel.WARN,
+            "UUID1: $uuid1 ${if (passed1) "PASS" else "FAIL（全 0）"}"))
+        onEvent(TestEngineEvent.LogMessage(
+            if (passed2) LogLevel.INFO else LogLevel.WARN,
+            "UUID2: $uuid2 ${if (passed2) "PASS" else "FAIL（全 0）"}"))
 
         onEvent(TestEngineEvent.TestCompleted(testType, results))
         return results
@@ -540,6 +541,8 @@ class FactoryTestEngine @Inject constructor(
             if (appSideFallback) {
                 // App 端计算模式：按采集参数轮询，满足条件立即停止；超时 → 蓝牙不稳定 FAIL
                 val spec = CollectionSpec.resolve(testDef.compute, testType)
+                onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+                    "${testType.displayName}: 采集参数 skip=${spec.skipNumber} min=${spec.minNumber} timeout=${spec.timeoutMs}ms"))
                 var waited = 0L
                 var complete = false
                 while (waited < spec.timeoutMs) {
@@ -591,6 +594,9 @@ class FactoryTestEngine @Inject constructor(
         } finally {
             collected = rawDataCollector.stop()
         }
+        onEvent(TestEngineEvent.LogMessage(LogLevel.INFO,
+            "${testType.displayName}: 采集结束，帧数=${collected.frameCnts.size}，通道数=${collected.channelCount}" +
+                "（rawdata=${collected.rawdataByChannel.size}，ipdPa=${collected.ipdPaByChannel.size}，led=${collected.ledCurrentSumMaByChannel.size}）"))
 
         // Evaluate results
         if (appSideFallback) {

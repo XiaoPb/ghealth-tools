@@ -22,6 +22,7 @@ import com.ghealth.tools.feature.factory.model.TestType
 import com.ghealth.tools.feature.factory.parser.ConfigJsonParser
 import com.ghealth.tools.feature.factory.parser.RegisterConfigParser
 import dagger.hilt.android.lifecycle.HiltViewModel
+import timber.log.Timber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -337,6 +338,12 @@ class FactoryViewModel @Inject constructor(
     }
 
     private fun addLog(level: LogLevel, message: String) {
+        // 同步写入 Timber 文件日志（release 无 logcat，仅落 GHealthTools/logs）
+        when (level) {
+            LogLevel.INFO -> Timber.i("产测: %s", message)
+            LogLevel.WARN -> Timber.w("产测: %s", message)
+            LogLevel.ERROR -> Timber.e("产测: %s", message)
+        }
         val entry = LogEntry(System.currentTimeMillis(), level, message)
         _uiState.update { state ->
             state.copy(logMessages = state.logMessages + entry)
