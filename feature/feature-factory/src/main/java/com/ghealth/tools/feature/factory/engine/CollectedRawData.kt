@@ -6,7 +6,9 @@ package com.ghealth.tools.feature.factory.engine
 data class CollectedRawData(
     val rawdataByChannel: Map<Int, List<Int>>,
     val ipdPaByChannel: Map<Int, List<Int>>,
-    val ledCurrentSumMaByChannel: Map<Int, Double>
+    val ledCurrentSumMaByChannel: Map<Int, Double>,
+    /** 去重后帧号序列（与各通道序列同序）。 */
+    val frameCnts: List<Int> = emptyList()
 ) {
     /** 实际通道数 = 最大通道索引 + 1（rawdata / Ipd pA 两者取大）。 */
     val channelCount: Int

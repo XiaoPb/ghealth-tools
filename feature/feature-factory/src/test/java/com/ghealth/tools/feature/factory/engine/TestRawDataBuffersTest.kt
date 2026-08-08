@@ -11,9 +11,11 @@ class TestRawDataBuffersTest {
         rawdata: IntArray = intArrayOf(),
         phyValue: IntArray = intArrayOf(),
         agcInfo: IntArray = intArrayOf(),
-        agcInfoHigh: IntArray = intArrayOf()
+        agcInfoHigh: IntArray = intArrayOf(),
+        frameCnt: Int = 0
     ) = GhFuncFrame(
         funcId = GhFuncId.TEST1,
+        frameCnt = frameCnt,
         rawdata = rawdata,
         phyValue = phyValue,
         agcInfo = agcInfo,
@@ -61,5 +63,44 @@ class TestRawDataBuffersTest {
         val data = buffers.snapshot()
         assertEquals(3, data.channelCount)
         assertEquals(false, data.isEmpty)
+    }
+
+    @Test
+    fun `记录帧号序列并随快照返回`() {
+        val buffers = TestRawDataBuffers()
+        buffers.addFrame(frame(rawdata = intArrayOf(1), frameCnt = 10))
+        buffers.addFrame(frame(rawdata = intArrayOf(2), frameCnt = 11))
+        val data = buffers.snapshot()
+        assertEquals(listOf(10, 11), data.frameCnts)
+    }
+
+    @Test
+    fun `frameCount 等于已去重帧数`() {
+        val buffers = TestRawDataBuffers()
+        assertEquals(0, buffers.frameCount())
+        buffers.addFrame(frame(frameCnt = 1))
+        buffers.addFrame(frame(frameCnt = 2))
+        assertEquals(2, buffers.frameCount())
+    }
+
+    @Test
+    fun `lastConsecutiveCount 统计末尾连续帧号`() {
+        val buffers = TestRawDataBuffers()
+        assertEquals(0, buffers.lastConsecutiveCount())
+        buffers.addFrame(frame(frameCnt = 1))
+        assertEquals(1, buffers.lastConsecutiveCount())
+        buffers.addFrame(frame(frameCnt = 2))
+        buffers.addFrame(frame(frameCnt = 5)) // 断帧
+        buffers.addFrame(frame(frameCnt = 6))
+        buffers.addFrame(frame(frameCnt = 7))
+        assertEquals(3, buffers.lastConsecutiveCount())
+    }
+
+    @Test
+    fun `lastConsecutiveCount 兼容 32 位帧号回绕`() {
+        val buffers = TestRawDataBuffers()
+        buffers.addFrame(frame(frameCnt = Int.MAX_VALUE))
+        buffers.addFrame(frame(frameCnt = Int.MIN_VALUE))
+        assertEquals(2, buffers.lastConsecutiveCount())
     }
 }
