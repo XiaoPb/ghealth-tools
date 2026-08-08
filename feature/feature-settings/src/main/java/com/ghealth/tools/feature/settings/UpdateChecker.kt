@@ -14,6 +14,7 @@ data class UpdateInfo(
     val versionName: String,
     val versionCode: Int,
     val downloadUrl: String,
+    val proxyDownloadUrl: String,
     val changelog: String,
     val publishedAt: String,
 )
@@ -123,10 +124,12 @@ class UpdateChecker @Inject constructor(
             val hasUpdate = latestVersionCode > currentCode
             val force = isForceUpdate(release.body ?: "")
 
+            val apkAssetUrl = UpdateDownloadLinks.apkAssetUrl(release.assets)
             val updateInfo = UpdateInfo(
                 versionName = release.tagName.trimStart('v', 'V'),
                 versionCode = latestVersionCode,
                 downloadUrl = release.htmlUrl,
+                proxyDownloadUrl = UpdateDownloadLinks.proxyUrl(apkAssetUrl ?: release.htmlUrl),
                 changelog = release.body ?: "",
                 publishedAt = release.publishedAt ?: "",
             )
