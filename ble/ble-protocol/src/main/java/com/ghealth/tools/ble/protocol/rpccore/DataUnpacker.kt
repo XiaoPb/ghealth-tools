@@ -88,13 +88,50 @@ class DataUnpacker {
         }
     }
 
-    private fun getArrayLen(data: ByteArray): Result<Pair<Int, Int>> {
+    /**
+     * 对齐 C 端 gh_package.c 的 unpackArray：数组元素超过 255 个时，发送方会拆成多个
+     * [header(split=1)][len][data] 分块，最后一块 split=0。这里循环累加所有分块并拼接，
+     * 后续分块头与首块头比较时忽略 split 位（对应 C compareWithoutFlag）。
+     */
+    private fun unpackArrayData(data: ByteArray, elementSize: Int): Result<ByteArray> {
         if (data.size < 2) {
             return Result.failure(UnpackError.InsufficientData)
         }
-        val arrayLen = data[1].toInt() and 0xFF
-        val start = 2
-        return Result.success(Pair(arrayLen, start))
+        var pos = 0
+        var firstHeader = 0
+        var first = true
+        val output = java.io.ByteArrayOutputStream()
+        while (true) {
+            if (pos >= data.size) {
+                return Result.failure(UnpackError.InsufficientData)
+            }
+            val header = data[pos].toInt() and 0xFF
+            if (first) {
+                firstHeader = header
+                first = false
+            } else if ((header or 0x80) != (firstHeader or 0x80)) {
+                return Result.failure(UnpackError.InvalidHeader)
+            }
+            if (!isArray(header.toByte())) {
+                return Result.failure(UnpackError.InvalidHeader)
+            }
+            pos++
+            if (pos >= data.size) {
+                return Result.failure(UnpackError.InsufficientData)
+            }
+            val length = data[pos].toInt() and 0xFF
+            pos++
+            val byteCount = length * elementSize
+            if (byteCount > data.size - pos) {
+                return Result.failure(UnpackError.InsufficientData)
+            }
+            output.write(data, pos, byteCount)
+            pos += byteCount
+            if ((header and 0x80) == 0) {
+                break
+            }
+        }
+        return Result.success(output.toByteArray())
     }
 
     private fun unpackU8Internal(data: ByteArray, elementSize: Int): Result<UnpackValue> {
@@ -113,15 +150,8 @@ class DataUnpacker {
             return Result.success(UnpackValue.U8Array(ubyteArrayOf((data[1].toInt() and 0xFF).toUByte())))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
-        val end = start + arrayLen * elementSize
-
-        if (end > data.size) {
-            val result = UByteArray(data.size - start) { i -> (data[start + i].toInt() and 0xFF).toUByte() }
-            return Result.success(UnpackValue.U8Array(result))
-        }
-
-        val result = UByteArray(arrayLen) { i -> (data[start + i].toInt() and 0xFF).toUByte() }
+        val bytes = unpackArrayData(data, elementSize).getOrElse { return Result.failure(it) }
+        val result = UByteArray(bytes.size) { i -> (bytes[i].toInt() and 0xFF).toUByte() }
         return Result.success(UnpackValue.U8Array(result))
     }
 
@@ -141,9 +171,8 @@ class DataUnpacker {
             return Result.success(UnpackValue.I8Array(byteArrayOf(data[1])))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
-        val result = ByteArray(arrayLen) { i -> data[start + i] }
-        return Result.success(UnpackValue.I8Array(result))
+        val bytes = unpackArrayData(data, elementSize).getOrElse { return Result.failure(it) }
+        return Result.success(UnpackValue.I8Array(bytes))
     }
 
     private fun unpackU16Internal(data: ByteArray, elementSize: Int): Result<UnpackValue> {
@@ -164,11 +193,9 @@ class DataUnpacker {
             return Result.success(UnpackValue.U16Array(ushortArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
-        val result = UShortArray(arrayLen) { i ->
-            val offset = start + i * 2
-            if (offset + 2 > data.size) return Result.failure(UnpackError.InsufficientData)
-            ((data[offset].toInt() and 0xFF) or ((data[offset + 1].toInt() and 0xFF) shl 8)).toUShort()
+        val bytes = unpackArrayData(data, elementSize).getOrElse { return Result.failure(it) }
+        val result = UShortArray(bytes.size / 2) { i ->
+            ((bytes[i * 2].toInt() and 0xFF) or ((bytes[i * 2 + 1].toInt() and 0xFF) shl 8)).toUShort()
         }
         return Result.success(UnpackValue.U16Array(result))
     }
@@ -191,11 +218,9 @@ class DataUnpacker {
             return Result.success(UnpackValue.I16Array(shortArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
-        val result = ShortArray(arrayLen) { i ->
-            val offset = start + i * 2
-            if (offset + 2 > data.size) return Result.failure(UnpackError.InsufficientData)
-            ((data[offset].toInt() and 0xFF) or (data[offset + 1].toInt() shl 8)).toShort()
+        val bytes = unpackArrayData(data, elementSize).getOrElse { return Result.failure(it) }
+        val result = ShortArray(bytes.size / 2) { i ->
+            ((bytes[i * 2].toInt() and 0xFF) or ((bytes[i * 2 + 1].toInt() and 0xFF) shl 8)).toShort()
         }
         return Result.success(UnpackValue.I16Array(result))
     }
@@ -224,14 +249,13 @@ class DataUnpacker {
             return Result.success(UnpackValue.U32Array(uintArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
-        val result = UIntArray(arrayLen) { i ->
-            val offset = start + i * 4
-            if (offset + 4 > data.size) return Result.failure(UnpackError.InsufficientData)
-            ((data[offset].toLong() and 0xFF) or
-                    ((data[offset + 1].toLong() and 0xFF) shl 8) or
-                    ((data[offset + 2].toLong() and 0xFF) shl 16) or
-                    ((data[offset + 3].toLong() and 0xFF) shl 24)).toUInt()
+        val bytes = unpackArrayData(data, elementSize).getOrElse { return Result.failure(it) }
+        val result = UIntArray(bytes.size / 4) { i ->
+            val offset = i * 4
+            ((bytes[offset].toLong() and 0xFF) or
+                    ((bytes[offset + 1].toLong() and 0xFF) shl 8) or
+                    ((bytes[offset + 2].toLong() and 0xFF) shl 16) or
+                    ((bytes[offset + 3].toLong() and 0xFF) shl 24)).toUInt()
         }
         return Result.success(UnpackValue.U32Array(result))
     }
@@ -260,14 +284,13 @@ class DataUnpacker {
             return Result.success(UnpackValue.I32Array(intArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
-        val result = IntArray(arrayLen) { i ->
-            val offset = start + i * 4
-            if (offset + 4 > data.size) return Result.failure(UnpackError.InsufficientData)
-            ((data[offset].toLong() and 0xFF) or
-                    ((data[offset + 1].toLong() and 0xFF) shl 8) or
-                    ((data[offset + 2].toLong() and 0xFF) shl 16) or
-                    ((data[offset + 3].toLong() and 0xFF) shl 24)).toInt()
+        val bytes = unpackArrayData(data, elementSize).getOrElse { return Result.failure(it) }
+        val result = IntArray(bytes.size / 4) { i ->
+            val offset = i * 4
+            ((bytes[offset].toLong() and 0xFF) or
+                    ((bytes[offset + 1].toLong() and 0xFF) shl 8) or
+                    ((bytes[offset + 2].toLong() and 0xFF) shl 16) or
+                    ((bytes[offset + 3].toLong() and 0xFF) shl 24)).toInt()
         }
         return Result.success(UnpackValue.I32Array(result))
     }
@@ -304,18 +327,17 @@ class DataUnpacker {
             return Result.success(UnpackValue.U64Array(ulongArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
-        val result = ULongArray(arrayLen) { i ->
-            val offset = start + i * 8
-            if (offset + 8 > data.size) return Result.failure(UnpackError.InsufficientData)
-            ((data[offset].toLong() and 0xFF) or
-                    ((data[offset + 1].toLong() and 0xFF) shl 8) or
-                    ((data[offset + 2].toLong() and 0xFF) shl 16) or
-                    ((data[offset + 3].toLong() and 0xFF) shl 24) or
-                    ((data[offset + 4].toLong() and 0xFF) shl 32) or
-                    ((data[offset + 5].toLong() and 0xFF) shl 40) or
-                    ((data[offset + 6].toLong() and 0xFF) shl 48) or
-                    ((data[offset + 7].toLong() and 0xFF) shl 56)).toULong()
+        val bytes = unpackArrayData(data, elementSize).getOrElse { return Result.failure(it) }
+        val result = ULongArray(bytes.size / 8) { i ->
+            val offset = i * 8
+            ((bytes[offset].toLong() and 0xFF) or
+                    ((bytes[offset + 1].toLong() and 0xFF) shl 8) or
+                    ((bytes[offset + 2].toLong() and 0xFF) shl 16) or
+                    ((bytes[offset + 3].toLong() and 0xFF) shl 24) or
+                    ((bytes[offset + 4].toLong() and 0xFF) shl 32) or
+                    ((bytes[offset + 5].toLong() and 0xFF) shl 40) or
+                    ((bytes[offset + 6].toLong() and 0xFF) shl 48) or
+                    ((bytes[offset + 7].toLong() and 0xFF) shl 56)).toULong()
         }
         return Result.success(UnpackValue.U64Array(result))
     }
@@ -352,18 +374,17 @@ class DataUnpacker {
             return Result.success(UnpackValue.I64Array(longArrayOf(value)))
         }
 
-        val (arrayLen, start) = getArrayLen(data).getOrElse { return Result.failure(it) }
-        val result = LongArray(arrayLen) { i ->
-            val offset = start + i * 8
-            if (offset + 8 > data.size) return Result.failure(UnpackError.InsufficientData)
-            ((data[offset].toLong() and 0xFF) or
-                    ((data[offset + 1].toLong() and 0xFF) shl 8) or
-                    ((data[offset + 2].toLong() and 0xFF) shl 16) or
-                    ((data[offset + 3].toLong() and 0xFF) shl 24) or
-                    ((data[offset + 4].toLong() and 0xFF) shl 32) or
-                    ((data[offset + 5].toLong() and 0xFF) shl 40) or
-                    ((data[offset + 6].toLong() and 0xFF) shl 48) or
-                    ((data[offset + 7].toLong() and 0xFF) shl 56))
+        val bytes = unpackArrayData(data, elementSize).getOrElse { return Result.failure(it) }
+        val result = LongArray(bytes.size / 8) { i ->
+            val offset = i * 8
+            ((bytes[offset].toLong() and 0xFF) or
+                    ((bytes[offset + 1].toLong() and 0xFF) shl 8) or
+                    ((bytes[offset + 2].toLong() and 0xFF) shl 16) or
+                    ((bytes[offset + 3].toLong() and 0xFF) shl 24) or
+                    ((bytes[offset + 4].toLong() and 0xFF) shl 32) or
+                    ((bytes[offset + 5].toLong() and 0xFF) shl 40) or
+                    ((bytes[offset + 6].toLong() and 0xFF) shl 48) or
+                    ((bytes[offset + 7].toLong() and 0xFF) shl 56))
         }
         return Result.success(UnpackValue.I64Array(result))
     }
