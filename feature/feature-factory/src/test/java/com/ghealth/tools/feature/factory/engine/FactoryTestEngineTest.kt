@@ -9,6 +9,7 @@ import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_READ_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_SW_FUNCTION_CMD
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import com.ghealth.tools.feature.factory.model.AppComputeConfig
+import com.ghealth.tools.feature.factory.model.ComputeMode
 import com.ghealth.tools.feature.factory.model.FactoryConfig
 import com.ghealth.tools.feature.factory.model.TestDef
 import com.ghealth.tools.feature.factory.model.TestResult
@@ -753,5 +754,47 @@ class FactoryTestEngineTest {
         val timeouts = events.filterIsInstance<TestEngineEvent.LogMessage>()
             .count { it.level == LogLevel.ERROR && it.message.contains("蓝牙连接不稳定") }
         assertEquals(2, timeouts) // base_noise 与 ppg_noise 各超时一次
+    }
+
+    @Test
+    fun `无回退时发出 ComputationMode MCU 事件`() = runTest {
+        val manager = mockk<BleConnectionManager>()
+        coEvery { manager.sendCommand(any(), any(), any()) } returns Result.success(ByteArray(0))
+        coEvery { manager.sendCommand(any(), KEY_F_GET_MODE, any()) } returns Result.success(byteArrayOf(1, 0, 100, 0))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(
+            newEngine(manager, collector, evaluator),
+            config = chipInitPlusBaseNoiseConfig
+        )
+
+        assertEquals(
+            listOf(TestEngineEvent.ComputationMode(ComputeMode.MCU)),
+            events.filterIsInstance<TestEngineEvent.ComputationMode>()
+        )
+    }
+
+    @Test
+    fun `CHIP_INIT 空数据回退时发出 ComputationMode APP 事件`() = runTest {
+        val manager = defaultManager()
+        // 寄存器校验回读一致，CHIP_INIT 判定 PASS，触发全局回退
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+        every { evaluator.evaluate(any(), any(), any(), any(), any()) } returns listOf(
+            TestResult(TestType.BASE_NOISE, 0, 152, "dB", "-", passed = true)
+        )
+
+        val events = runSequence(
+            newEngine(manager, collector, evaluator),
+            config = chipInitPlusBaseNoiseConfig
+        )
+
+        assertEquals(
+            listOf(TestEngineEvent.ComputationMode(ComputeMode.APP)),
+            events.filterIsInstance<TestEngineEvent.ComputationMode>()
+        )
     }
 }

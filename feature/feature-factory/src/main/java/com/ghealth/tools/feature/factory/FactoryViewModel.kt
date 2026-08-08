@@ -312,6 +312,9 @@ class FactoryViewModel @Inject constructor(
             is TestEngineEvent.ShowBluetoothUnstableDialog -> {
                 _uiState.update { it.copy(showBluetoothUnstableDialog = true) }
             }
+            is TestEngineEvent.ComputationMode -> {
+                _uiState.update { it.copy(computeMode = event.mode) }
+            }
             is TestEngineEvent.SequenceCompleted -> {
                 _uiState.update {
                     it.copy(

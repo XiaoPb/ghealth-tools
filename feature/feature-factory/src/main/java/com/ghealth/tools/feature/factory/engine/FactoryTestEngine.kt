@@ -12,6 +12,7 @@ import com.ghealth.tools.ble.protocol.gh3036.CommandPayloadBuilder
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import com.ghealth.tools.ble.protocol.rpccore.Package
+import com.ghealth.tools.feature.factory.model.ComputeMode
 import com.ghealth.tools.feature.factory.model.FactoryConfig
 import com.ghealth.tools.feature.factory.model.RegisterConfig
 import com.ghealth.tools.feature.factory.model.TestDef
@@ -32,6 +33,7 @@ sealed class TestEngineEvent {
     data class LogMessage(val level: LogLevel, val message: String) : TestEngineEvent()
     data object ShowEnvironmentSwitchDialog : TestEngineEvent()
     data object ShowBluetoothUnstableDialog : TestEngineEvent()
+    data class ComputationMode(val mode: ComputeMode) : TestEngineEvent()
     data class SequenceCompleted(val overallPassed: Boolean, val errorCodes: List<Int>) :
         TestEngineEvent()
 
@@ -115,6 +117,11 @@ class FactoryTestEngine @Inject constructor(
                 currentStep++
                 allResults[TestType.CHIP_INIT] = chipInitResults
             } else if (failAction == "abort") return
+
+            // 计算模式在 CHIP_INIT 一次性确定（MCU / App 端回退），供结果区顶部标签展示
+            onEvent(TestEngineEvent.ComputationMode(
+                if (appSideFallback) ComputeMode.APP else ComputeMode.MCU
+            ))
 
             // Step 3: CHIP_UID
             if (factoryConfig.tests["chip_uid"]?.enabled != false) {

@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.factory
 
 import com.ghealth.tools.feature.factory.engine.LogLevel
+import com.ghealth.tools.feature.factory.model.ComputeMode
 import com.ghealth.tools.feature.factory.model.FactoryConfig
 import com.ghealth.tools.feature.factory.model.RegisterConfig
 import com.ghealth.tools.feature.factory.model.TestResult
@@ -46,6 +47,7 @@ data class FactoryUiState(
     val results: Map<TestType, List<TestResult>> = emptyMap(),
     val overallPassed: Boolean = false,
     val testCompleted: Boolean = false,
+    val computeMode: ComputeMode? = null,
 
     // Dismissable dialogs
     val showEnvironmentSwitchDialog: Boolean = false,
