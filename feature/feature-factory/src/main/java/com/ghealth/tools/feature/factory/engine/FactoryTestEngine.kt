@@ -339,36 +339,33 @@ class FactoryTestEngine @Inject constructor(
                 deviceAddress, KEY_F_SET_MODE,
                 Package.packU8(testType.mode.toByte())
             )
-            if (setResult.isSuccess) {
-                delay(500)
+            if (setResult.isFailure) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                    "${testType.displayName}: F_SetMode 失败，MCU 模式不允许中途回退，本项判定 FAIL"))
+                return failedUidResults(testType, onEvent)
             }
+            delay(500)
 
-            // F_GetMode — 产测命令读不到数据时（对端无产测逻辑），改用上位机寄存器指令读取 eFuse
+            // F_GetMode —— 非回退模式不允许中途回退：失败/不足 32 字节直接 FAIL
             val getResult = sendSimpleCommand(
                 deviceAddress, KEY_F_GET_MODE,
                 Package.packU8(testType.mode.toByte())
             )
-            if (setResult.isFailure) {
-                onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                    "${testType.displayName}: F_SetMode 失败，改用上位机寄存器指令读取 eFuse"))
-                rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
-            } else if (getResult.isSuccess) {
-                val u16Values = parseU16ArrayResponse(getResult.getOrThrow())
-                if (u16Values.size >= 16) {
-                    rawBytes = ByteArray(u16Values.size * 2)
-                    for (i in u16Values.indices) {
-                        rawBytes[i * 2] = (u16Values[i] and 0xFF).toByte()
-                        rawBytes[i * 2 + 1] = ((u16Values[i] shr 8) and 0xFF).toByte()
-                    }
-                } else {
-                    onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                        "${testType.displayName}: F_GetMode 返回 ${u16Values.size * 2} 字节，不足32字节，改用上位机寄存器指令读取 eFuse"))
-                    rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
-                }
-            } else {
-                onEvent(TestEngineEvent.LogMessage(LogLevel.WARN,
-                    "${testType.displayName}: F_GetMode 失败，改用上位机寄存器指令读取 eFuse"))
-                rawBytes = readUuidFromEfuse(deviceAddress, chip, onEvent) ?: return failedUidResults(testType, onEvent)
+            if (getResult.isFailure) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                    "${testType.displayName}: F_GetMode 失败，MCU 模式不允许中途回退，本项判定 FAIL"))
+                return failedUidResults(testType, onEvent)
+            }
+            val u16Values = parseU16ArrayResponse(getResult.getOrThrow())
+            if (u16Values.size < 16) {
+                onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                    "${testType.displayName}: F_GetMode 返回 ${u16Values.size * 2} 字节，不足32字节，MCU 模式不允许中途回退，本项判定 FAIL"))
+                return failedUidResults(testType, onEvent)
+            }
+            rawBytes = ByteArray(u16Values.size * 2)
+            for (i in u16Values.indices) {
+                rawBytes[i * 2] = (u16Values[i] and 0xFF).toByte()
+                rawBytes[i * 2 + 1] = ((u16Values[i] shr 8) and 0xFF).toByte()
             }
         }
 

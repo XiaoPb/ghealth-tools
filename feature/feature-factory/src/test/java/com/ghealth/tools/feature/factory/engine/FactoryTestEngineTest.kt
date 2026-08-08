@@ -165,8 +165,21 @@ class FactoryTestEngineTest {
         coEvery { manager.sendCommand(any(), KEY_F_GET_MODE, any()) } returns Result.success(byteArrayOf(1, 0, 100, 0))
         val collector = defaultCollector()
         val evaluator = mockk<AppSideTestEvaluator>()
+        // 本测试仅关注 BASE_NOISE 判定路径；禁用 CHIP_UID，避免其非回退 FAIL 影响序列整体结论
+        val config = FactoryConfig(
+            project = "test",
+            tests = mapOf(
+                "base_noise" to baseNoiseDef,
+                "chip_uid" to TestDef(
+                    enabled = false,
+                    mode = TestType.CHIP_UID.mode,
+                    channels = 1,
+                    unit = "status"
+                )
+            )
+        )
 
-        val events = runSequence(newEngine(manager, collector, evaluator))
+        val events = runSequence(newEngine(manager, collector, evaluator), config = config)
 
         verify(exactly = 0) { evaluator.evaluate(any(), any(), any(), any(), any()) }
         val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
@@ -333,7 +346,7 @@ class FactoryTestEngineTest {
     )
 
     @Test
-    fun `CHIP_UID F_GetMode 无数据时回退 eFuse 读取成功则 PASS`() = runTest {
+    fun `CHIP_UID F_GetMode 无数据时不再回退 eFuse 且判 FAIL`() = runTest {
         val manager = defaultManager()
         val collector = defaultCollector()
         val evaluator = mockk<AppSideTestEvaluator>()
@@ -343,27 +356,7 @@ class FactoryTestEngineTest {
 
         val events = runSequence(engine, config = chipUidConfig)
 
-        coVerify(exactly = 1) { efuse.readAll("AA:BB") }
-        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
-            .single { it.type == TestType.CHIP_UID }
-        assertEquals(2, completed.results.size)
-        assertTrue(completed.results.all { it.passed })
-        assertEquals("30303030-3030-3030-3030-303030303030", completed.results[0].displayValue)
-        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
-        assertTrue(sequence.overallPassed)
-    }
-
-    @Test
-    fun `CHIP_UID F_GetMode 无数据且 eFuse 读取失败则 FAIL`() = runTest {
-        val manager = defaultManager()
-        val collector = defaultCollector()
-        val evaluator = mockk<AppSideTestEvaluator>()
-        val efuse = mockk<EfuseReader>()
-        coEvery { efuse.readAll(any()) } returns null
-        val engine = FactoryTestEngine(manager, collector, evaluator, efuse)
-
-        val events = runSequence(engine, config = chipUidConfig)
-
+        coVerify(exactly = 0) { efuse.readAll(any()) }
         val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
             .single { it.type == TestType.CHIP_UID }
         assertEquals(2, completed.results.size)
@@ -396,7 +389,7 @@ class FactoryTestEngineTest {
     }
 
     @Test
-    fun `CHIP_UID F_GetMode 失败时回退 eFuse 读取成功则 PASS`() = runTest {
+    fun `CHIP_UID F_GetMode 失败时不再回退 eFuse 且判 FAIL`() = runTest {
         val manager = defaultManager()
         coEvery { manager.sendCommand(any(), KEY_F_GET_MODE, any()) } returns
             Result.failure(IllegalStateException("get mode failed"))
@@ -408,13 +401,13 @@ class FactoryTestEngineTest {
 
         val events = runSequence(engine, config = chipUidConfig)
 
-        coVerify(exactly = 1) { efuse.readAll("AA:BB") }
+        coVerify(exactly = 0) { efuse.readAll(any()) }
         val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
             .single { it.type == TestType.CHIP_UID }
         assertEquals(2, completed.results.size)
-        assertTrue(completed.results.all { it.passed })
+        assertTrue(completed.results.all { !it.passed })
         val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
-        assertTrue(sequence.overallPassed)
+        assertFalse(sequence.overallPassed)
     }
 
     @Test
@@ -465,7 +458,7 @@ class FactoryTestEngineTest {
     }
 
     @Test
-    fun `CHIP_UID F_SetMode 失败时回退 eFuse 读取成功则 PASS`() = runTest {
+    fun `CHIP_UID F_SetMode 失败时不再回退 eFuse 且判 FAIL`() = runTest {
         val manager = defaultManager()
         coEvery { manager.sendCommand(any(), KEY_F_SET_MODE, any()) } returns
             Result.failure(IllegalStateException("set mode failed"))
@@ -477,14 +470,14 @@ class FactoryTestEngineTest {
 
         val events = runSequence(engine, config = chipUidConfig)
 
-        coVerify(exactly = 1) { efuse.readAll("AA:BB") }
+        coVerify(exactly = 0) { efuse.readAll(any()) }
+        coVerify(exactly = 0) { manager.sendCommand(any(), KEY_F_GET_MODE, any()) }
         val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
             .single { it.type == TestType.CHIP_UID }
         assertEquals(2, completed.results.size)
-        assertTrue(completed.results.all { it.passed })
-        assertEquals("30303030-3030-3030-3030-303030303030", completed.results[0].displayValue)
+        assertTrue(completed.results.all { !it.passed })
         val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
-        assertTrue(sequence.overallPassed)
+        assertFalse(sequence.overallPassed)
     }
 
     private val chipInitPlusBaseNoiseConfig = FactoryConfig(
