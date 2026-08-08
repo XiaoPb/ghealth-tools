@@ -118,4 +118,26 @@ class TestRawDataCollectorTest {
         assertTrue(collector.isCollectionComplete(spec))
         scope.coroutineContext[Job]!!.cancel()
     }
+
+    @Test
+    fun `skip 为 0 时仅需 min 帧`() = runTest {
+        val flow = MutableSharedFlow<Pair<String, GhFuncFrame>>(extraBufferCapacity = 64)
+        val (collector, scope) = newCollector(flow)
+        collector.start("AA:BB")
+        (0 until 2).forEach { flow.tryEmit("AA:BB" to testFrame(intArrayOf(it), frameCnt = it)) }
+        val spec = CollectionSpec(minNumber = 2, skipNumber = 0, timeoutMs = 10_000L, isContinuous = false)
+        assertTrue(collector.isCollectionComplete(spec))
+        scope.coroutineContext[Job]!!.cancel()
+    }
+
+    @Test
+    fun `末尾连续帧数恰好等于 min 时完成`() = runTest {
+        val flow = MutableSharedFlow<Pair<String, GhFuncFrame>>(extraBufferCapacity = 64)
+        val (collector, scope) = newCollector(flow)
+        collector.start("AA:BB")
+        listOf(0, 1, 2, 5, 6).forEach { flow.tryEmit("AA:BB" to testFrame(intArrayOf(it), frameCnt = it)) }
+        val spec = CollectionSpec(minNumber = 2, skipNumber = 3, timeoutMs = 10_000L, isContinuous = true)
+        assertTrue(collector.isCollectionComplete(spec))
+        scope.coroutineContext[Job]!!.cancel()
+    }
 }

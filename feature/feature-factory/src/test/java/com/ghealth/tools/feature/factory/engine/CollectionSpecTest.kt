@@ -46,4 +46,12 @@ class CollectionSpecTest {
         assertTrue(spec.isContinuous)
         assertEquals(10_000L, spec.timeoutMs)
     }
+
+    @Test
+    fun `非法配置被钳制到合法范围`() {
+        val compute = AppComputeConfig(minNumber = 0, skipNumber = -5)
+        val spec = CollectionSpec.resolve(compute, TestType.BASE_NOISE)
+        assertEquals(1, spec.minNumber)
+        assertEquals(0, spec.skipNumber)
+    }
 }

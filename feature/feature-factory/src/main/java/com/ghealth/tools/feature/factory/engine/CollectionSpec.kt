@@ -22,8 +22,8 @@ data class CollectionSpec(
         fun resolve(compute: AppComputeConfig?, testType: TestType): CollectionSpec {
             val isNoise = testType == TestType.BASE_NOISE || testType == TestType.PPG_NOISE
             return CollectionSpec(
-                minNumber = compute?.minNumber ?: DEFAULT_MIN_NUMBER,
-                skipNumber = compute?.skipNumber ?: if (isNoise) DEFAULT_SKIP_NOISE else DEFAULT_SKIP_CTR,
+                minNumber = (compute?.minNumber ?: DEFAULT_MIN_NUMBER).coerceAtLeast(1),
+                skipNumber = (compute?.skipNumber ?: if (isNoise) DEFAULT_SKIP_NOISE else DEFAULT_SKIP_CTR).coerceAtLeast(0),
                 timeoutMs = compute?.timeout ?: DEFAULT_TIMEOUT_MS,
                 isContinuous = compute?.isContinuous?.let { it == 1 } ?: isNoise
             )
