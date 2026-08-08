@@ -12,6 +12,7 @@ class TestRawDataBuffers {
     private val rawdataByChannel = mutableMapOf<Int, MutableList<Int>>()
     private val ipdPaByChannel = mutableMapOf<Int, MutableList<Int>>()
     private val ledSumMaByChannel = mutableMapOf<Int, Double>()
+    private val agcPhysicalByChannel = mutableMapOf<Int, AgcPhysicalCodec.Physical>()
     private val frameCnts = mutableListOf<Int>()
 
     fun addFrame(frame: GhFuncFrame) {
@@ -26,6 +27,7 @@ class TestRawDataBuffers {
             val agcH = frame.agcInfoHigh.getOrElse(ch) { 0 }
             val physical = AgcPhysicalCodec.decode(frame.agcInfo[ch], agcH)
             ledSumMaByChannel[ch] = physical.ledCurrentSum / 10.0 // 0.1mA → mA
+            agcPhysicalByChannel[ch] = physical
         }
     }
 
@@ -51,6 +53,7 @@ class TestRawDataBuffers {
         rawdataByChannel = rawdataByChannel.mapValues { it.value.toList() },
         ipdPaByChannel = ipdPaByChannel.mapValues { it.value.toList() },
         ledCurrentSumMaByChannel = ledSumMaByChannel.toMap(),
+        agcPhysicalByChannel = agcPhysicalByChannel.toMap(),
         frameCnts = frameCnts.toList()
     )
 }

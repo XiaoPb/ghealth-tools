@@ -8,6 +8,7 @@ import com.ghealth.tools.feature.factory.model.TestDef
 import com.ghealth.tools.feature.factory.model.TestResult
 import com.ghealth.tools.feature.factory.model.TestType
 import com.ghealth.tools.feature.factory.model.ThresholdOperator
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
@@ -73,12 +74,24 @@ class AppSideTestEvaluator @Inject constructor() {
                     }
                     computed = PpgMetricsCalculator.noise(sigma, params)
                     val snr = PpgMetricsCalculator.snr(rawWindowAvg, params.offset, sigma)
+                    Timber.d("PPG_DEBUG %s ch%d raw[last%d]=%s",
+                        testType.displayName, ch, spec.minNumber,
+                        compactDoubles(rawSeries.takeLast(spec.minNumber)))
+                    Timber.d("PPG_DEBUG %s ch%d filt[last%d]=%s",
+                        testType.displayName, ch, spec.minNumber,
+                        compactDoubles(filtered.takeLast(spec.minNumber).toList()))
+                    Timber.d("PPG_DEBUG %s ch%d params fullScale=%s vref=%s offset=%s tiaRatio=%s rawAvg=%s sigma=%s",
+                        testType.displayName, ch,
+                        TestResult.formatComputed(params.fullScale), TestResult.formatComputed(params.vref),
+                        TestResult.formatComputed(params.offset), TestResult.formatComputed(params.tiaRatio),
+                        TestResult.formatComputed(rawAvg), TestResult.formatComputed(sigma))
                     log(LogLevel.INFO,
-                        "${testType.displayName}: 通道$ch Noise=${TestResult.formatComputed(computed)}μV SNR=${TestResult.formatComputed(snr)}dB")
+                        "${testType.displayName}: 通道$ch Noise=${TestResult.formatComputed(computed)}μV SNR=${TestResult.formatComputed(snr)}dB rawAvg=${TestResult.formatComputed(rawAvg)} sigma=${TestResult.formatComputed(sigma)}")
                 }
                 testType == TestType.LPCTR || testType == TestType.LPLCTR -> {
                     val ipdPaSeries = data.ipdPaByChannel[ch]
-                    val ipdNa = if (!ipdPaSeries.isNullOrEmpty() && ipdPaSeries.size >= spec.minNumber) {
+                    val useIpdPa = !ipdPaSeries.isNullOrEmpty() && ipdPaSeries.size >= spec.minNumber
+                    val ipdNa = if (useIpdPa) {
                         PpgMetricsCalculator.ipdFromPa(
                             PpgMetricsCalculator.average(
                                 ipdPaSeries.takeLast(spec.minNumber).map { it.toDouble() }.toDoubleArray()
@@ -106,12 +119,41 @@ class AppSideTestEvaluator @Inject constructor() {
                     if (params.offset != 0.0 && compute?.ledCurrentMa == null && agcLedMa != null) {
                         log(LogLevel.WARN, "${testType.displayName}: 通道$ch LED 电流来自 AGC 解码（非 GH3036 位域未文档化），建议配置 compute.led_current_ma")
                     }
+                    val ipdSource = if (useIpdPa) "ipd_pa" else "rawdata"
+                    val ledSource = if (params.offset == 0.0) {
+                        if (agcLedMa != null) "agc" else if (compute?.ledCurrentMa != null) "config" else "none"
+                    } else {
+                        if (compute?.ledCurrentMa != null) "config" else if (agcLedMa != null) "agc" else "none"
+                    }
+                    val agcPhysical = data.agcPhysicalByChannel[ch]
+                    Timber.d("PPG_DEBUG %s ch%d raw[last%d]=%s rawAvg=%s",
+                        testType.displayName, ch, spec.minNumber,
+                        compactDoubles(rawSeries?.takeLast(spec.minNumber) ?: emptyList()),
+                        TestResult.formatComputed(rawWindowAvg))
+                    if (useIpdPa) {
+                        Timber.d("PPG_DEBUG %s ch%d ipdPa[last%d]=%s avg=%s",
+                            testType.displayName, ch, spec.minNumber,
+                            compactInts(ipdPaSeries!!.takeLast(spec.minNumber)),
+                            TestResult.formatComputed(PpgMetricsCalculator.average(
+                                ipdPaSeries.takeLast(spec.minNumber).map { it.toDouble() }.toDoubleArray())))
+                    }
+                    if (agcPhysical != null) {
+                        Timber.d("PPG_DEBUG %s ch%d agc: gain=%d bg_cancel=%d dc_cancel=%d dc_code=%d drv0=%s mA drv1=%s mA led_sum=%s mA",
+                            testType.displayName, ch,
+                            agcPhysical.gain, agcPhysical.bgCancelLevel, agcPhysical.dcCancelLevel,
+                            agcPhysical.dcCancelCode,
+                            TestResult.formatComputed(agcPhysical.ledCurrentDrv0 / 10.0),
+                            TestResult.formatComputed(agcPhysical.ledCurrentDrv1 / 10.0),
+                            TestResult.formatComputed(agcPhysical.ledCurrentSum / 10.0))
+                    }
                     computed = PpgMetricsCalculator.ctr(ipdNa, ledMa)
                     if (computed.isNaN()) {
                         results += failedResult(testType, ch, testDef)
                         log(LogLevel.WARN, "${testType.displayName}: 通道$ch LED 电流为 0，无法计算 CTR，标记 FAIL")
                         continue
                     }
+                    log(LogLevel.INFO,
+                        "${testType.displayName}: 通道$ch Ipd=${TestResult.formatComputed(ipdNa)}nA($ipdSource) Iled=${TestResult.formatComputed(ledMa)}mA($ledSource) CTR=${TestResult.formatComputed(computed)}nA/mA")
                 }
                 else -> {
                     results += failedResult(testType, ch, testDef)
@@ -136,6 +178,14 @@ class AppSideTestEvaluator @Inject constructor() {
         val passCount = results.count { it.passed }
         log(LogLevel.INFO, "${testType.displayName}: App端计算完成，$passCount/${results.size} 通道通过")
         return results
+    }
+
+    /** 调试用：整型序列压缩为逗号分隔字符串。 */
+    private fun compactInts(values: List<Int>): String = values.joinToString(",") { it.toString() }
+
+    /** 调试用：浮点序列压缩为逗号分隔字符串；整数值省略小数位。 */
+    private fun compactDoubles(values: List<Double>): String = values.joinToString(",") { d ->
+        if (d.isFinite() && d == kotlin.math.floor(d) && kotlin.math.abs(d) < 1e15) d.toLong().toString() else d.toString()
     }
 
     private fun failedResult(testType: TestType, channel: Int, testDef: TestDef): TestResult =
