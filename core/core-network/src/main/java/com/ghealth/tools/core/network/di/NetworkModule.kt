@@ -3,6 +3,7 @@ package com.ghealth.tools.core.network.di
 import android.content.Context
 import com.ghealth.tools.core.network.AuthAuthenticator
 import com.ghealth.tools.core.network.AuthInterceptor
+import com.ghealth.tools.core.network.PrimaryEndpointInterceptor
 import com.ghealth.tools.core.network.RetryInterceptor
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
@@ -21,6 +22,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.Dns
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -52,6 +54,25 @@ object NetworkModule {
     @Named("baseUrl")
     fun provideBaseUrl(): String {
         return DEFAULT_BASE_URL
+    }
+
+    @Provides
+    @Singleton
+    @Named("primaryBaseUrl")
+    fun providePrimaryBaseUrl(): String {
+        return PRIMARY_AUTH_BASE_URL
+    }
+
+    @Provides
+    @Singleton
+    fun providePrimaryEndpointInterceptor(
+        @Named("primaryBaseUrl") primaryBaseUrl: String,
+        @Named("baseUrl") fallbackBaseUrl: String
+    ): PrimaryEndpointInterceptor {
+        return PrimaryEndpointInterceptor(
+            primaryBaseUrl = primaryBaseUrl.toHttpUrl(),
+            fallbackBaseUrl = fallbackBaseUrl.toHttpUrl()
+        )
     }
 
     @Provides
@@ -123,13 +144,15 @@ object NetworkModule {
     fun provideOkHttpClient(
         authInterceptor: AuthInterceptor,
         authAuthenticator: AuthAuthenticator,
-        dns: Dns
+        dns: Dns,
+        primaryEndpointInterceptor: PrimaryEndpointInterceptor
     ): OkHttpClient {
         val loggingInterceptor = createApiLoggingInterceptor()
 
         return OkHttpClient.Builder()
             .dns(dns)
             .addInterceptor(RetryInterceptor(maxRetries = 3))
+            .addInterceptor(primaryEndpointInterceptor)
             .addInterceptor(authInterceptor)
             .authenticator(authAuthenticator)
             .addInterceptor(loggingInterceptor)
