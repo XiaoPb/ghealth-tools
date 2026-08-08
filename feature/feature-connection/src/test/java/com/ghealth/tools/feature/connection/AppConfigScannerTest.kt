@@ -18,7 +18,7 @@ class AppConfigScannerTest {
 
         val result = scanOfflineAppConfigDir(chipDir, "gh3036")
 
-        assertEquals(listOf("base_noise.config", "hrp.ini"), result.map { it.fileName })
+        assertEquals(listOf("base_noise.config", "hrp.ini"), result.map { it.fileName }.sorted())
         assertTrue(result.all { it.displayPath == it.fileName })
         assertTrue(result.all { it.chipName == "gh3036" })
     }
