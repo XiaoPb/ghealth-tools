@@ -40,13 +40,6 @@ data class SettingsUiState(
     val isDeletingProject: Boolean = false,
     val isSyncingConfig: Boolean = false,
     val operationMessage: String? = null,
-    val showUpdateDialog: Boolean = false,
-    val updateVersionName: String = "",
-    val updateChangelog: String = "",
-    val updateDownloadUrl: String = "",
-    val updateProxyDownloadUrl: String = "",
-    val useProxyDownload: Boolean = true,
-    val isForceUpdate: Boolean = false,
     val isCheckingUpdate: Boolean = false,
     val isDeviceConnected: Boolean = false,
     val bleVersion: String = "",
@@ -64,7 +57,7 @@ class SettingsViewModel @Inject constructor(
     private val configSyncManager: ConfigSyncManager,
     private val projectApi: ProjectApi,
     private val configPathProvider: ConfigPathProvider,
-    private val updateChecker: UpdateChecker
+    private val updateCheckCoordinator: UpdateCheckCoordinator
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState(appVersion = versionName))
@@ -248,66 +241,25 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isCheckingUpdate = true) }
             try {
-                val result = updateChecker.checkForUpdate()
-                if (result.hasUpdate && result.updateInfo != null) {
-                    _uiState.update {
-                        it.copy(
-                            isCheckingUpdate = false,
-                            showUpdateDialog = true,
-                            updateVersionName = result.updateInfo.versionName,
-                            updateChangelog = result.updateInfo.changelog,
-                            updateDownloadUrl = result.updateInfo.downloadUrl,
-                            updateProxyDownloadUrl = result.updateInfo.proxyDownloadUrl,
-                            useProxyDownload = true,
-                            isForceUpdate = result.isForceUpdate,
-                        )
-                    }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            isCheckingUpdate = false,
-                            operationMessage = result.errorMessage ?: "已是最新版本"
-                        )
-                    }
+                val result = updateCheckCoordinator.checkForUpdate(respectIgnored = false)
+                _uiState.update {
+                    it.copy(
+                        isCheckingUpdate = false,
+                        operationMessage = if (result.hasUpdate) {
+                            null
+                        } else {
+                            result.errorMessage ?: "已是最新版本"
+                        },
+                    )
                 }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isCheckingUpdate = false,
-                        operationMessage = "检查更新失败: ${e.message}"
+                        operationMessage = "检查更新失败: ${e.message}",
                     )
                 }
             }
-        }
-    }
-
-    fun setUseProxyDownload(useProxy: Boolean) {
-        _uiState.update { it.copy(useProxyDownload = useProxy) }
-    }
-
-    fun dismissUpdateDialog() {
-        _uiState.update {
-            it.copy(
-                showUpdateDialog = false,
-                updateVersionName = "",
-                updateChangelog = "",
-                updateDownloadUrl = "",
-                updateProxyDownloadUrl = "",
-                useProxyDownload = true,
-                isForceUpdate = false,
-            )
-        }
-    }
-
-    fun openDownloadPage() {
-        val state = _uiState.value
-        val url = UpdateDownloadLinks.effectiveDownloadUrl(
-            useProxy = state.useProxyDownload,
-            directUrl = state.updateDownloadUrl,
-            proxyUrl = state.updateProxyDownloadUrl,
-        )
-        if (url.isNotEmpty()) {
-            updateChecker.openDownloadUrl(url)
         }
     }
 }

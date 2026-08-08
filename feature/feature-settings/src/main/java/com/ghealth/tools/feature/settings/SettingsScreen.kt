@@ -429,21 +429,6 @@ fun SettingsScreen(
                     colors = listItemColors
                 )
             }
-
-            if (state.showUpdateDialog) {
-                UpdateDialog(
-                    versionName = state.updateVersionName,
-                    changelog = state.updateChangelog,
-                    isForceUpdate = state.isForceUpdate,
-                    useProxyDownload = state.useProxyDownload,
-                    onUseProxyChange = viewModel::setUseProxyDownload,
-                    onDownload = {
-                        viewModel.openDownloadPage()
-                        viewModel.dismissUpdateDialog()
-                    },
-                    onDismiss = { viewModel.dismissUpdateDialog() },
-                )
-            }
         }
     }
 }
