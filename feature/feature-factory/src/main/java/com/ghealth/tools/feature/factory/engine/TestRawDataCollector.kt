@@ -49,6 +49,15 @@ class TestRawDataCollector @Inject constructor(
         }
     }
 
+    /** 采集是否满足完成条件：去重帧数 >= skip+min，且要求连续时末尾连续帧数 >= min。 */
+    fun isCollectionComplete(spec: CollectionSpec): Boolean {
+        synchronized(lock) {
+            if (buffers.frameCount() < spec.skipNumber + spec.minNumber) return false
+            if (!spec.isContinuous) return true
+            return buffers.lastConsecutiveCount() >= spec.minNumber
+        }
+    }
+
     private fun stopLocked() {
         job?.cancel()
         job = null

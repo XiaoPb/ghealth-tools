@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -70,6 +72,50 @@ class TestRawDataCollectorTest {
         flow.tryEmit("AA:BB" to testFrame(intArrayOf(200)))
         val data = collector.stop()
         assertEquals(listOf(200), data.rawdataByChannel[0])
+        scope.coroutineContext[Job]!!.cancel()
+    }
+
+    @Test
+    fun `未达 skip 加 min 总数时未完成`() = runTest {
+        val flow = MutableSharedFlow<Pair<String, GhFuncFrame>>(extraBufferCapacity = 64)
+        val (collector, scope) = newCollector(flow)
+        collector.start("AA:BB")
+        (0 until 3).forEach { flow.tryEmit("AA:BB" to testFrame(intArrayOf(it), frameCnt = it)) }
+        val spec = CollectionSpec(minNumber = 2, skipNumber = 3, timeoutMs = 10_000L, isContinuous = true)
+        assertFalse(collector.isCollectionComplete(spec))
+        scope.coroutineContext[Job]!!.cancel()
+    }
+
+    @Test
+    fun `达到总数且不要求连续时完成`() = runTest {
+        val flow = MutableSharedFlow<Pair<String, GhFuncFrame>>(extraBufferCapacity = 64)
+        val (collector, scope) = newCollector(flow)
+        collector.start("AA:BB")
+        listOf(0, 1, 5, 6, 7).forEach { flow.tryEmit("AA:BB" to testFrame(intArrayOf(it), frameCnt = it)) }
+        val spec = CollectionSpec(minNumber = 2, skipNumber = 3, timeoutMs = 10_000L, isContinuous = false)
+        assertTrue(collector.isCollectionComplete(spec))
+        scope.coroutineContext[Job]!!.cancel()
+    }
+
+    @Test
+    fun `达到总数要求连续但末尾断帧时未完成`() = runTest {
+        val flow = MutableSharedFlow<Pair<String, GhFuncFrame>>(extraBufferCapacity = 64)
+        val (collector, scope) = newCollector(flow)
+        collector.start("AA:BB")
+        listOf(0, 1, 2, 3, 5).forEach { flow.tryEmit("AA:BB" to testFrame(intArrayOf(it), frameCnt = it)) }
+        val spec = CollectionSpec(minNumber = 2, skipNumber = 3, timeoutMs = 10_000L, isContinuous = true)
+        assertFalse(collector.isCollectionComplete(spec))
+        scope.coroutineContext[Job]!!.cancel()
+    }
+
+    @Test
+    fun `达到总数要求连续且末尾连续时完成`() = runTest {
+        val flow = MutableSharedFlow<Pair<String, GhFuncFrame>>(extraBufferCapacity = 64)
+        val (collector, scope) = newCollector(flow)
+        collector.start("AA:BB")
+        (0 until 5).forEach { flow.tryEmit("AA:BB" to testFrame(intArrayOf(it), frameCnt = it)) }
+        val spec = CollectionSpec(minNumber = 2, skipNumber = 3, timeoutMs = 10_000L, isContinuous = true)
+        assertTrue(collector.isCollectionComplete(spec))
         scope.coroutineContext[Job]!!.cancel()
     }
 }
