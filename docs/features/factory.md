@@ -141,6 +141,12 @@ FactoryViewModel.startTest(testName)
 | `gain_k` | number | 无 | 跨阻增益 kΩ；帧内无 Ipd pA 且需 rawdata 法计算时必需（不限芯片） |
 | `led_current_ma` | number | 无 | LED 电流 mA，缺省从 AGC 帧读取 |
 | `sample_rate_hz` | number | 100 | 采样率，用于 0.5Hz 高通滤波系数 |
+| `min_number` | number | 100 | App 端计算最少帧数（计算窗口 = 最后 min_number 帧）；有效帧数不足时该项 FAIL |
+| `skip_number` | number | 噪声 200 / CTR 0 | 跳过帧数（预热），总帧数 = skip_number + min_number |
+| `is_continuous` | number | 噪声 1 / CTR 0 | 1=要求末尾 min_number 帧帧号连续；0=不要求 |
+| `timeout` | number | 10000 | 采集超时 ms；超时未满足条件提示蓝牙连接不稳定并判定 FAIL |
+
+**采集策略（仅 App 端计算回退路径）**：回退模式下按 `compute` 块参数轮询采集 TEST1 原始帧（100ms 间隔），去重帧数达到 `skip_number + min_number` 即停止采集；`is_continuous=1` 时还要求末尾 `min_number` 帧帧号连续。超时未满足条件时输出 ERROR 日志「蓝牙连接不稳定…本项判定 FAIL」、该测试项直接 FAIL，并弹出一次性对话框提示（不影响测试流程）。非回退路径仍为固定 3s 采集窗口。噪声计算对完整序列做 0.5Hz 高通滤波、σ 只统计最后 `min_number` 帧。
 
 计算值以 `TestResult.computedValue` 输出到界面与 CSV；单通道无原始数据时该通道标记 FAIL 并记录 WARN 日志；整个测试窗口未采集到任何原始数据时记录 ERROR 日志并产出 1 个合成 FAIL 结果（`value=0`），整次产测判定 FAIL，不再误判 PASS。
 
