@@ -3,6 +3,7 @@ package com.ghealth.tools.feature.factory.engine
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_READ_CMD
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -46,6 +47,15 @@ class EfuseReaderTest {
         coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_LIST_WRITE_CMD, any()) } answers {
             val param = thirdArg<ByteArray>()
             writes += param
+            val addr = (param[2].toInt() and 0xFF) or ((param[3].toInt() and 0xFF) shl 8)
+            if (addr == failWriteAddr) {
+                Result.failure(IllegalStateException("write failed"))
+            } else {
+                Result.success(ByteArray(0))
+            }
+        }
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_WRITE_CMD, any()) } answers {
+            val param = thirdArg<ByteArray>()
             val addr = (param[2].toInt() and 0xFF) or ((param[3].toInt() and 0xFF) shl 8)
             if (addr == failWriteAddr) {
                 Result.failure(IllegalStateException("write failed"))
