@@ -36,6 +36,13 @@ class AppSideTestEvaluator @Inject constructor() {
             return null
         }
 
+        val spec = CollectionSpec.resolve(testDef.compute, testType)
+        if (data.frameCnts.size < spec.minNumber) {
+            log(LogLevel.ERROR,
+                "${testType.displayName}: 有效帧数不足（${data.frameCnts.size}/${spec.minNumber}），蓝牙连接不稳定或采集过早停止，App端计算失败")
+            return null
+        }
+
         val params = ChipAdcParams.forChip(chip)
         val compute = testDef.compute
         val filter = HighPassFilter(sampleRateHz = compute?.sampleRateHz ?: DEFAULT_SAMPLE_RATE_HZ)
@@ -45,6 +52,8 @@ class AppSideTestEvaluator @Inject constructor() {
         for (ch in 0 until data.channelCount) {
             val rawSeries = data.rawdataByChannel[ch]?.map { it.toDouble() }?.toDoubleArray()
             val rawAvg = rawSeries?.let { PpgMetricsCalculator.average(it) } ?: Double.NaN
+            val rawWindowAvg = rawSeries?.takeLast(spec.minNumber)
+                ?.let { PpgMetricsCalculator.average(it.toDoubleArray()) } ?: Double.NaN
 
             val computed: Double
             when {
@@ -54,15 +63,16 @@ class AppSideTestEvaluator @Inject constructor() {
                         log(LogLevel.WARN, "${testType.displayName}: 通道$ch 无原始数据，标记 FAIL")
                         continue
                     }
-                    // 以均值为滤波器初态，消除直流阶跃瞬态
-                    val sigma = PpgMetricsCalculator.stddev(filter.filter(rawSeries, initialX = rawAvg))
+                    // 以均值为滤波器初态，消除直流阶跃瞬态；σ 只统计最后 min_number 帧
+                    val filtered = filter.filter(rawSeries, initialX = rawAvg)
+                    val sigma = PpgMetricsCalculator.stddev(filtered.takeLast(spec.minNumber).toDoubleArray())
                     if (sigma <= 0.0) {
                         results += failedResult(testType, ch, testDef)
                         log(LogLevel.WARN, "${testType.displayName}: 通道$ch 滤波后标准差为 0（样本过少或数据异常），标记 FAIL")
                         continue
                     }
                     computed = PpgMetricsCalculator.noise(sigma, params)
-                    val snr = PpgMetricsCalculator.snr(rawAvg, params.offset, sigma)
+                    val snr = PpgMetricsCalculator.snr(rawWindowAvg, params.offset, sigma)
                     log(LogLevel.INFO,
                         "${testType.displayName}: 通道$ch Noise=${TestResult.formatComputed(computed)}μV SNR=${TestResult.formatComputed(snr)}dB")
                 }
@@ -70,10 +80,12 @@ class AppSideTestEvaluator @Inject constructor() {
                     val ipdPaSeries = data.ipdPaByChannel[ch]
                     val ipdNa = if (!ipdPaSeries.isNullOrEmpty()) {
                         PpgMetricsCalculator.ipdFromPa(
-                            PpgMetricsCalculator.average(ipdPaSeries.map { it.toDouble() }.toDoubleArray())
+                            PpgMetricsCalculator.average(
+                                ipdPaSeries.takeLast(spec.minNumber).map { it.toDouble() }.toDoubleArray()
+                            )
                         )
                     } else if (rawSeries != null && rawSeries.isNotEmpty() && compute != null && compute.gainK != null && compute.gainK > 0) {
-                        PpgMetricsCalculator.ipdFromRaw(rawAvg, params, compute.gainK)
+                        PpgMetricsCalculator.ipdFromRaw(rawWindowAvg, params, compute.gainK)
                     } else {
                         val reason = if (rawSeries == null || rawSeries.isEmpty()) "无原始数据"
                         else "缺少有效的 compute.gain_k 配置，无法用 rawdata 计算 Ipd"
