@@ -10,7 +10,7 @@
 |------|------|------|
 | `FactoryViewModel` | `FactoryViewModel.kt` | 测试流程控制、配置加载、结果汇总 |
 | `FactoryScreen` | `FactoryScreen.kt` | 产测界面（项目选择、测试执行、结果展示） |
-| `factory_config.json` | assets/ | 测试项目配置定义 |
+| `factory_config.json` | defaults/factory/config/{chip}/{project}/ | 测试项目配置定义 |
 | `.config` 文件 | defaults/factory/config/ | 各测试项的寄存器配置 |
 
 ## 3. 配置结构
@@ -226,7 +226,7 @@ FactoryViewModel.exportResults()
 
 默认配置源目录为仓库根 `defaults/`（`app/build.gradle.kts` 注册为 assets 源目录，自动打包进 APK）：
 - `application/config/{chip}/*.config|ini`：芯片级默认应用配置
-- `factory/config/{chip}/{project-name}/*.config`：产测默认配置
+- `factory/config/{chip}/{project-name}/*.config|ini|json`：产测默认配置
 
 应用启动时 `DefaultConfigInstaller`（core-storage）把 APK assets 中的 `application/config`、`factory/config`
 解压到 `GHealthTools/application/config/`、`GHealthTools/factory/config/`，已存在文件跳过（不覆盖用户配置）。
