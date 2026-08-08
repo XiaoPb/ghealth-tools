@@ -102,44 +102,41 @@ class FactoryTestEngineTest {
     }
 
     @Test
-    fun `F_GetMode 空数据时触发 App 端回退并上报评估器结果`() = runTest {
+    fun `F_GetMode 空数据时非回退模式直接 FAIL 且不调用评估器`() = runTest {
         val manager = defaultManager()
         val collector = defaultCollector()
         val evaluator = mockk<AppSideTestEvaluator>()
-        val computed = listOf(
-            TestResult(
-                testType = TestType.BASE_NOISE,
-                channelIndex = 0,
-                value = 152,
-                unit = "dB",
-                threshold = "-",
-                passed = true
-            )
-        )
-        every { evaluator.evaluate(any(), any(), any(), any(), any()) } returns computed
 
         val events = runSequence(newEngine(manager, collector, evaluator))
 
-        verify(exactly = 1) { evaluator.evaluate(any(), any(), any(), any(), any()) }
-        // 非回退模式不轮询采集完成状态
+        verify(exactly = 0) { evaluator.evaluate(any(), any(), any(), any(), any()) }
         verify(exactly = 0) { collector.isCollectionComplete(any()) }
         val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
             .single { it.type == TestType.BASE_NOISE }
-        assertEquals(computed, completed.results)
+        assertEquals(1, completed.results.size)
+        assertFalse(completed.results.single().passed)
+        assertEquals(0, completed.results.single().value)
         val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
-        assertTrue(sequence.overallPassed)
-        assertEquals(emptyList<Int>(), sequence.errorCodes)
+        assertFalse(sequence.overallPassed)
+        assertTrue(sequence.errorCodes.contains(TestType.BASE_NOISE.errorBase))
     }
 
     @Test
-    fun `评估器返回 null 时产出合成 FAIL 结果且整体不 PASS`() = runTest {
+    fun `回退模式下评估器返回 null 时产出合成 FAIL 结果且整体不 PASS`() = runTest {
         val manager = defaultManager()
+        // 寄存器校验回读一致，CHIP_INIT 判定 PASS，触发全局回退
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
+            Result.success(byteArrayOf(1, 0, 0x19, 0x29))
         val collector = defaultCollector()
         val evaluator = mockk<AppSideTestEvaluator>()
         every { evaluator.evaluate(any(), any(), any(), any(), any()) } returns null
 
-        val events = runSequence(newEngine(manager, collector, evaluator))
+        val events = runSequence(
+            newEngine(manager, collector, evaluator),
+            config = chipInitPlusBaseNoiseConfig
+        )
 
+        verify(exactly = 1) { evaluator.evaluate(any(), any(), any(), any(), any()) }
         val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
             .single { it.type == TestType.BASE_NOISE }
         assertEquals(1, completed.results.size)
@@ -796,5 +793,54 @@ class FactoryTestEngineTest {
             listOf(TestEngineEvent.ComputationMode(ComputeMode.APP)),
             events.filterIsInstance<TestEngineEvent.ComputationMode>()
         )
+    }
+
+    @Test
+    fun `非回退模式 F_GetMode 命令失败时直接 FAIL 且不调用评估器`() = runTest {
+        val manager = defaultManager()
+        coEvery { manager.sendCommand(any(), KEY_F_GET_MODE, any()) } returns
+            Result.failure(IllegalStateException("get mode failed"))
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(newEngine(manager, collector, evaluator))
+
+        verify(exactly = 0) { evaluator.evaluate(any(), any(), any(), any(), any()) }
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.BASE_NOISE }
+        assertEquals(1, completed.results.size)
+        assertFalse(completed.results.single().passed)
+        assertTrue(
+            events.filterIsInstance<TestEngineEvent.LogMessage>()
+                .any { it.level == LogLevel.ERROR && it.message.contains("F_GetMode 失败") }
+        )
+        val sequence = events.filterIsInstance<TestEngineEvent.SequenceCompleted>().single()
+        assertFalse(sequence.overallPassed)
+    }
+
+    @Test
+    fun `非回退模式空数据时按配置通道数产出全通道 FAIL`() = runTest {
+        val twoChannelConfig = FactoryConfig(
+            project = "test",
+            tests = mapOf(
+                "base_noise" to TestDef(
+                    enabled = true, mode = TestType.BASE_NOISE.mode, channels = 2, unit = "dB"
+                )
+            )
+        )
+        val manager = defaultManager()
+        val collector = defaultCollector()
+        val evaluator = mockk<AppSideTestEvaluator>()
+
+        val events = runSequence(
+            newEngine(manager, collector, evaluator),
+            config = twoChannelConfig
+        )
+
+        val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
+            .single { it.type == TestType.BASE_NOISE }
+        assertEquals(2, completed.results.size)
+        assertTrue(completed.results.all { !it.passed })
+        assertEquals(listOf(0, 1), completed.results.map { it.channelIndex })
     }
 }

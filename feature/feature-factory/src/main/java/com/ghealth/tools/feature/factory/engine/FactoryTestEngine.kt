@@ -584,8 +584,11 @@ class FactoryTestEngine @Inject constructor(
                     Package.packU8(testType.mode.toByte())
                 )
                 if (getResult.isFailure) {
-                    onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR, "${testType.displayName}: F_GetMode 失败"))
-                    return null
+                    onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                        "${testType.displayName}: F_GetMode 失败，MCU 模式不允许中途回退，本项判定 FAIL"))
+                    val failed = failedResults(testType, testDef)
+                    onEvent(TestEngineEvent.TestCompleted(testType, failed))
+                    return failed
                 }
             }
         } finally {
@@ -603,8 +606,11 @@ class FactoryTestEngine @Inject constructor(
         val maxChannels = testDef.channels
 
         if (actualChannels == 0) {
-            return evaluateAppSide(testType, testDef, collected, chip,
-                "设备未返回产测数据，切换为 App 端计算", onEvent)
+            onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
+                "${testType.displayName}: 设备未返回产测数据，MCU 模式不允许中途回退，本项判定 FAIL"))
+            val failed = failedResults(testType, testDef)
+            onEvent(TestEngineEvent.TestCompleted(testType, failed))
+            return failed
         }
 
         if (actualChannels < maxChannels) {
@@ -675,6 +681,19 @@ class FactoryTestEngine @Inject constructor(
         onEvent(TestEngineEvent.TestCompleted(testType, computed))
         return computed
     }
+
+    /** 非回退模式中途异常时按配置通道数产出全通道 FAIL，避免空窗口静默跳过。 */
+    private fun failedResults(testType: TestType, testDef: TestDef): List<TestResult> =
+        (0 until testDef.channels).map { ch ->
+            TestResult(
+                testType = testType,
+                channelIndex = ch,
+                value = 0,
+                unit = testDef.unit,
+                threshold = "-",
+                passed = false
+            )
+        }
 
     /** App 端计算不可用或采集超时时产出合成 FAIL（单通道），避免空窗口静默通过。 */
     private fun syntheticFail(testType: TestType, testDef: TestDef): List<TestResult> =
