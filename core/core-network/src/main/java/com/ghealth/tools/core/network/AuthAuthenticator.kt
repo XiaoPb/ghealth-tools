@@ -12,6 +12,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import timber.log.Timber
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -99,6 +100,8 @@ class AuthAuthenticator @Inject constructor(
         val client = OkHttpClient.Builder()
             .addInterceptor(primaryEndpointInterceptor)
             .addInterceptor(loggingInterceptor)
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(3, TimeUnit.SECONDS)
             .build()
 
         return Retrofit.Builder()
