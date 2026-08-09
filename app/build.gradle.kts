@@ -29,8 +29,8 @@ android {
         applicationId = "com.ghealth.tools"
         minSdk = 24
         targetSdk = 35
-        versionCode = 630
-        versionName = "0.6.30"
+        versionCode = 631
+        versionName = "0.6.31"
     }
 
     signingConfigs {
