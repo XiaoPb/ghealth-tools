@@ -1,6 +1,5 @@
 package com.ghealth.tools.ble.gh3220.commands
 
-import com.ghealth.tools.ble.gh3220.Gh3220Cmd
 import com.ghealth.tools.ble.itlvc.core.CommandSpec
 import com.ghealth.tools.ble.itlvc.core.ItlvcConfig
 import com.ghealth.tools.ble.itlvc.core.ItlvcError
