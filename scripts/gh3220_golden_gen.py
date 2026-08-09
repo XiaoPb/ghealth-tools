@@ -20,6 +20,7 @@ def sign_u32(a, b):
     a &= MASK32; b &= MASK32
     return 0 if a > b else 1
 
+# 注意：编码仅在 32bit 差分内自洽（dtype <= 15 才能放入一个 nibble）。
 def get_diff(channel_count, cur, last):
     nibbles = []
     for ch in range(channel_count):

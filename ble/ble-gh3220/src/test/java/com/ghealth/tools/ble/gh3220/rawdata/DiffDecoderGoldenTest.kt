@@ -1,7 +1,11 @@
 package com.ghealth.tools.ble.gh3220.rawdata
 
+import com.ghealth.tools.ble.itlvc.core.ItlvcError
 import org.junit.jupiter.api.Test
+import kotlin.test.assertContains
 import kotlin.test.assertContentEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class DiffDecoderGoldenTest {
 
@@ -16,6 +20,11 @@ class DiffDecoderGoldenTest {
             "0000000000000000|f4bea973dcf4bb99|ef4bea973edcf4bb99",
             "f4bea973dcf4bb99|f2a4d27bd95bafc8|d219d6f8d3990bd1",
             "f2a4d27bd95bafc8|0e7a269f177219d3|fe42aabdcfc1e995f5",
+        ),
+        4 to listOf(
+            "00000000000000000000000000000000|3c6da5d74da4f9fc1a6916c7b8a1abcd|e3c6da5d7e4da4f9fce1a6916c7eb8a1abcd",
+            "3c6da5d74da4f9fc1a6916c7b8a1abcd|656412a97a97c64327ac435a1710cf53|e28f66cd2e2cf2cc47cd432c93fa190dc7a0",
+            "656412a97a97c64327ac435a1710cf53|110722310512bd1366ceab368ca59966|f545cf078f75850930e3f2267dce7594ca13",
         ),
     )
 
@@ -48,6 +57,43 @@ class DiffDecoderGoldenTest {
         assertContentEquals(intArrayOf(0x2265B1F5), r1.getOrThrow())
         val r2 = decoder.decode(hexBytes("e6f51a6550")) // → 0x91B7584A
         assertContentEquals(intArrayOf(0x91B7584A.toInt()), r2.getOrThrow())
+    }
+
+    @Test
+    fun `rejects empty diff stream`() {
+        val result = DiffDecoder(1).decode(ByteArray(0))
+        assertTrue(result.isFailure)
+        val error = result.exceptionOrNull()
+        assertIs<ItlvcError.ParseError>(error)
+        assertContains(error.message, "type nibble missing")
+    }
+
+    @Test
+    fun `rejects truncated value nibbles`() {
+        // type=0xE 需要 8 个值 nibble，但只有 1 个可用
+        val result = DiffDecoder(1).decode(hexBytes("e2"))
+        assertTrue(result.isFailure)
+        val error = result.exceptionOrNull()
+        assertIs<ItlvcError.ParseError>(error)
+        assertContains(error.message, "value nibble missing")
+    }
+
+    @Test
+    fun `rejects truncated second channel`() {
+        // ch0（type=0）消费 2 个 nibble 后，ch1 的类型 nibble 缺失
+        val result = DiffDecoder(2).decode(hexBytes("00"))
+        assertTrue(result.isFailure)
+        val error = result.exceptionOrNull()
+        assertIs<ItlvcError.ParseError>(error)
+        assertContains(error.message, "type nibble missing")
+    }
+
+    @Test
+    fun `failed decode does not mutate baseline`() {
+        val decoder = DiffDecoder(1)
+        assertTrue(decoder.decode(hexBytes("e2")).isFailure)
+        val result = decoder.decode(hexBytes("e2265b1f50")) // 基线未变：0 → 0x2265B1F5
+        assertContentEquals(intArrayOf(0x2265B1F5), result.getOrThrow())
     }
 
     private fun IntArray.toByteArray(): ByteArray = ByteArray(size * 4) { i ->

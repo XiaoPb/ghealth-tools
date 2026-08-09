@@ -31,10 +31,14 @@ class NibbleReader(private val data: ByteArray) {
  */
 class DiffDecoder(private val channelCount: Int) {
 
-    private val last = IntArray(channelCount)
+    init {
+        require(channelCount > 0) { "channelCount must be positive: $channelCount" }
+    }
+
+    private var last = IntArray(channelCount)
 
     fun reset() {
-        last.fill(0)
+        last = IntArray(channelCount)
     }
 
     fun decode(data: ByteArray): Result<IntArray> {
@@ -50,9 +54,9 @@ class DiffDecoder(private val channelCount: Int) {
             }
             val signed = if (type % 2 == 0) magnitude else -magnitude
             val value = last[ch] + signed
-            last[ch] = value
             out[ch] = value
         }
+        last = out
         return Result.success(out)
     }
 }
