@@ -38,6 +38,9 @@ include(":ble:ble-scanner")
 include(":ble:ble-connection")
 include(":ble:ble-protocol")
 
+include(":ble:ble-itlvc")
+include(":ble:ble-gh3220")
+
 include(":external:libcom")
 include(":external:libdfu2")
 include(":feature:feature-ota")
