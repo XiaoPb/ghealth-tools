@@ -5,7 +5,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
-/** 测试用内存传输：可注入入站块、记录出站字节、模拟发送失败。 */
+/**
+ * 测试用内存传输：可注入入站块、记录出站字节、模拟发送失败。
+ * 非线程安全，仅用于单线程测试。
+ */
 class InMemoryTransport(override val mtu: Int = 240) : ByteTransport {
 
     private val _receive = MutableSharedFlow<ByteArray>(extraBufferCapacity = 128)
