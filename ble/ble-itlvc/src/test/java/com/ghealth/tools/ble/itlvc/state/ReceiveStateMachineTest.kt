@@ -5,6 +5,7 @@ import com.ghealth.tools.ble.itlvc.codec.ItlvcFrameCodec
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -95,5 +96,96 @@ class ReceiveStateMachineTest {
         val frames = noCrc.feed(bytes, now = 0)
         assertEquals(1, frames.size)
         assertContentEquals(byteArrayOf(0x10, 0x20), frames[0].value)
+    }
+
+    @Test
+    fun `drainDropReasons reports drop reasons once`() {
+        val bad = frame(0x1A, ByteArray(0)).copyOf()
+        bad[bad.lastIndex] = (bad.last().toInt() xor 0xFF).toByte()
+        assertEquals(0, rx.feed(bad, now = 0).size)
+        assertTrue(rx.drainDropReasons().contains(DropReason.CRC_MISMATCH))
+        assertTrue(rx.drainDropReasons().isEmpty())
+        // 干净 feed 后无丢弃原因
+        assertEquals(1, rx.feed(frame(0x1A, ByteArray(0)), now = 1).size)
+        assertTrue(rx.drainDropReasons().isEmpty())
+    }
+
+    @Test
+    fun `zero-length frame with checksum parses from raw vector`() {
+        val raw = byteArrayOf(0xAA.toByte(), 0x11, 0x1A, 0x00, 0xAE.toByte())
+        val frames = rx.feed(raw, now = 0)
+        assertEquals(1, frames.size)
+        assertContentEquals(byteArrayOf(0x1A), frames[0].type)
+        assertContentEquals(ByteArray(0), frames[0].value)
+    }
+
+    @Test
+    fun `multi-byte type and length layout`() {
+        val multi = ReceiveStateMachine(
+            FrameLayout(
+                idBytes = byteArrayOf(0xAA.toByte(), 0x11.toByte()),
+                typeBytes = 2,
+                lenBytes = 2,
+                checksum = null,
+            ),
+        )
+        val bytes = byteArrayOf(0xAA.toByte(), 0x11, 0x01, 0x02, 0x00, 0x03, 0x10, 0x20, 0x30)
+        val frames = multi.feed(bytes, now = 0)
+        assertEquals(1, frames.size)
+        assertContentEquals(byteArrayOf(0x01, 0x02), frames[0].type)
+        assertContentEquals(byteArrayOf(0x10, 0x20, 0x30), frames[0].value)
+    }
+
+    @Test
+    fun `header split across feeds`() {
+        val full = frame(0x1A, ByteArray(0))
+        assertEquals(0, rx.feed(byteArrayOf(0xAA.toByte()), now = 0).size)
+        val frames = rx.feed(full.copyOfRange(1, full.size), now = 1)
+        assertEquals(1, frames.size)
+        assertContentEquals(byteArrayOf(0x1A), frames[0].type)
+        assertContentEquals(ByteArray(0), frames[0].value)
+    }
+
+    @Test
+    fun `four-byte length overflow is dropped`() {
+        val wide = ReceiveStateMachine(
+            FrameLayout(
+                idBytes = byteArrayOf(0xAA.toByte(), 0x11.toByte()),
+                lenBytes = 4,
+                checksum = null,
+            ),
+        )
+        val bytes = byteArrayOf(0xAA.toByte(), 0x11, 0x01, 0x80.toByte(), 0x00, 0x00, 0x00, 0x00, 0x00)
+        assertEquals(0, wide.feed(bytes, now = 0).size)
+        assertEquals(1, wide.lengthErrorCount)
+    }
+
+    @Test
+    fun `timeout boundary equality does not drop`() {
+        val full = frame(0x19, byteArrayOf(0x01))
+        val part1 = full.copyOfRange(0, 4)
+        assertEquals(0, rx.feed(part1, now = 0).size)
+        assertFalse(rx.checkTimeout(nowMs = 100, timeoutMs = 100))
+        assertEquals(0, rx.truncatedCount)
+    }
+
+    @Test
+    fun `overflow drop then valid frame resyncs`() {
+        val wide = ReceiveStateMachine(
+            FrameLayout(
+                idBytes = byteArrayOf(0xAA.toByte(), 0x11.toByte()),
+                lenBytes = 4,
+                checksum = null,
+            ),
+        )
+        val overflow = byteArrayOf(0xAA.toByte(), 0x11, 0x01, 0x80.toByte(), 0x00, 0x00, 0x00, 0x00, 0x00)
+        assertEquals(0, wide.feed(overflow, now = 0).size)
+        assertEquals(1, wide.lengthErrorCount)
+        // 溢出丢弃（reset）后，同机可继续解析后续合法帧
+        val valid = byteArrayOf(0xAA.toByte(), 0x11, 0x1A, 0x00, 0x00, 0x00, 0x03, 0x10, 0x20, 0x30)
+        val frames = wide.feed(valid, now = 1)
+        assertEquals(1, frames.size)
+        assertContentEquals(byteArrayOf(0x1A), frames[0].type)
+        assertContentEquals(byteArrayOf(0x10, 0x20, 0x30), frames[0].value)
     }
 }

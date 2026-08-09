@@ -93,7 +93,7 @@ class ReceiveStateMachine(private val layout: FrameLayout) {
         State.WAIT_LEN -> {
             lenBuf.add(b)
             if (lenBuf.size == layout.lenBytes) {
-                val len = lenBuf.fold(0) { acc, x -> (acc shl 8) or (x.toInt() and 0xFF) }
+                val len = lenBuf.fold(0L) { acc, x -> (acc shl 8) or (x.toInt() and 0xFF).toLong() }
                 lenBuf.clear()
                 when {
                     len > layout.maxValueLen -> {
@@ -101,10 +101,10 @@ class ReceiveStateMachine(private val layout: FrameLayout) {
                         drops.add(DropReason.LENGTH_OVERFLOW)
                         reset()
                     }
-                    len == 0 && layout.checksumLen == 0 -> return emitFrame()
-                    len == 0 -> state = State.WAIT_CHECKSUM
+                    len == 0L && layout.checksumLen == 0 -> return emitFrame()
+                    len == 0L -> state = State.WAIT_CHECKSUM
                     else -> {
-                        expectedValueLen = len
+                        expectedValueLen = len.toInt()
                         state = State.WAIT_VALUE
                     }
                 }
