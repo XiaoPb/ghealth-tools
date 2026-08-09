@@ -82,4 +82,3 @@ class Gh3220PayloadTest {
         assertFailsWith<IllegalArgumentException> { Gh3220Payload.u16le(-1) }
     }
 }
-
