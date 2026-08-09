@@ -6,13 +6,14 @@ sealed class ItlvcError : Exception() {
     sealed class FrameError : ItlvcError() {
         object CrcMismatch : FrameError()
         object InvalidHeader : FrameError()
-        /** 保留：供绑定层区分版本不匹配；通用状态机以前缀失配报告 InvalidHeader。 */
+        /** 保留：供绑定层区分版本不匹配；当前接收状态机对头部失配静默重同步，不产出该错误。 */
         object InvalidVersion : FrameError()
         object LengthOverflow : FrameError()
         object TruncatedFrame : FrameError()
     }
 
     sealed class CommandError : ItlvcError() {
+        /** 响应超时（attempts 为总发送次数，即重试次数 + 1）。 */
         data class Timeout(val attempts: Int) : CommandError()
         data class DeviceError(val code: Int) : CommandError()
         object Unsupported : CommandError()

@@ -8,7 +8,8 @@ import kotlin.test.assertTrue
 class ItlvcErrorTest {
 
     @Test
-    fun `device error codes map to CommandError`() {
+    fun `error hierarchy exposes expected variants`() {
+        // 编译期目录：真实 code→错误映射为 Phase 2 工作。
         val byCode = mapOf(
             0x00 to null,
             0x01 to ItlvcError.CommandError.DeviceError(0x01),
@@ -28,5 +29,11 @@ class ItlvcErrorTest {
     fun `parse error carries message`() {
         val e = ItlvcError.ParseError("bad payload")
         assertEquals("bad payload", e.message)
+    }
+
+    @Test
+    fun `transport error carries message`() {
+        val e = ItlvcError.TransportError("send failed")
+        assertEquals("send failed", e.message)
     }
 }
