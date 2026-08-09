@@ -2,6 +2,7 @@ package com.ghealth.tools.feature.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.SavedAccount
 import com.ghealth.tools.core.datastore.UserPreferences
@@ -42,7 +43,8 @@ class LoginViewModel @Inject constructor(
     private val sessionManager: UserSessionManager,
     private val apiErrorParser: ApiErrorParser,
     private val userPreferences: UserPreferences,
-    private val blePreferences: BlePreferences
+    private val blePreferences: BlePreferences,
+    private val bleConnectionManager: BleConnectionManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -166,6 +168,7 @@ class LoginViewModel @Inject constructor(
     }
 
     suspend fun logout() {
+        bleConnectionManager.disconnectAll()
         try {
             val refreshToken = tokenManager.getRefreshTokenSuspend().orEmpty()
             authApi.logout(LogoutRequest(refreshToken))

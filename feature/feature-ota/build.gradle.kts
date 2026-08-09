@@ -6,12 +6,19 @@ plugins {
 
 android {
     namespace = "com.ghealth.tools.feature.ota"
+
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+        }
+    }
 }
 
 dependencies {
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-model"))
     implementation(project(":core:core-datastore"))
+    implementation(project(":core:core-network"))
     implementation(project(":ble:ble-connection"))
     implementation(project(":external:libcom"))
     implementation(project(":external:libdfu2"))
@@ -24,4 +31,9 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.timber)
+
+    testImplementation(libs.junit5)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.mockk)
+    testImplementation(libs.coroutines.test)
 }
