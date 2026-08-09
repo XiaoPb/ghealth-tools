@@ -3,6 +3,7 @@ package com.ghealth.tools.feature.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import com.ghealth.tools.core.network.api.GitHubApi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
@@ -134,11 +135,9 @@ class UpdateChecker @Inject constructor(
                 publishedAt = release.publishedAt ?: "",
             )
 
-            Timber.d(
-                "Version check: current=%s(%s) latest=%s(%s) hasUpdate=%s force=%s",
-                currentCode, currentVersionName,
-                latestVersionCode, release.tagName,
-                hasUpdate, force,
+            Log.i(
+                "UpdateCheck",
+                "版本检查: 当前版本=$currentVersionName($currentCode) 云端最新=${release.tagName}($latestVersionCode) 有更新=$hasUpdate 强制=$force",
             )
 
             UpdateCheckResult(
@@ -148,6 +147,7 @@ class UpdateChecker @Inject constructor(
                 errorMessage = null,
             )
         } catch (e: Exception) {
+            Log.i("UpdateCheck", "版本检查失败: 当前版本=$currentVersionName 错误=${e.message}")
             Timber.e(e, "Version check failed")
             UpdateCheckResult(
                 hasUpdate = false,

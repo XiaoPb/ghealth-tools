@@ -1,5 +1,6 @@
 package com.ghealth.tools.feature.settings
 
+import android.util.Log
 import com.ghealth.tools.core.datastore.UpdatePreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +31,7 @@ class UpdateCheckCoordinator @Inject constructor(
         val info = result.updateInfo
         if (result.hasUpdate && info != null) {
             val ignoredVersionCode = updatePreferences.ignoredUpdateVersionCode.first()
+            Log.i("UpdateCheck", "弹窗决策: respectIgnored=$respectIgnored 已忽略版本=$ignoredVersionCode 最新版本=${info.versionCode} 是否弹窗=${UpdateCheckDecision.shouldShowDialog(respectIgnored, ignoredVersionCode, info.versionCode)}")
             if (UpdateCheckDecision.shouldShowDialog(respectIgnored, ignoredVersionCode, info.versionCode)) {
                 _state.update {
                     it.copy(
