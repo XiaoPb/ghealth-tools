@@ -15,4 +15,3 @@ class CommandStateMachine {
     fun onFailure() { state = CommandState.FAILED }
     fun onResponse() { state = CommandState.COMPLETED }
 }
-

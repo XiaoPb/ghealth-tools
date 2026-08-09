@@ -69,4 +69,3 @@ class CommandStateMachineTest {
         assertEquals(0x0102, CommandSpec(type = byteArrayOf(0x01, 0x02)).typeValue)
     }
 }
-

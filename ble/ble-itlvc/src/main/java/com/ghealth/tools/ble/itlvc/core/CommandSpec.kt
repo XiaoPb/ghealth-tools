@@ -26,4 +26,3 @@ data class CommandSpec(
     /** T 字段按大端序解释为 Int，提供内容安全的比较键。 */
     val typeValue: Int get() = type.fold(0) { acc, b -> (acc shl 8) or (b.toInt() and 0xFF) }
 }
-
