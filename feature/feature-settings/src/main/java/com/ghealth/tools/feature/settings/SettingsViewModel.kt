@@ -162,6 +162,8 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setLogLevel(level: LogLevel) {
+        logManager.appLogLevel = level.priority
+        Timber.d("App log level switched to ${level.key}")
         viewModelScope.launch { blePreferences.setLogLevel(level.key) }
     }
 
