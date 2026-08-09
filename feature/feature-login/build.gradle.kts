@@ -6,6 +6,12 @@ plugins {
 
 android {
     namespace = "com.ghealth.tools.feature.login"
+
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+        }
+    }
 }
 
 dependencies {
@@ -15,6 +21,7 @@ dependencies {
     implementation(project(":core:core-datastore"))
     implementation(project(":core:core-network"))
     implementation(project(":core:core-storage"))
+    implementation(project(":ble:ble-connection"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.navigation.compose)
@@ -22,6 +29,11 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
-    
+
     implementation(libs.timber)
+
+    testImplementation(libs.junit5)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.mockk)
+    testImplementation(libs.coroutines.test)
 }
