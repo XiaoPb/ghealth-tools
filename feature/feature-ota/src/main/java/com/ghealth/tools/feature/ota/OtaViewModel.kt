@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
+import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.feature.ota.engine.DebugResult
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
 import com.ghealth.tools.feature.ota.engine.OtaEngine
@@ -32,6 +33,7 @@ class OtaViewModel @Inject constructor(
     application: Application,
     private val otaEngine: OtaEngine,
     private val connectionManager: BleConnectionManager,
+    private val tokenManager: TokenManager,
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(OtaUiState())
@@ -653,9 +655,8 @@ class OtaViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         otaEngine.unbindDfuProfile()
-        // 退出 OTA 页面时后台静默断连并重连,恢复普通 GHealth 连接,前端无弹窗
         val device = _uiState.value.selectedDevice
-        if (device != null) {
+        if (shouldReconnectOnCleared(tokenManager.isLoggedInSync(), device) && device != null) {
             connectionManager.reconnectInBackground(device.address, device.name)
         }
     }
@@ -683,3 +684,8 @@ class OtaViewModel @Inject constructor(
         }
     }
 }
+
+internal fun shouldReconnectOnCleared(
+    isLoggedIn: Boolean,
+    device: ConnectedDeviceInfo?
+): Boolean = isLoggedIn && device != null
