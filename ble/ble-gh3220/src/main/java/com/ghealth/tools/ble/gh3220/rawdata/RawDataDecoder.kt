@@ -135,6 +135,23 @@ class RawDataDecoder(private val config: SamplingConfig) {
         )
     }
 
+    /**
+     * 0x2A FIFO 上报：[fifoId(1B)][len u32le(4B)][rawdata]。
+     *
+     * 与设备端 C 源码的已知偏差（真机抓包未验证）：C demo 端载荷为
+     * [fifoId][len 1B][idChangeFlag 1B][data...]（数据同样从偏移 5 开始），
+     * len 字段解释与文档 §3.35 的 4 字节小端不同。
+     */
+    fun decode2A(payload: ByteArray): Result<Gh3220FifoReport> {
+        if (payload.size < 5) return Result.failure(ItlvcError.ParseError("0x2A: header truncated"))
+        val fifoId = u8(payload, 0)
+        val len = le32(payload, 1)
+        if (len < 0 || len > payload.size - 5) {
+            return Result.failure(ItlvcError.ParseError("0x2A: len overflow"))
+        }
+        return Result.success(Gh3220FifoReport(fifoId, payload.copyOfRange(5, 5 + len)))
+    }
+
     private fun decodeZipFrames(payload: ByteArray): Result<List<Gh3220RawDataFrame>> {
         val frames = ArrayList<Gh3220RawDataFrame>()
         var pos = 0
