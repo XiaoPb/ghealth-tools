@@ -48,14 +48,17 @@ class RawDataDecoder(private val config: SamplingConfig) {
         }
         val frameId = take(1)?.let { u8(it, 0) } ?: return null
         val acc = if (hasBit(dataType, 0)) {
-            take(6)?.let { readAcc(it) }
+            val accBytes = take(6) ?: return null
+            readAcc(accBytes)
         } else null
         val rawdata = take(config.channelCount * 4)?.let { readChannels32(it, config.channelCount) } ?: return null
         val agc = if (hasBit(dataType, 2)) {
-            take(config.channelCount * 3)?.let { readChannels24(it, config.channelCount) }
+            val agcBytes = take(config.channelCount * 3) ?: return null
+            readChannels24(agcBytes, config.channelCount)
         } else null
         val amb = if (hasBit(dataType, 3)) {
-            take(config.channelCount * 3)?.let { readChannels24(it, config.channelCount) }
+            val ambBytes = take(config.channelCount * 3) ?: return null
+            readChannels24(ambBytes, config.channelCount)
         } else null
         val results = if (hasBit(dataType, 1)) {
             val byteNum = take(1)?.let { u8(it, 0) } ?: return null

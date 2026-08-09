@@ -58,4 +58,22 @@ class RawDataDecoder08Test {
     fun `decode08 rejects truncated package`() {
         assertTrue(decoder.decode08(bytes(0x0E, 0x10, 0x00)).isFailure)
     }
+
+    @Test
+    fun `decode08 rejects truncated acc`() {
+        // dataType=0x01：仅 bit0(acc) 置位；单通道 rawdata 需 4B。
+        // acc 仅 4B（不足 6B），旧实现会把 acc 字节误当 rawdata 解析成功。
+        val singleChannel = RawDataDecoder(SamplingConfig(channelCount = 1))
+        val payload = bytes(0x01, 1 + 4, 0x00, 0x01, 0x02, 0x03, 0x04)
+        assertTrue(singleChannel.decode08(payload).isFailure)
+    }
+
+    @Test
+    fun `decode08 rejects truncated agc`() {
+        // dataType=0x04：仅 bit2(agc) 置位；单通道 frameId + rawdata(4B)。
+        // agc 位声明但字段缺失（0 字节），旧实现会静默接受 agc=null。
+        val singleChannel = RawDataDecoder(SamplingConfig(channelCount = 1))
+        val payload = bytes(0x04, 1 + 4, 0x00, 0x01, 0x02, 0x03, 0x04)
+        assertTrue(singleChannel.decode08(payload).isFailure)
+    }
 }
