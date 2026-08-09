@@ -3,12 +3,18 @@ package com.ghealth.tools.ble.gh3220
 /** GH3220 payload 小端读写工具（协议文档标注"小端"的字段）。 */
 object Gh3220Payload {
 
-    fun u8(value: Int): ByteArray = byteArrayOf((value and 0xFF).toByte())
+    fun u8(value: Int): ByteArray {
+        require(value in 0..0xFF) { "value out of u8 range: $value" }
+        return byteArrayOf((value and 0xFF).toByte())
+    }
 
-    fun u16le(value: Int): ByteArray = byteArrayOf(
-        (value and 0xFF).toByte(),
-        ((value shr 8) and 0xFF).toByte(),
-    )
+    fun u16le(value: Int): ByteArray {
+        require(value in 0..0xFFFF) { "value out of u16 range: $value" }
+        return byteArrayOf(
+            (value and 0xFF).toByte(),
+            ((value shr 8) and 0xFF).toByte(),
+        )
+    }
 
     fun u32le(value: Long): ByteArray = byteArrayOf(
         (value and 0xFF).toByte(),
