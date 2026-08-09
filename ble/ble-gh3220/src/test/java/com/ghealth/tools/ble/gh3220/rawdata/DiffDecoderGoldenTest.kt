@@ -96,6 +96,16 @@ class DiffDecoderGoldenTest {
         assertContentEquals(intArrayOf(0x2265B1F5), result.getOrThrow())
     }
 
+    @Test
+    fun `returned array mutation does not affect decoder state`() {
+        val decoder = DiffDecoder(1)
+        val returned = decoder.decode(hexBytes("e2265b1f50")).getOrThrow() // 0 → 0x2265B1F5
+        assertContentEquals(intArrayOf(0x2265B1F5), returned)
+        returned[0] = 0 // 篡改返回数组不应影响内部基线
+        val next = decoder.decode(hexBytes("e6f51a6550")) // → 0x91B7584A
+        assertContentEquals(intArrayOf(0x91B7584A.toInt()), next.getOrThrow())
+    }
+
     private fun IntArray.toByteArray(): ByteArray = ByteArray(size * 4) { i ->
         (this[i / 4] ushr ((3 - i % 4) * 8) and 0xFF).toByte()
     }

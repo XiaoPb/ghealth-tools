@@ -56,7 +56,7 @@ class DiffDecoder(private val channelCount: Int) {
             val value = last[ch] + signed
             out[ch] = value
         }
-        last = out
+        last = out.copyOf()
         return Result.success(out)
     }
 }
