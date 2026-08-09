@@ -10,10 +10,12 @@ import com.ghealth.tools.ble.itlvc.core.ItlvcSession
 import com.ghealth.tools.ble.itlvc.transport.InMemoryTransport
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -111,5 +113,52 @@ class DriverConfigFlowTest {
         assertIs<ItlvcError.CommandError.DeviceError>(result.exceptionOrNull())
         assertEquals(1, transport.sent.size)
         session.detach()
+    }
+
+    @Test
+    fun `sendDriverConfig rejects empty response`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+        val flow = DriverConfigFlow(session, CommandSpec(type = bytes(Gh3220Cmd.DRV_CFG), timeoutMs = 200))
+
+        val responder = launch {
+            while (transport.sent.isEmpty()) delay(1)
+            transport.emit(responseFrame(Gh3220Cmd.DRV_CFG, ByteArray(0)))
+        }
+        val result = flow.sendDriverConfig(ByteArray(10) { 0 })
+        responder.join()
+
+        assertTrue(result.isFailure)
+        assertIs<ItlvcError.ParseError>(result.exceptionOrNull())
+        session.detach()
+    }
+
+    @Test
+    fun `sendDriverConfig rejects unknown status`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+        val flow = DriverConfigFlow(session, CommandSpec(type = bytes(Gh3220Cmd.DRV_CFG), timeoutMs = 200))
+
+        val responder = launch {
+            while (transport.sent.isEmpty()) delay(1)
+            transport.emit(responseFrame(Gh3220Cmd.DRV_CFG, bytes(0x02)))
+        }
+        val result = flow.sendDriverConfig(ByteArray(10) { 0 })
+        responder.join()
+
+        assertTrue(result.isFailure)
+        assertIs<ItlvcError.ParseError>(result.exceptionOrNull())
+        session.detach()
+    }
+
+    @Test
+    fun `sendDriverConfig rejects oversized config`() {
+        val session = ItlvcSession(codec, ItlvcConfig())
+        val flow = DriverConfigFlow(session, CommandSpec(type = bytes(Gh3220Cmd.DRV_CFG), timeoutMs = 200))
+        assertFailsWith<IllegalArgumentException> {
+            runBlocking { flow.sendDriverConfig(ByteArray(0x10001) { 0 }) }
+        }
     }
 }

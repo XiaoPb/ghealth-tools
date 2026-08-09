@@ -25,6 +25,7 @@ class DriverConfigFlow(
     ): Result<Unit> {
         require(data.isNotEmpty()) { "config empty" }
         require(chunkSize in 1..230) { "chunkSize must be 1..230, got $chunkSize" }
+        require(data.size <= 0xFFFF) { "config too large for u16 pos: ${data.size}" }
         var sent = 0
         var offset = 0
         while (offset < data.size) {
@@ -40,10 +41,11 @@ class DriverConfigFlow(
                 data.copyOfRange(offset, offset + len)
             val result = session.execute(spec, payload).mapCatching { resp ->
                 if (resp.isEmpty()) throw ItlvcError.ParseError("drv cfg response empty")
-                when (Gh3220Payload.readU8(resp, 0)) {
+                val status = Gh3220Payload.readU8(resp, 0)
+                when (status) {
                     0 -> Unit
                     1 -> throw ItlvcError.CommandError.DeviceError(1)
-                    else -> throw ItlvcError.ParseError("drv cfg unknown status ${Gh3220Payload.readU8(resp, 0)}")
+                    else -> throw ItlvcError.ParseError("drv cfg unknown status $status")
                 }
             }
             if (result.isFailure) return result
