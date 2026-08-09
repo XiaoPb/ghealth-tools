@@ -898,11 +898,11 @@ class BleConnectionManager @Inject constructor(
             DeviceType.GH3220 -> com.ghealth.tools.ble.protocol.gh3220.Gh3220Executor()
             else -> Gh3036Executor()
         }
-        setupExecutor(executor, address)
+        setupExecutor(executor, address, deviceType)
         return executor to deviceType
     }
 
-    private fun setupExecutor(executor: GHealthExecutor, address: String) {
+    private fun setupExecutor(executor: GHealthExecutor, address: String, deviceType: DeviceType) {
         executor.setSendFunction { data ->
             try {
                 kotlinx.coroutines.runBlocking {
@@ -915,16 +915,16 @@ class BleConnectionManager @Inject constructor(
             }
         }
         executor.registerFrameCallback { frame ->
-            onGhFuncFrame(address, frame)
+            onGhFuncFrame(address, frame, deviceType)
         }
         scope.launch {
             executor.registerGHandler()
         }
     }
 
-    private fun onGhFuncFrame(address: String, frame: GhFuncFrame) {
+    private fun onGhFuncFrame(address: String, frame: GhFuncFrame, deviceType: DeviceType) {
         Timber.v(
-            "Parsed frame from $address: func=${frame.funcId}, cnt=${frame.frameCnt}, ts=${frame.timestamp}, " +
+            "Parsed frame from $address chip=${deviceType.name}: func=${frame.funcId}, cnt=${frame.frameCnt}, ts=${frame.timestamp}, " +
                 "acc=${frame.gsData.toList()}, ipd=${frame.phyValue.toList()}, raw=${frame.rawdata.toList()}, " +
                 "agc=${frame.agcInfo.toList()}, agcH=${frame.agcInfoHigh.toList()}"
         )
