@@ -67,7 +67,13 @@ class AuthAuthenticator @Inject constructor(
                     val tokenData = newTokenResponse.body()?.data
                     if (tokenData != null) {
                         val newAccessToken = tokenData.access
-                        runBlocking { tokenManager.updateAccessToken(newAccessToken) }
+                        val newRefreshToken = tokenData.refresh?.takeIf { it.isNotBlank() }
+                        if (newRefreshToken != null) {
+                            Timber.i("Token 刷新：服务端已轮换 refresh token，已保存新 refresh token")
+                            runBlocking { tokenManager.saveTokens(newAccessToken, newRefreshToken) }
+                        } else {
+                            runBlocking { tokenManager.updateAccessToken(newAccessToken) }
+                        }
                         retryCount++
 
                         request.newBuilder()

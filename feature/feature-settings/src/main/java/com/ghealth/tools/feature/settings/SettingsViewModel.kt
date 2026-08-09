@@ -8,6 +8,7 @@ import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.LogLevel
 import com.ghealth.tools.core.network.ConfigPathProvider
 import com.ghealth.tools.core.network.ConfigSyncManager
 import com.ghealth.tools.core.network.api.ProjectApi
@@ -31,6 +32,8 @@ data class SettingsUiState(
     val autoReconnect: Boolean = true,
     val appVersion: String = "",
     val exportedLogPath: String? = null,
+    val appLogLevel: LogLevel = LogLevel.DEBUG,
+    val availableLogLevels: List<LogLevel> = LogLevel.entries,
     val themeMode: ThemeMode = ThemeMode.BLUE_500,
     val availableThemes: List<ThemeMode> = ThemeMode.entries,
     val selectedChip: String = "gh3036",
@@ -87,6 +90,13 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             blePreferences.themeMode.collect { key ->
                 _uiState.update { it.copy(themeMode = ThemeMode.fromKey(key)) }
+            }
+        }
+        viewModelScope.launch {
+            blePreferences.logLevel.collect { key ->
+                val level = LogLevel.fromKey(key)
+                logManager.appLogLevel = level.priority
+                _uiState.update { it.copy(appLogLevel = level) }
             }
         }
         viewModelScope.launch {
@@ -149,6 +159,12 @@ class SettingsViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { blePreferences.setThemeMode(mode.key) }
+    }
+
+    fun setLogLevel(level: LogLevel) {
+        logManager.appLogLevel = level.priority
+        Timber.d("App log level switched to ${level.key}")
+        viewModelScope.launch { blePreferences.setLogLevel(level.key) }
     }
 
     fun exportLogs() {

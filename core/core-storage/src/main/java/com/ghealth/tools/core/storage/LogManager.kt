@@ -1,5 +1,6 @@
 package com.ghealth.tools.core.storage
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedWriter
@@ -10,6 +11,10 @@ import java.util.Date
 import java.util.Locale
 
 class LogManager(private val baseDir: File) {
+
+    /** 写入 app_*.log 的最低日志等级（与 android.util.Log 常量一致），默认保存 D 及以上。 */
+    @Volatile
+    var appLogLevel: Int = Log.DEBUG
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
@@ -44,9 +49,18 @@ class LogManager(private val baseDir: File) {
         writeLine("logs/$date/protocol_$date.log", "$time $message")
     }
 
-    fun logApp(level: String, tag: String, message: String) {
+    fun logApp(priority: Int, tag: String, message: String) {
+        if (priority < appLogLevel) return
         val date = dateFormat.format(Date())
         val time = timeFormat.format(Date())
+        val level = when (priority) {
+            Log.VERBOSE -> "V"
+            Log.DEBUG -> "D"
+            Log.INFO -> "I"
+            Log.WARN -> "W"
+            Log.ERROR -> "E"
+            else -> "?"
+        }
         writeLine("logs/$date/app_$date.log", "$time [$level] $tag: $message")
     }
 
@@ -67,7 +81,7 @@ class LogManager(private val baseDir: File) {
             writer.newLine()
             writer.flush()
         } catch (e: Exception) {
-            android.util.Log.w("LogManager", "Failed to write log: $relativePath", e)
+            Log.w("LogManager", "Failed to write log: $relativePath", e)
         }
     }
 

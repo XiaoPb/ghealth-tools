@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import com.ghealth.tools.core.model.LogLevel
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,6 +31,7 @@ class BlePreferences @Inject constructor(
         val SELECTED_PROJECT_CHIP = stringPreferencesKey("selected_project_chip")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val VERSION_TYPE = stringPreferencesKey("version_type")
+        val LOG_LEVEL = stringPreferencesKey("log_level")
     }
 
     val serviceUuid: Flow<String> = context.dataStore.data.map { prefs ->
@@ -70,6 +72,10 @@ class BlePreferences @Inject constructor(
 
     val themeMode: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[Keys.THEME_MODE] ?: "blue_500"
+    }
+
+    val logLevel: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.LOG_LEVEL] ?: LogLevel.DEBUG.key
     }
 
     val versionType: Flow<String> = context.dataStore.data.map { prefs ->
@@ -114,6 +120,10 @@ class BlePreferences @Inject constructor(
 
     suspend fun setThemeMode(mode: String) {
         context.dataStore.edit { it[Keys.THEME_MODE] = mode }
+    }
+
+    suspend fun setLogLevel(level: String) {
+        context.dataStore.edit { it[Keys.LOG_LEVEL] = level }
     }
 
     suspend fun setVersionType(type: String) {

@@ -172,10 +172,11 @@ object NetworkModule {
         return HttpLoggingInterceptor(
             object : HttpLoggingInterceptor.Logger {
                 override fun log(message: String) {
-                    if (message.length > 512) {
-                        Timber.tag("API").d("${message.take(256)}... [${message.length} chars truncated]")
+                    val safe = message.redactSensitive()
+                    if (safe.length > 512) {
+                        Timber.tag("API").d("${safe.take(256)}... [${safe.length} chars truncated]")
                     } else {
-                        Timber.tag("API").d(message)
+                        Timber.tag("API").d(safe)
                     }
                 }
             }
@@ -301,4 +302,23 @@ object NetworkModule {
     ): GitHubApi {
         return retrofit.create(GitHubApi::class.java)
     }
+}
+
+/**
+ * API 日志脱敏：密码等敏感字段统一替换为 ***，避免明文写入日志文件。
+ */
+internal fun String.redactSensitive(): String {
+    val sensitiveKeys = listOf(
+        "password", "password_confirm", "passwordConfirm",
+        "old_password", "new_password", "oldPassword", "newPassword"
+    )
+    val keyPattern = sensitiveKeys.joinToString("|") { Regex.escape(it) }
+    val jsonRedacted = replace(
+        Regex("(\"(?:$keyPattern)\"\\s*:\\s*\")[^\"]*(\")", RegexOption.IGNORE_CASE),
+        "$1***$2"
+    )
+    return jsonRedacted.replace(
+        Regex("((?:$keyPattern))=([^&\\s]*)", RegexOption.IGNORE_CASE),
+        "$1=***"
+    )
 }

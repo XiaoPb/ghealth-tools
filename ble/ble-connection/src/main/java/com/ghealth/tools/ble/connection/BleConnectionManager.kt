@@ -5,6 +5,7 @@ package com.ghealth.tools.ble.connection
 import com.ghealth.tools.ble.protocol.rpccore.GHealthExecutor
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.rpccore.Unpackage
+import com.ghealth.tools.ble.protocol.gh3036.AgcPhysicalCodec
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
@@ -719,7 +720,7 @@ class BleConnectionManager @Inject constructor(
                         try {
                             peripheral.observe(notifyChar)
                                 .onEach { data ->
-                                    Timber.d("Notify received ${data.size} bytes from $address")
+                                    Timber.v("Notify received ${data.size} bytes from $address")
                                     onDataReceived(address, data)
                                 }
                                 .onCompletion { cause ->
@@ -795,7 +796,7 @@ class BleConnectionManager @Inject constructor(
             val results = executor.process(data)
             for (result in results) {
                 result.onSuccess { parsed ->
-                    Timber.d("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
+                    Timber.v("Parsed frame from $address: key=${parsed.key}, param=${parsed.param.size} bytes, secure=${parsed.isSecure}")
                     _dataFlow.emit(address to parsed)
                 }
                 result.onFailure { error ->
@@ -898,11 +899,11 @@ class BleConnectionManager @Inject constructor(
             DeviceType.GH3220 -> com.ghealth.tools.ble.protocol.gh3220.Gh3220Executor()
             else -> Gh3036Executor()
         }
-        setupExecutor(executor, address)
+        setupExecutor(executor, address, deviceType)
         return executor to deviceType
     }
 
-    private fun setupExecutor(executor: GHealthExecutor, address: String) {
+    private fun setupExecutor(executor: GHealthExecutor, address: String, deviceType: DeviceType) {
         executor.setSendFunction { data ->
             try {
                 kotlinx.coroutines.runBlocking {
@@ -915,16 +916,39 @@ class BleConnectionManager @Inject constructor(
             }
         }
         executor.registerFrameCallback { frame ->
-            onGhFuncFrame(address, frame)
+            onGhFuncFrame(address, frame, deviceType)
         }
         scope.launch {
             executor.registerGHandler()
         }
     }
 
-    private fun onGhFuncFrame(address: String, frame: GhFuncFrame) {
+    private fun onGhFuncFrame(address: String, frame: GhFuncFrame, deviceType: DeviceType) {
+        val agcSuffix = if (deviceType == DeviceType.GH3036) {
+            val (packedAgc, packedLed) = AgcPhysicalCodec.encodeColumns(frame.agcInfo, frame.agcInfoHigh)
+            val physicals = (0 until maxOf(frame.agcInfo.size, frame.agcInfoHigh.size)).joinToString(",") { ch ->
+                val agcL = frame.agcInfo.getOrElse(ch) { 0 }
+                val agcH = frame.agcInfoHigh.getOrElse(ch) { 0 }
+                val p = AgcPhysicalCodec.decode(agcL, agcH)
+                val raw = String.format("0x%016X", ((agcH.toLong() and 0xFFFFFFFFL) shl 32) or (agcL.toLong() and 0xFFFFFFFFL))
+                "ch$ch{raw=$raw,g=${p.gain},bg=${p.bgCancelLevel},dc=${p.dcCancelLevel},code=${p.dcCancelCode}," +
+                    "fs=${p.ledDrvFs},drv0=${p.ledDrv0},drv1=${p.ledDrv1},sum=${p.ledCurrentSum}," +
+                    "ma0=${p.ledCurrentDrv0},ma1=${p.ledCurrentDrv1}}"
+            }
+            ", agcInfoCh=${packedAgc.toUnsignedList()}, ledInfoCh=${packedLed.toUnsignedList()}, agcPhys=[$physicals]"
+        } else {
+            ""
+        }
+        Timber.v(
+            "Parsed frame from $address chip=${deviceType.name}: func=${frame.funcId}, cnt=${frame.frameCnt}, ts=${frame.timestamp}, " +
+                "acc=${frame.gsData.toList()}, ipd=${frame.phyValue.toList()}, raw=${frame.rawdata.toList()}, " +
+                "agc=${frame.agcInfo.toUnsignedList()}, agcH=${frame.agcInfoHigh.toUnsignedList()}$agcSuffix"
+        )
         _ghFrameFlow.tryEmit(address to frame)
     }
+
+    private fun IntArray.toUnsignedList(): String =
+        joinToString(prefix = "[", postfix = "]", separator = ", ") { Integer.toUnsignedString(it) }
 
     private fun emitConnectionError(address: String, error: ConnectionError) {
         scope.launch {
