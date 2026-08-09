@@ -12,7 +12,13 @@ import com.ghealth.tools.ble.itlvc.core.ItlvcError
  */
 class RawDataDecoder(private val config: SamplingConfig) {
 
-    fun reset() {}
+    private val diff = DiffDecoder(config.channelCount)
+    private val agcDiff = DiffDecoder(config.channelCount)
+
+    fun reset() {
+        diff.reset()
+        agcDiff.reset()
+    }
 
     fun decode08(payload: ByteArray): Result<List<Gh3220RawDataFrame>> {
         val frames = ArrayList<Gh3220RawDataFrame>()
@@ -35,6 +41,71 @@ class RawDataDecoder(private val config: SamplingConfig) {
             }
         }
         return Result.success(frames)
+    }
+
+    /** 0x09 压缩偶数包：payload = FrameData 序列，第 0 帧为绝对值。 */
+    fun decode09(payload: ByteArray): Result<List<Gh3220RawDataFrame>> = decodeZipFrames(payload)
+
+    /** 0x0A 压缩奇数包：payload = FrameData 序列，全部为差分值。 */
+    fun decode0A(payload: ByteArray): Result<List<Gh3220RawDataFrame>> = decodeZipFrames(payload)
+
+    private fun decodeZipFrames(payload: ByteArray): Result<List<Gh3220RawDataFrame>> {
+        val frames = ArrayList<Gh3220RawDataFrame>()
+        var pos = 0
+        while (pos < payload.size) {
+            val parsed = parseZipFrame(payload, pos, payload.size)
+                ?: return Result.failure(ItlvcError.ParseError("0x09/0x0A: frame truncated"))
+            pos = parsed.first
+            frames.add(parsed.second)
+        }
+        return Result.success(frames)
+    }
+
+    /** 压缩帧：`[frameId][rawLen][tagFlag][tag*][rawDiff][agcLen][agcDiff][amb*][result]`。 */
+    private fun parseZipFrame(data: ByteArray, start: Int, end: Int): Pair<Int, Gh3220RawDataFrame>? {
+        var pos = start
+        fun take(n: Int): ByteArray? {
+            if (pos + n > end) return null
+            val out = data.copyOfRange(pos, pos + n)
+            pos += n
+            return out
+        }
+        val frameId = take(1)?.let { u8(it, 0) } ?: return null
+        val acc = if (config.gsEnabled) take(6)?.let { readAcc(it) } else null
+        val rawLen = take(1)?.let { u8(it, 0) } ?: return null
+        val tagFlag = take(1)?.let { u8(it, 0) } ?: return null
+        val tagBytes = if (tagFlag != 0) {
+            take(config.channelCount) ?: return null
+        } else {
+            ByteArray(0)
+        }
+        if (rawLen < 1 + tagBytes.size) return null
+        val rawDiffBytes = take(rawLen - 1 - tagBytes.size) ?: return null
+        val rawdata = diff.decode(rawDiffBytes).getOrNull() ?: return null
+        val agcLen = take(1)?.let { u8(it, 0) } ?: return null
+        val agcDiffBytes = take(agcLen) ?: return null
+        val agc = if (agcLen == 0) null else agcDiff.decode(agcDiffBytes).getOrNull()
+        val amb = if (config.ambEnabled) {
+            take(config.channelCount * 3)?.let { readChannels24(it, config.channelCount) }
+        } else null
+        val results = if (config.algoEnabled) {
+            val byteNum = take(1)?.let { u8(it, 0) } ?: return null
+            val resultBytes = take(byteNum) ?: return null
+            parseResults(resultBytes) ?: return null
+        } else {
+            emptyList()
+        }
+        val frame = Gh3220RawDataFrame(
+            dataType = 0,
+            funcId = 0,
+            frameId = frameId,
+            acc = acc,
+            rawdata = rawdata,
+            agc = agc,
+            amb = amb,
+            results = results,
+        )
+        return Pair(pos, frame)
     }
 
     /** 解析 0x08 的一个 FrameData，返回 (新位置, 帧)。 */
