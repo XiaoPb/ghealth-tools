@@ -935,17 +935,20 @@ class BleConnectionManager @Inject constructor(
                     "fs=${p.ledDrvFs},drv0=${p.ledDrv0},drv1=${p.ledDrv1},sum=${p.ledCurrentSum}," +
                     "ma0=${p.ledCurrentDrv0},ma1=${p.ledCurrentDrv1}}"
             }
-            ", agcInfoCh=${packedAgc.toList()}, ledInfoCh=${packedLed.toList()}, agcPhys=[$physicals]"
+            ", agcInfoCh=${packedAgc.toUnsignedList()}, ledInfoCh=${packedLed.toUnsignedList()}, agcPhys=[$physicals]"
         } else {
             ""
         }
         Timber.v(
             "Parsed frame from $address chip=${deviceType.name}: func=${frame.funcId}, cnt=${frame.frameCnt}, ts=${frame.timestamp}, " +
                 "acc=${frame.gsData.toList()}, ipd=${frame.phyValue.toList()}, raw=${frame.rawdata.toList()}, " +
-                "agc=${frame.agcInfo.toList()}, agcH=${frame.agcInfoHigh.toList()}$agcSuffix"
+                "agc=${frame.agcInfo.toUnsignedList()}, agcH=${frame.agcInfoHigh.toUnsignedList()}$agcSuffix"
         )
         _ghFrameFlow.tryEmit(address to frame)
     }
+
+    private fun IntArray.toUnsignedList(): String =
+        joinToString(prefix = "[", postfix = "]", separator = ", ") { Integer.toUnsignedString(it) }
 
     private fun emitConnectionError(address: String, error: ConnectionError) {
         scope.launch {
