@@ -6,6 +6,7 @@ import com.ghealth.tools.ble.itlvc.codec.ItlvcFrameCodec
 import com.ghealth.tools.ble.itlvc.core.ItlvcConfig
 import com.ghealth.tools.ble.itlvc.core.ItlvcSession
 import com.ghealth.tools.ble.itlvc.transport.InMemoryTransport
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -72,5 +73,29 @@ class EventAckHandlerTest {
         val result = ReportDecoder.decodeSlaveLog("ABC".toByteArray(Charsets.UTF_8))
         assertTrue(result.isSuccess)
         assertEquals("ABC", result.getOrThrow().text)
+    }
+
+    @Test
+    fun `malformed 0x16 report does not kill session`() = runTest {
+        val transport = InMemoryTransport()
+        session.attach(transport, this)
+        val handler = EventAckHandler(session)
+        handler.attach()
+        testScheduler.runCurrent()
+
+        // 畸形 0x16：payload 只有 2 字节（<3），应被丢弃且不发送 ACK
+        transport.emit(responseFrame(Gh3220Cmd.CHIP_EVENT_REPORT, bytes(0x00, 0x02)))
+        testScheduler.runCurrent()
+        assertEquals(0, transport.sent.size)
+
+        // 订阅事件流后再发合法帧：接收协程必须存活
+        val deferred = async { handler.events.first() }
+        testScheduler.runCurrent()
+        transport.emit(responseFrame(Gh3220Cmd.CHIP_EVENT_REPORT, bytes(0x00, 0x02, 0x03)))
+        val event = deferred.await()
+        assertEquals(0x0002, event.event)
+        assertEquals(3, event.eventReportId)
+        assertEquals(1, transport.sent.size)
+        session.detach()
     }
 }
