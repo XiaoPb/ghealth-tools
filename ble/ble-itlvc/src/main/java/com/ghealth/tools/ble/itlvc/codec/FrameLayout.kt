@@ -16,6 +16,13 @@ data class FrameLayout(
     val maxValueLen: Int = 238,
     val checksum: Checksum? = Crc8,
 ) {
+    init {
+        require(idBytes.isNotEmpty()) { "idBytes must not be empty" }
+        require(typeBytes in 1..4) { "typeBytes must be in 1..4, got $typeBytes" }
+        require(lenBytes in 1..4) { "lenBytes must be in 1..4, got $lenBytes" }
+        require(maxValueLen >= 0) { "maxValueLen must be >= 0, got $maxValueLen" }
+    }
+
     val checksumLen: Int get() = checksum?.size ?: 0
     val headerLen: Int get() = idBytes.size + typeBytes + lenBytes
 

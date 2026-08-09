@@ -40,4 +40,31 @@ class FrameLayoutTest {
         val l = FrameLayout(idBytes = byteArrayOf(0xAA.toByte()), checksum = null)
         assertEquals(0, l.checksumLen)
     }
+
+    @Test
+    fun `encodeLen boundary values`() {
+        val len2 = FrameLayout(idBytes = byteArrayOf(0xAA.toByte()), lenBytes = 2)
+        assertContentEquals(byteArrayOf(0xFF.toByte(), 0xFF.toByte()), len2.encodeLen(65535))
+        assertFailsWith<IllegalArgumentException> { len2.encodeLen(65536) }
+
+        val len3 = FrameLayout(idBytes = byteArrayOf(0xAA.toByte()), lenBytes = 3)
+        assertContentEquals(byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte()), len3.encodeLen(16777215))
+        assertFailsWith<IllegalArgumentException> { len3.encodeLen(16777216) }
+
+        val len4 = FrameLayout(idBytes = byteArrayOf(0xAA.toByte()), lenBytes = 4)
+        assertContentEquals(byteArrayOf(0x7F, 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte()), len4.encodeLen(Int.MAX_VALUE))
+    }
+
+    @Test
+    fun `constructor rejects invalid layout`() {
+        assertFailsWith<IllegalArgumentException> { FrameLayout(idBytes = byteArrayOf(0xAA.toByte()), lenBytes = 5) }
+        assertFailsWith<IllegalArgumentException> { FrameLayout(idBytes = byteArrayOf(0xAA.toByte()), lenBytes = 0) }
+        assertFailsWith<IllegalArgumentException> { FrameLayout(idBytes = byteArrayOf(), checksum = null) }
+        assertFailsWith<IllegalArgumentException> { FrameLayout(idBytes = byteArrayOf(0xAA.toByte()), maxValueLen = -1) }
+    }
+
+    @Test
+    fun `headerLen computed for gh3220`() {
+        assertEquals(4, FrameLayout.GH3220.headerLen)
+    }
 }
