@@ -161,4 +161,14 @@ class RawDataDecoderZipTest {
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is ItlvcError.ParseError)
     }
+
+    @Test
+    fun `decode09 with agc disabled skips agc section`() {
+        val noAgc = RawDataDecoder(SamplingConfig(channelCount = 1, algoEnabled = true))
+        // 帧 = [frameId=0][rawLen=6][tagFlag=0][rawDiff 5B][result byteNum=0]（无 agcLen/agcDiff 字节）
+        val payload = bytes(0x00, 0x06, 0x00, 0xE2, 0x26, 0x5B, 0x1F, 0x50, 0x00)
+        val frames = noAgc.decode09(payload).getOrThrow()
+        assertContentEquals(intArrayOf(0x2265B1F5), frames[0].rawdata)
+        assertEquals(null, frames[0].agc)
+    }
 }
