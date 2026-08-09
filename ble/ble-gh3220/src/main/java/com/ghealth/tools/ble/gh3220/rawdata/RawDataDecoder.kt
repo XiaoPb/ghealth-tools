@@ -65,6 +65,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
     private fun parseZipFrame(data: ByteArray, start: Int, end: Int): Pair<Int, Gh3220RawDataFrame>? {
         var pos = start
         fun take(n: Int): ByteArray? {
+            require(n >= 0)
             if (pos + n > end) return null
             val out = data.copyOfRange(pos, pos + n)
             pos += n
@@ -82,9 +83,11 @@ class RawDataDecoder(private val config: SamplingConfig) {
         if (rawLen < 1 + tagBytes.size) return null
         val rawDiffBytes = take(rawLen - 1 - tagBytes.size) ?: return null
         val rawdata = diff.decode(rawDiffBytes).getOrNull() ?: return null
-        val agcLen = take(1)?.let { u8(it, 0) } ?: return null
-        val agcDiffBytes = take(agcLen) ?: return null
-        val agc = if (agcLen == 0) null else agcDiff.decode(agcDiffBytes).getOrNull()
+        val agc = if (config.agcEnabled) {
+            val agcLen = take(1)?.let { u8(it, 0) } ?: return null
+            val agcDiffBytes = take(agcLen) ?: return null
+            if (agcLen == 0) null else agcDiff.decode(agcDiffBytes).getOrNull() ?: return null
+        } else null
         val amb = if (config.ambEnabled) {
             take(config.channelCount * 3)?.let { readChannels24(it, config.channelCount) }
         } else null
