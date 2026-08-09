@@ -23,6 +23,12 @@ class ConfigCommandsTest {
     }
 
     @Test
+    fun `gsensor rejects out-of-range values`() {
+        assertFailsWith<IllegalArgumentException> { ConfigCommands.gsensorSet(0x100, 0, 25) }
+        assertFailsWith<IllegalArgumentException> { ConfigCommands.gsensorSet(1, 0, 0x10000) }
+    }
+
+    @Test
     fun `fifo threshold payload little-endian`() {
         assertContentEquals(byteArrayOf(0x00, 0x40), ConfigCommands.fifoThreshold(0x4000))
     }
@@ -44,6 +50,13 @@ class ConfigCommandsTest {
             byteArrayOf(0x01, 0x10, 0x19), // 1 项：id=1, sr=25 → (1<<12)|25 = 0x1019
             ConfigCommands.sampleRates(listOf(1 to 25)),
         )
+    }
+
+    @Test
+    fun `sample rates reject out-of-range id and sr`() {
+        assertFailsWith<IllegalArgumentException> { ConfigCommands.sampleRates(listOf(0x10 to 25)) }
+        assertFailsWith<IllegalArgumentException> { ConfigCommands.sampleRates(listOf(1 to 0x1000)) }
+        assertFailsWith<IllegalArgumentException> { ConfigCommands.sampleRates(emptyList()) }
     }
 
     @Test
