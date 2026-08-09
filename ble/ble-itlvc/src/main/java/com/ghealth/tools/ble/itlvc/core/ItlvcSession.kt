@@ -37,8 +37,10 @@ class ItlvcSession(
     private val _events = MutableSharedFlow<ItlvcEvent>(extraBufferCapacity = 256)
     val events: Flow<ItlvcEvent> = _events.asSharedFlow()
 
+    @Volatile
     private var transport: ByteTransport? = null
     private var receiverJob: Job? = null
+    @Volatile
     private var awaiting: PendingCommand? = null
 
     @Volatile
@@ -91,7 +93,7 @@ class ItlvcSession(
     private suspend fun handleFrame(frame: ItlvcFrame) {
         val pending = awaiting
         if (pending != null && frame.type.toList() == pending.spec.type.toList()) {
-            awaiting = null
+            if (awaiting === pending) awaiting = null
             pending.complete(Result.success(frame.value))
             return
         }

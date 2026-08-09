@@ -15,7 +15,6 @@ class ItlvcSessionTest {
 
     private val codec = ItlvcFrameCodec()
     private val connSpec = CommandSpec(type = byteArrayOf(0x1A), timeoutMs = 200)
-    private val verSpec = CommandSpec(type = byteArrayOf(0x19), timeoutMs = 200)
 
     private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
 
@@ -120,4 +119,89 @@ class ItlvcSessionTest {
         assertEquals(listOf(1), reports)
         session.detach()
     }
+
+    @Test
+    fun `late response after timeout routes to report handler`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+
+        val lateValues = mutableListOf<ByteArray>()
+        session.registerReportHandler(bytes(0x1A)) { frame ->
+            lateValues.add(frame.value)
+        }
+
+        val spec = CommandSpec(type = byteArrayOf(0x1A), timeoutMs = 50)
+        val result = session.execute(spec, ByteArray(0))
+        assertTrue(result.isFailure)
+        assertIs<ItlvcError.CommandError.Timeout>(result.exceptionOrNull())
+
+        transport.emit(responseFrame(0x1A, bytes(0x00)))
+        testScheduler.runCurrent()
+
+        assertEquals(1, lateValues.size)
+        assertTrue(lateValues[0].contentEquals(bytes(0x00)))
+        session.detach()
+    }
+
+    @Test
+    fun `detach while awaiting returns timeout without hang`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+
+        var result: Result<ByteArray>? = null
+        val job = launch {
+            result = session.execute(connSpec, ByteArray(0))
+        }
+        testScheduler.runCurrent()
+        session.detach()
+        job.join()
+
+        assertIs<ItlvcError.CommandError.Timeout>(result?.exceptionOrNull())
+    }
+
+    @Test
+    fun `re-attach switches transport`() = runTest {
+        val transport1 = InMemoryTransport()
+        val transport2 = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport1, this)
+        session.attach(transport2, this)
+
+        val responder = launch {
+            transport2.emit(responseFrame(0x19, bytes(0x41)))
+        }
+        val spec = CommandSpec(type = byteArrayOf(0x19), timeoutMs = 200)
+        val result = session.execute(spec, bytes(0x01))
+        responder.join()
+
+        assertTrue(result.isSuccess, "result: $result")
+        assertEquals(1, transport2.sent.size)
+        assertEquals(0, transport1.sent.size)
+        session.detach()
+    }
+
+    @Test
+    fun `cancelled execute rethrows CancellationException`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+
+        var cancelled = false
+        val job = launch {
+            try {
+                session.execute(connSpec, ByteArray(0))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                cancelled = true
+            }
+        }
+        testScheduler.runCurrent()
+        job.cancel()
+        job.join()
+
+        assertTrue(cancelled)
+        session.detach()
+    }
+
 }
