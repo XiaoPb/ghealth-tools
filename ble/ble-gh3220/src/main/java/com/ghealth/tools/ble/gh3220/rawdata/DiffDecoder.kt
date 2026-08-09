@@ -49,6 +49,7 @@ class DiffDecoder(private val channelCount: Int) {
 
     /** 多功能模式下按通道索引更新基准。 */
     fun setBaselineChannel(index: Int, value: Int) {
+        require(index in last.indices) { "baseline channel out of range: $index" }
         last[index] = value
     }
 

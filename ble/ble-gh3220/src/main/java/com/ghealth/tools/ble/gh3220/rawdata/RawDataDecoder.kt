@@ -100,6 +100,9 @@ class RawDataDecoder(private val config: SamplingConfig) {
             return Result.failure(ItlvcError.ParseError("0x0B: channel mask count $channelCount != config ${config.channelCount}"))
         }
         val channel = if (multiFunction) Integer.numberOfTrailingZeros(channelMask) else 0
+        if (multiFunction && channel >= config.channelCount) {
+            return Result.failure(ItlvcError.ParseError("0x0B: multifunction channel $channel >= config ${config.channelCount}"))
+        }
         val frames = ArrayList<Gh3220RawDataFrame>()
         var pos = 7
         while (pos < end) {
