@@ -197,8 +197,9 @@ class RawDataDecoder0BTest {
     @Test
     fun `decode0B rejects multifunction channel index beyond config`() {
         // chMask=0x00000004（bit2）+ config.channelCount=2：通道索引越界 → ParseError（避免 setBaselineChannel 越界逃逸 Result）
+        // 帧完整 6 字节（frameId+fifoId+rawdata），删除防护时会真正抵达 setBaselineChannel(2, …) 抛 AIOOBE
         val dec2 = RawDataDecoder(SamplingConfig(channelCount = 2, agcEnabled = true, algoEnabled = true))
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x05, 0x00, 0x01, 0x02, 0x03, 0x04)
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x06, 0x00, 0x01, 0x01, 0x02, 0x03, 0x04)
         assertTrue(dec2.decode0B(payload).isFailure)
         assertTrue(dec2.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
     }
