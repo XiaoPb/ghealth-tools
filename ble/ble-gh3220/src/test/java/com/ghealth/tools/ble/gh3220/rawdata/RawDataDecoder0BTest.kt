@@ -123,4 +123,74 @@ class RawDataDecoder0BTest {
         assertTrue(one.decode0B(payload).isFailure)
         assertTrue(one.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
     }
+
+    @Test
+    fun `decode0B rejects empty channel mask`() {
+        // chMask=0x00000000 → ParseError（避免 DiffDecoder 尺寸不匹配异常逃逸 Result）
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+        assertTrue(decoder.decode0B(payload).isFailure)
+        assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
+    }
+
+    @Test
+    fun `decode0B rejects multifunction with multiple channel bits`() {
+        // chMask=0x00000003 + flag=0x04：多功能每包只允许 1 个通道位
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x00)
+        assertTrue(decoder.decode0B(payload).isFailure)
+        assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
+    }
+
+    @Test
+    fun `decode0B rejects compressed multifunction`() {
+        // flag=0x05（压缩 + 多功能）：当前显式拒绝
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x05, 0x00)
+        assertTrue(decoder.decode0B(payload).isFailure)
+        assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
+    }
+
+    @Test
+    fun `decode0B rejects channel count mismatch with config`() {
+        // chMask=0x00000001（1 通道）但 config.channelCount=2 → ParseError
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00)
+        assertTrue(decoder.decode0B(payload).isFailure)
+        assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
+    }
+
+    @Test
+    fun `decode0B rejects trailing bytes after data len`() {
+        // dataLen=0 但 payload 末尾多 1 字节
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xFF)
+        assertTrue(decoder.decode0B(payload).isFailure)
+        assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
+    }
+
+    @Test
+    fun `decode0B parses compressed odd packet with splice flags`() {
+        // chMask=0x1，flag=0x2B（压缩 bit0 + 奇数包 bit1 + 分包计数 1 bits3-4 + 分包结束 bit5）
+        // 注：审查稿 flag=0x3B 的 bits3-4=3，与 splicePackCount=1 断言矛盾，此处用 0x2B 使语义一致
+        val one = RawDataDecoder(SamplingConfig(channelCount = 1, agcEnabled = true, algoEnabled = true))
+        // 帧 = [frameId=0][rawLen=6][tagFlag=0][E2 26 5B 1F 50][agcLen=0][result 0x00]
+        val frame = bytes(0x00, 0x06, 0x00, 0xE2, 0x26, 0x5B, 0x1F, 0x50, 0x00, 0x00)
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x2B, frame.size) + frame
+        val pkg = one.decode0B(payload).getOrThrow()
+        assertTrue(pkg.compressed)
+        assertTrue(pkg.oddPacket)
+        assertEquals(1, pkg.splicePackCount)
+        assertTrue(pkg.splicePackOver)
+        assertContentEquals(intArrayOf(0x2265B1F5), pkg.frames[0].rawdata)
+    }
+
+    @Test
+    fun `decode0B uncompressed frame syncs baseline for later compressed frame`() {
+        val one = RawDataDecoder(SamplingConfig(channelCount = 1, agcEnabled = true, algoEnabled = true))
+        // 未压缩绝对帧：dataType=0x00，frame = [frameId=0][0x2265B1F5]
+        val absPayload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x05) + bytes(0x00, 0x22, 0x65, 0xB1, 0xF5)
+        val abs = one.decode0B(absPayload).getOrThrow()
+        assertContentEquals(intArrayOf(0x2265B1F5), abs.frames[0].rawdata)
+
+        // 压缩差分帧 e6f51a6550（golden：0x2265B1F5 → 0x91B7584A）
+        val diffFrame = bytes(0x01, 0x06, 0x00) + hexBytes("e6f51a6550") + bytes(0x00, 0x00)
+        val pkg = one.decode0B(bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x01, diffFrame.size) + diffFrame).getOrThrow()
+        assertContentEquals(intArrayOf(0x91B7584A.toInt()), pkg.frames[0].rawdata)
+    }
 }

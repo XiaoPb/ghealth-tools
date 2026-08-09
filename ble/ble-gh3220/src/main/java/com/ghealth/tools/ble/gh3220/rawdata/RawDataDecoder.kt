@@ -43,13 +43,31 @@ class RawDataDecoder(private val config: SamplingConfig) {
         return Result.success(frames)
     }
 
-    /** 0x09 压缩偶数包：payload = FrameData 序列，第 0 帧为绝对值。 */
+    /** 0x09 压缩偶数包：payload = FrameData 序列，第 0 帧为绝对值。
+     * 偶数包第 0 帧按文档 §3.7.7 解释为"绝对值"，以从 0 差分（类型 14 = 32bit 正差分）编码；
+     * C 端 gh_zip.c 对偶数包首帧直接写 4B/通道原始绝对值（无 rawLen/tagFlag 前缀），真机未验证。 */
     fun decode09(payload: ByteArray): Result<List<Gh3220RawDataFrame>> = decodeZipFrames(payload)
 
-    /** 0x0A 压缩奇数包：payload = FrameData 序列，全部为差分值。 */
+    /** 0x0A 压缩奇数包：payload = FrameData 序列，全部为差分值。
+     * 偶数包第 0 帧按文档 §3.7.7 解释为"绝对值"，以从 0 差分（类型 14 = 32bit 正差分）编码；
+     * C 端 gh_zip.c 对偶数包首帧直接写 4B/通道原始绝对值（无 rawLen/tagFlag 前缀），真机未验证。 */
     fun decode0A(payload: ByteArray): Result<List<Gh3220RawDataFrame>> = decodeZipFrames(payload)
 
-    /** 0x0B 新结构 rawdata 包：`[dataType][Data Channel Num 4B BE][Rawdata Flag][Data len][FrameData...]`。 */
+    /**
+     * 0x0B 新结构包。包头：[dataType][chMask 4B BE][pkgFlag][dataLen]。
+     * pkgFlag：bit0 压缩 / bit1 奇偶 / bit2 多功能 / bits3-4 分包计数 / bit5 分包结束。
+     *
+     * 与设备端 C 源码（gh_uprotocol.c / gh_zip.c）的已知偏差（真机抓包未验证）：
+     * 1. C 端 uProtocol 载荷为 8 字节包头 [FunctionID][DataType][mask 4B][flag][len]；
+     *    本实现按协议文档 §3.7.2 取 7 字节（FunctionID 并入 dataType 高 nibble）。
+     * 2. Data Channel Num 按 C 端解释为大端通道位掩码；文档 §3.7.4 为 seq/chnlCnt 形式。
+     * 3. 多功能标志按 C 端取 bit2；文档 §3.7.5 为 bit5。
+     * 4. 压缩帧 agc/amb/result 存在性按 SamplingConfig 判定（与 0x09/0x0A 同款设计），
+     *    非包头 dataType 位；C 端 agc/algo 恒开、amb 恒关。
+     * 5. AGC 每通道 3 字节按文档；C 端按 4 字节打包。
+     * 6. 多功能帧 [FifoID][RawData 4B] 按文档 §3.7.9；C 端 fifo 模式仅 1 字节 FifoID，
+     *    真实样本走 0x2A。多功能 + 压缩组合当前显式拒绝（差分解码器按 config.channelCount 定长）。
+     */
     fun decode0B(payload: ByteArray): Result<Gh3220RawDataPackage> {
         if (payload.size < 7) {
             return Result.failure(ItlvcError.ParseError("0x0B: header truncated"))
@@ -68,12 +86,20 @@ class RawDataDecoder(private val config: SamplingConfig) {
         val splicePackCount = (pkgFlag shr 3) and 0x03
         val splicePackOver = (pkgFlag and 0x20) != 0
         val activeChannels = activeChannelIndices(channelMask)
-        val channelCount = if (multiFunction) 1 else activeChannels.size
-        val channel = if (multiFunction) {
-            if (channelMask != 0) Integer.numberOfTrailingZeros(channelMask) else 0
-        } else {
-            0
+        if (activeChannels.isEmpty()) {
+            return Result.failure(ItlvcError.ParseError("0x0B: empty channel mask"))
         }
+        if (multiFunction && activeChannels.size != 1) {
+            return Result.failure(ItlvcError.ParseError("0x0B: multifunction requires exactly one channel bit"))
+        }
+        if (multiFunction && compressed) {
+            return Result.failure(ItlvcError.ParseError("0x0B: compressed multifunction unsupported"))
+        }
+        val channelCount = if (multiFunction) 1 else activeChannels.size
+        if (!multiFunction && channelCount != config.channelCount) {
+            return Result.failure(ItlvcError.ParseError("0x0B: channel mask count $channelCount != config ${config.channelCount}"))
+        }
+        val channel = if (multiFunction) Integer.numberOfTrailingZeros(channelMask) else 0
         val frames = ArrayList<Gh3220RawDataFrame>()
         var pos = 7
         while (pos < end) {
@@ -86,6 +112,9 @@ class RawDataDecoder(private val config: SamplingConfig) {
             }) ?: return Result.failure(ItlvcError.ParseError("0x0B: frame truncated"))
             pos = parsed.first
             frames.add(parsed.second)
+        }
+        if (end != payload.size) {
+            return Result.failure(ItlvcError.ParseError("0x0B: trailing bytes"))
         }
         return Result.success(
             Gh3220RawDataPackage(
