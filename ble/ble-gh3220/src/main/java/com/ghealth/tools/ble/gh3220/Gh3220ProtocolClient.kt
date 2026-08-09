@@ -61,7 +61,10 @@ class Gh3220ProtocolClient(
     val sessionState: SessionState
         get() = session.sessionState
 
-    /** 注册全部上报处理器；需在 `session.attach(...)` 之后调用。 */
+    /**
+     * 注册全部上报处理器；需在 `session.attach(...)` 之后调用。
+     * 断线重连后必须重新调用本方法（内部执行 decoder.reset() 恢复差分解压基准）。
+     */
     fun attach() {
         decoder.reset()
         session.registerReportHandler(byteArrayOf(Gh3220Cmd.RAWDATA.toByte())) { frame ->
@@ -191,6 +194,11 @@ class Gh3220ProtocolClient(
     suspend fun regArrayWrite(blocks: List<IntArray>): Result<Unit> =
         session.execute(Gh3220CommandSpecs.REG_ARRAY_WRITE, RegisterCommands.regArrayWrite(blocks)).mapCatching { resp ->
             if (resp.isEmpty()) throw ItlvcError.ParseError("reg array write response empty")
+            when (Gh3220Payload.readU8(resp, 0)) {
+                0 -> Unit
+                1 -> throw ItlvcError.CommandError.DeviceError(1)
+                else -> throw ItlvcError.ParseError("reg array write unknown status ${Gh3220Payload.readU8(resp, 0)}")
+            }
         }
 
     suspend fun setWorkMode(mode: Int, function: Long): Result<Int> =

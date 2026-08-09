@@ -131,17 +131,25 @@ class Gh3220ProtocolClientTest {
         val client = Gh3220ProtocolClient(session)
         client.attach()
 
+        val frames = mutableListOf<Gh3220RawDataFrame>()
         val errors = mutableListOf<Throwable>()
-        val collect = launch {
-            client.decodeErrors.collect { errors.add(it) }
-        }
+        val collectFrames = launch { client.rawdataFrames.collect { frames.add(it) } }
+        val collect = launch { client.decodeErrors.collect { errors.add(it) } }
         testScheduler.runCurrent()
-        // 0x08 dataLen=10 但只有 1 字节数据 → 解码失败
+
+        // 0x08 dataLen=10 但只有 1 字节数据 → 解码失败进 decodeErrors
         transport.emit(responseFrame(0x08, bytes(0x00, 0x0A, 0x00)))
         delay(10)
+        // 随后合法帧仍被路由 → 接收协程存活
+        transport.emit(responseFrame(0x08, bytes(0x00, 0x05, 0x00, 0x01, 0x02, 0x03, 0x04)))
+        delay(10)
         collect.cancel()
+        collectFrames.cancel()
+
         assertEquals(1, errors.size)
         assertIs<com.ghealth.tools.ble.itlvc.core.ItlvcError.ParseError>(errors[0])
+        assertEquals(1, frames.size)
+        assertContentEquals(intArrayOf(0x01020304), frames[0].rawdata)
         session.detach()
     }
 
@@ -152,6 +160,26 @@ class Gh3220ProtocolClientTest {
         session.attach(transport, this)
         val client = Gh3220ProtocolClient(session)
         assertEquals(SessionState.CONNECTED, client.sessionState)
+        session.detach()
+    }
+
+    @Test
+    fun `regArrayWrite rejects status 1`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+        val client = Gh3220ProtocolClient(session)
+        client.attach()
+
+        val responder = launch {
+            while (transport.sent.isEmpty()) delay(1)
+            transport.emit(responseFrame(0xA1, bytes(0x01)))
+        }
+        val result = client.regArrayWrite(listOf(intArrayOf(0x00, 0x01, 0x00, 0x02)))
+        responder.join()
+
+        assertTrue(result.isFailure)
+        assertIs<com.ghealth.tools.ble.itlvc.core.ItlvcError.CommandError.DeviceError>(result.exceptionOrNull())
         session.detach()
     }
 }
