@@ -7,15 +7,19 @@ import com.ghealth.tools.ble.itlvc.core.ItlvcError
 object RegisterCommands {
 
     /** 0x03 读寄存器：[0x00][count][addrHi][addrLo]。 */
-    fun regRead(addr: Int, count: Int): ByteArray = byteArrayOf(
-        0x00,
-        count.toByte(),
-        ((addr shr 8) and 0xFF).toByte(),
-        (addr and 0xFF).toByte(),
-    )
+    fun regRead(addr: Int, count: Int): ByteArray {
+        require(count in 1..255) { "register count out of range: $count" }
+        require(addr in 0..0xFFFF) { "register address out of range: $addr" }
+        return byteArrayOf(0x00) + Gh3220Payload.u8(count) + byteArrayOf(
+            ((addr shr 8) and 0xFF).toByte(),
+            (addr and 0xFF).toByte(),
+        )
+    }
 
     /** 0x03 写寄存器：[0x01][count][addrHi][addrLo][data 每寄存器 2B 大端]。 */
     fun regWrite(addr: Int, values: IntArray): ByteArray {
+        require(addr in 0..0xFFFF) { "register address out of range: $addr" }
+        require(values.isNotEmpty()) { "values must not be empty" }
         require(values.size <= 255) { "too many registers: ${values.size}" }
         val head = byteArrayOf(
             0x01,
@@ -47,8 +51,9 @@ object RegisterCommands {
         return Result.success(values)
     }
 
-    /** 0xA1 写寄存器数组：N × [addrHi][addrLo][valHi][valLo]。 */
+    /** 0xA1 写寄存器数组：N × [addrHi][addrLo][valHi][valLo]，块内字节按 0..0xFF 原始字节透传，不做范围校验。 */
     fun regArrayWrite(blocks: List<IntArray>): ByteArray {
+        require(blocks.isNotEmpty()) { "blocks must not be empty" }
         require(blocks.all { it.size == 4 }) { "each block must be [addrHi, addrLo, valHi, valLo]" }
         val out = ByteArray(blocks.size * 4)
         blocks.forEachIndexed { i, b ->
