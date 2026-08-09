@@ -11,6 +11,7 @@ import com.ghealth.tools.core.network.AuthRepository
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.core.network.api.AuthApi
 import com.ghealth.tools.core.network.model.LoginRequest
+import com.ghealth.tools.core.network.model.LogoutRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -166,7 +167,8 @@ class LoginViewModel @Inject constructor(
 
     suspend fun logout() {
         try {
-            authApi.logout()
+            val refreshToken = tokenManager.getRefreshTokenSuspend().orEmpty()
+            authApi.logout(LogoutRequest(refreshToken))
         } catch (e: Exception) {
             Timber.e(e, "Logout API call failed")
         }

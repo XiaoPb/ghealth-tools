@@ -67,7 +67,12 @@ class AuthAuthenticator @Inject constructor(
                     val tokenData = newTokenResponse.body()?.data
                     if (tokenData != null) {
                         val newAccessToken = tokenData.access
-                        runBlocking { tokenManager.updateAccessToken(newAccessToken) }
+                        val newRefreshToken = tokenData.refresh?.takeIf { it.isNotBlank() }
+                        if (newRefreshToken != null) {
+                            runBlocking { tokenManager.saveTokens(newAccessToken, newRefreshToken) }
+                        } else {
+                            runBlocking { tokenManager.updateAccessToken(newAccessToken) }
+                        }
                         retryCount++
 
                         request.newBuilder()

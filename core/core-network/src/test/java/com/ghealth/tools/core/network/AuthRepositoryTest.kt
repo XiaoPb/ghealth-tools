@@ -4,6 +4,7 @@ import com.ghealth.tools.core.network.api.AuthApi
 import com.ghealth.tools.core.network.model.ApiResponse
 import com.ghealth.tools.core.network.model.LoginRequest
 import com.ghealth.tools.core.network.model.LoginResponse
+import com.ghealth.tools.core.network.model.LogoutRequest
 import com.ghealth.tools.core.network.model.RegisterRequest
 import com.ghealth.tools.core.network.model.TokenRefreshRequest
 import com.ghealth.tools.core.network.model.UserResponse
@@ -130,7 +131,7 @@ class AuthRepositoryTest {
         return object : AuthApi {
             override suspend fun login(request: LoginRequest) = onLogin(request)
             override suspend fun register(request: RegisterRequest) = error("not used")
-            override suspend fun logout() = error("not used")
+            override suspend fun logout(request: LogoutRequest) = error("not used")
             override suspend fun refreshToken(request: TokenRefreshRequest) = error("not used")
             override suspend fun getCurrentUser() = error("not used")
         }

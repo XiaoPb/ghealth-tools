@@ -38,6 +38,11 @@ data class TokenRefreshRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class LogoutRequest(
+    val refresh: String
+)
+
+@JsonClass(generateAdapter = true)
 data class LoginResponse(
     val access: String,
     val refresh: String,
@@ -57,7 +62,8 @@ data class UserResponse(
 
 @JsonClass(generateAdapter = true)
 data class TokenRefreshResponse(
-    val access: String
+    val access: String,
+    val refresh: String? = null
 )
 
 @JsonClass(generateAdapter = true)
