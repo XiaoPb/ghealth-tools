@@ -2,6 +2,7 @@ package com.ghealth.tools.ble.itlvc.core
 
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ProtocolClockTest {
 
@@ -22,7 +23,7 @@ class ProtocolClockTest {
     fun `system clock moves forward`() {
         val a = SystemClock.now()
         Thread.sleep(5)
-        assert(SystemClock.now() >= a)
+        assertTrue(SystemClock.now() >= a)
     }
 
     @Test
@@ -31,6 +32,7 @@ class ProtocolClockTest {
         assertEquals(100L, c.frameTimeoutMs)
         assertEquals(1000L, c.defaultResponseTimeoutMs)
         assertEquals(0, c.defaultRetryCount)
+        assertEquals(0L, c.defaultRetryDelayMs)
         assertEquals(false, c.passThroughMode)
     }
 }
