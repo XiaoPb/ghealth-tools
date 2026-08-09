@@ -49,6 +49,60 @@ class RawDataDecoder(private val config: SamplingConfig) {
     /** 0x0A 压缩奇数包：payload = FrameData 序列，全部为差分值。 */
     fun decode0A(payload: ByteArray): Result<List<Gh3220RawDataFrame>> = decodeZipFrames(payload)
 
+    /** 0x0B 新结构 rawdata 包：`[dataType][Data Channel Num 4B BE][Rawdata Flag][Data len][FrameData...]`。 */
+    fun decode0B(payload: ByteArray): Result<Gh3220RawDataPackage> {
+        if (payload.size < 7) {
+            return Result.failure(ItlvcError.ParseError("0x0B: header truncated"))
+        }
+        val dataType = u8(payload, 0)
+        val channelMask = be32(payload, 1)
+        val pkgFlag = u8(payload, 5)
+        val dataLen = u8(payload, 6)
+        val end = 7 + dataLen
+        if (end > payload.size) {
+            return Result.failure(ItlvcError.ParseError("0x0B: data len overflow"))
+        }
+        val compressed = (pkgFlag and 0x01) != 0
+        val oddPacket = (pkgFlag and 0x02) != 0
+        val multiFunction = (pkgFlag and 0x04) != 0
+        val splicePackCount = (pkgFlag shr 3) and 0x03
+        val splicePackOver = (pkgFlag and 0x20) != 0
+        val activeChannels = activeChannelIndices(channelMask)
+        val channelCount = if (multiFunction) 1 else activeChannels.size
+        val channel = if (multiFunction) {
+            if (channelMask != 0) Integer.numberOfTrailingZeros(channelMask) else 0
+        } else {
+            0
+        }
+        val frames = ArrayList<Gh3220RawDataFrame>()
+        var pos = 7
+        while (pos < end) {
+            val parsed = (if (compressed) {
+                parseZipFrame(payload, pos, end, channelCount, if (multiFunction) channel else null)
+            } else if (multiFunction) {
+                parseFrame0BMulti(dataType, payload, pos, end, channel)
+            } else {
+                parseFrame08(dataType, payload, pos, end, channelCount)
+            }) ?: return Result.failure(ItlvcError.ParseError("0x0B: frame truncated"))
+            pos = parsed.first
+            frames.add(parsed.second)
+        }
+        return Result.success(
+            Gh3220RawDataPackage(
+                dataType = dataType,
+                funcId = dataType shr 4,
+                channelMask = channelMask,
+                activeChannels = activeChannels,
+                compressed = compressed,
+                oddPacket = oddPacket,
+                multiFunction = multiFunction,
+                splicePackCount = splicePackCount,
+                splicePackOver = splicePackOver,
+                frames = frames,
+            ),
+        )
+    }
+
     private fun decodeZipFrames(payload: ByteArray): Result<List<Gh3220RawDataFrame>> {
         val frames = ArrayList<Gh3220RawDataFrame>()
         var pos = 0
@@ -61,8 +115,15 @@ class RawDataDecoder(private val config: SamplingConfig) {
         return Result.success(frames)
     }
 
-    /** 压缩帧：`[frameId][rawLen][tagFlag][tag*][rawDiff][agcLen][agcDiff][amb*][result]`。 */
-    private fun parseZipFrame(data: ByteArray, start: Int, end: Int): Pair<Int, Gh3220RawDataFrame>? {
+    /** 压缩帧：`[frameId][rawLen][tagFlag][tag*][rawDiff][agcLen][agcDiff][amb*][result]`；
+     * multiChannel 非 null 时（0x0B 多功能模式）帧内读 1 字节 FifoID 作结构校验。 */
+    private fun parseZipFrame(
+        data: ByteArray,
+        start: Int,
+        end: Int,
+        channelCount: Int = config.channelCount,
+        multiChannel: Int? = null,
+    ): Pair<Int, Gh3220RawDataFrame>? {
         var pos = start
         fun take(n: Int): ByteArray? {
             require(n >= 0)
@@ -73,10 +134,13 @@ class RawDataDecoder(private val config: SamplingConfig) {
         }
         val frameId = take(1)?.let { u8(it, 0) } ?: return null
         val acc = if (config.gsEnabled) take(6)?.let { readAcc(it) } else null
+        if (multiChannel != null) {
+            take(1) ?: return null // FifoID，仅结构校验（通道归属以 chMask 为准）
+        }
         val rawLen = take(1)?.let { u8(it, 0) } ?: return null
         val tagFlag = take(1)?.let { u8(it, 0) } ?: return null
         val tagBytes = if (tagFlag != 0) {
-            take(config.channelCount) ?: return null
+            take(channelCount) ?: return null
         } else {
             ByteArray(0)
         }
@@ -89,7 +153,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
             if (agcLen == 0) null else agcDiff.decode(agcDiffBytes).getOrNull() ?: return null
         } else null
         val amb = if (config.ambEnabled) {
-            take(config.channelCount * 3)?.let { readChannels24(it, config.channelCount) }
+            take(channelCount * 3)?.let { readChannels24(it, channelCount) }
         } else null
         val results = if (config.algoEnabled) {
             val byteNum = take(1)?.let { u8(it, 0) } ?: return null
@@ -107,12 +171,19 @@ class RawDataDecoder(private val config: SamplingConfig) {
             agc = agc,
             amb = amb,
             results = results,
+            channel = multiChannel,
         )
         return Pair(pos, frame)
     }
 
     /** 解析 0x08 的一个 FrameData，返回 (新位置, 帧)。 */
-    private fun parseFrame08(dataType: Int, data: ByteArray, start: Int, end: Int): Pair<Int, Gh3220RawDataFrame>? {
+    private fun parseFrame08(
+        dataType: Int,
+        data: ByteArray,
+        start: Int,
+        end: Int,
+        channelCount: Int = config.channelCount,
+    ): Pair<Int, Gh3220RawDataFrame>? {
         var pos = start
         fun take(n: Int): ByteArray? {
             require(n >= 0)
@@ -126,14 +197,16 @@ class RawDataDecoder(private val config: SamplingConfig) {
             val accBytes = take(6) ?: return null
             readAcc(accBytes)
         } else null
-        val rawdata = take(config.channelCount * 4)?.let { readChannels32(it, config.channelCount) } ?: return null
+        val rawdata = take(channelCount * 4)?.let { readChannels32(it, channelCount) } ?: return null
+        diff.setBaseline(rawdata)
         val agc = if (hasBit(dataType, 2)) {
-            val agcBytes = take(config.channelCount * 3) ?: return null
-            readChannels24(agcBytes, config.channelCount)
+            val agcBytes = take(channelCount * 3) ?: return null
+            readChannels24(agcBytes, channelCount)
         } else null
+        agc?.let { agcDiff.setBaseline(it) }
         val amb = if (hasBit(dataType, 3)) {
-            val ambBytes = take(config.channelCount * 3) ?: return null
-            readChannels24(ambBytes, config.channelCount)
+            val ambBytes = take(channelCount * 3) ?: return null
+            readChannels24(ambBytes, channelCount)
         } else null
         val results = if (hasBit(dataType, 1)) {
             val byteNum = take(1)?.let { u8(it, 0) } ?: return null
@@ -143,6 +216,50 @@ class RawDataDecoder(private val config: SamplingConfig) {
             emptyList()
         }
         return Pair(pos, Gh3220RawDataFrame(dataType, dataType shr 4, frameId, acc, rawdata, agc, amb, results))
+    }
+
+    /** 解析 0x0B 多功能未压缩帧：`[frameId][ACC?][FifoID(1B)][RawData(4B)][AgcData(3B)?][AmbData(3B)?][Result?]`；
+     * 通道归属以 chMask 为准，FifoID 仅作结构校验。 */
+    private fun parseFrame0BMulti(
+        dataType: Int,
+        data: ByteArray,
+        start: Int,
+        end: Int,
+        channel: Int,
+    ): Pair<Int, Gh3220RawDataFrame>? {
+        var pos = start
+        fun take(n: Int): ByteArray? {
+            require(n >= 0)
+            if (pos + n > end) return null
+            val out = data.copyOfRange(pos, pos + n)
+            pos += n
+            return out
+        }
+        val frameId = take(1)?.let { u8(it, 0) } ?: return null
+        val acc = if (hasBit(dataType, 0)) {
+            val accBytes = take(6) ?: return null
+            readAcc(accBytes)
+        } else null
+        take(1) ?: return null // FifoID，仅结构校验
+        val rawdata = take(4)?.let { readChannels32(it, 1) } ?: return null
+        diff.setBaselineChannel(channel, rawdata[0])
+        val agc = if (hasBit(dataType, 2)) {
+            val agcBytes = take(3) ?: return null
+            readChannels24(agcBytes, 1)
+        } else null
+        agc?.let { agcDiff.setBaselineChannel(channel, it[0]) }
+        val amb = if (hasBit(dataType, 3)) {
+            val ambBytes = take(3) ?: return null
+            readChannels24(ambBytes, 1)
+        } else null
+        val results = if (hasBit(dataType, 1)) {
+            val byteNum = take(1)?.let { u8(it, 0) } ?: return null
+            val resultBytes = take(byteNum) ?: return null
+            parseResults(resultBytes) ?: return null
+        } else {
+            emptyList()
+        }
+        return Pair(pos, Gh3220RawDataFrame(dataType, dataType shr 4, frameId, acc, rawdata, agc, amb, results, channel = channel))
     }
 
     /** Result 段：[ResultByteNum(1)][(tag 1B + value 4B LE)*]，段长非 5 的倍数时返回 null。 */
@@ -184,6 +301,22 @@ class RawDataDecoder(private val config: SamplingConfig) {
     private fun hasBit(byte: Int, bit: Int): Boolean = (byte and (1 shl bit)) != 0
 
     private fun u8(data: ByteArray, offset: Int): Int = data[offset].toInt() and 0xFF
+
+    /** 大端 4 字节 → Int（0x0B Data Channel Num 通道位掩码）。 */
+    private fun be32(data: ByteArray, offset: Int): Int =
+        ((data[offset].toInt() and 0xFF) shl 24) or
+            ((data[offset + 1].toInt() and 0xFF) shl 16) or
+            ((data[offset + 2].toInt() and 0xFF) shl 8) or
+            (data[offset + 3].toInt() and 0xFF)
+
+    /** 通道位掩码置位索引（0..31 升序）。 */
+    private fun activeChannelIndices(mask: Int): IntArray {
+        val out = ArrayList<Int>()
+        for (bit in 0 until 32) {
+            if ((mask and (1 shl bit)) != 0) out.add(bit)
+        }
+        return out.toIntArray()
+    }
 
     private fun le32(data: ByteArray, offset: Int): Int =
         (data[offset].toInt() and 0xFF) or

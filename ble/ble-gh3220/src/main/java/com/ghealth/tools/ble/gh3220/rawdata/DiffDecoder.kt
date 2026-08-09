@@ -41,6 +41,17 @@ class DiffDecoder(private val channelCount: Int) {
         last = IntArray(channelCount)
     }
 
+    /** 以未压缩绝对帧同步基准（0x08 / 0x0B 未压缩路径）。 */
+    fun setBaseline(values: IntArray) {
+        require(values.size == channelCount) { "baseline size mismatch: ${values.size} != $channelCount" }
+        values.copyInto(last)
+    }
+
+    /** 多功能模式下按通道索引更新基准。 */
+    fun setBaselineChannel(index: Int, value: Int) {
+        last[index] = value
+    }
+
     fun decode(data: ByteArray): Result<IntArray> {
         val reader = NibbleReader(data)
         val out = IntArray(channelCount)
