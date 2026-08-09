@@ -15,5 +15,15 @@ data class CommandSpec(
     val retryCount: Int = 0,
     val retryDelayMs: Long = 0,
     val allowedInPassThrough: Boolean = false,
-)
+) {
+    init {
+        require(type.isNotEmpty()) { "command type must not be empty" }
+        require(timeoutMs > 0) { "timeoutMs must be positive: $timeoutMs" }
+        require(retryCount >= 0) { "retryCount must be non-negative: $retryCount" }
+        require(retryDelayMs >= 0) { "retryDelayMs must be non-negative: $retryDelayMs" }
+    }
+
+    /** T 字段按大端序解释为 Int，提供内容安全的比较键。 */
+    val typeValue: Int get() = type.fold(0) { acc, b -> (acc shl 8) or (b.toInt() and 0xFF) }
+}
 
