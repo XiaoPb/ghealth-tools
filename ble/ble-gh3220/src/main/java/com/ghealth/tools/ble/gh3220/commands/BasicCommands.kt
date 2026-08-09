@@ -7,7 +7,7 @@ import com.ghealth.tools.ble.itlvc.core.ItlvcError
 object BasicCommands {
 
     /** 0x05 通讯包测试：[len][data]，设备回显同构。 */
-    fun packageTest(data: ByteArray): ByteArray = byteArrayOf(data.size.toByte()) + data
+    fun packageTest(data: ByteArray): ByteArray = Gh3220Payload.u8(data.size) + data
 
     fun parsePackageTest(payload: ByteArray): Result<ByteArray> {
         if (payload.size < 1) return Result.failure(ItlvcError.ParseError("package test payload too short"))
@@ -48,7 +48,7 @@ object BasicCommands {
     /** 0x2E 切换 Cardiff 芯片：[cmd]。 */
     fun switchChip(cmd: Int): ByteArray = Gh3220Payload.u8(cmd)
 
-    /** 通用 1 字节状态响应解析（0=成功 / 1=失败）。 */
+    /** 通用 1 字节状态响应解析（0=成功 / 1=失败；其他值原样透传，由调用方自行解释）。 */
     fun parseStatus(payload: ByteArray, cmdName: String): Result<Int> {
         if (payload.size < 1) return Result.failure(ItlvcError.ParseError("$cmdName: status payload too short"))
         return Result.success(Gh3220Payload.readU8(payload, 0))
