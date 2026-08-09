@@ -55,8 +55,21 @@ class RawDataDecoder08Test {
     }
 
     @Test
-    fun `decode08 rejects truncated package`() {
+    fun `decode08 rejects package len overflow`() {
+        // dataLen=0x10，剩余仅 1 字节，超出 payload
         assertTrue(decoder.decode08(bytes(0x0E, 0x10, 0x00)).isFailure)
+    }
+
+    @Test
+    fun `decode08 rejects header truncated`() {
+        assertTrue(decoder.decode08(bytes(0x0E)).isFailure)
+    }
+
+    @Test
+    fun `decode08 accepts empty package`() {
+        val result = decoder.decode08(bytes(0x00, 0x00))
+        assertTrue(result.isSuccess, "result: $result")
+        assertTrue(result.getOrThrow().isEmpty())
     }
 
     @Test
@@ -75,5 +88,59 @@ class RawDataDecoder08Test {
         val singleChannel = RawDataDecoder(SamplingConfig(channelCount = 1))
         val payload = bytes(0x04, 1 + 4, 0x00, 0x01, 0x02, 0x03, 0x04)
         assertTrue(singleChannel.decode08(payload).isFailure)
+    }
+
+    @Test
+    fun `decode08 parses signed acc`() {
+        // dataType=0x01：仅 bit0(acc) 置位；单通道 frameId + acc(6B) + rawdata(4B)
+        val singleChannel = RawDataDecoder(SamplingConfig(channelCount = 1))
+        val payload = bytes(
+            0x01, 1 + 6 + 4,
+            0x00,
+            0xF8, 0x00, 0x01, 0x02, 0x03, 0x04,
+            0x10, 0x11, 0x12, 0x13,
+        )
+        val result = singleChannel.decode08(payload)
+        assertTrue(result.isSuccess, "result: $result")
+        val frames = result.getOrThrow()
+        assertEquals(1, frames.size)
+        // 0xF800 → 有符号 int16 → -2048
+        assertContentEquals(intArrayOf(-2048, 0x0102, 0x0304), frames[0].acc)
+    }
+
+    @Test
+    fun `decode08 rejects results segment not multiple of 5`() {
+        // dataType=0x02：仅 bit1(results) 置位；单通道 frameId + rawdata(4B)。
+        // byteNum=6，结果段 (tag+value4B)+0xAA 非 5 的倍数，应严格失败。
+        val singleChannel = RawDataDecoder(SamplingConfig(channelCount = 1))
+        val payload = bytes(
+            0x02, 1 + 4 + 1 + 6,
+            0x00,
+            0x01, 0x02, 0x03, 0x04,
+            0x06, 0x01, 0x2A, 0x00, 0x00, 0x00, 0xAA,
+        )
+        assertTrue(singleChannel.decode08(payload).isFailure)
+    }
+
+    @Test
+    fun `decode08 parses multiple packages with non-zero funcId`() {
+        // 包1: dataType=0x1E (funcId=1)，最小帧 = frameId + rawdata(4B) + agc(3B) + amb(3B) + byteNum=0
+        // 包2: dataType=0x00 (funcId=0)，最小帧 = frameId + rawdata(4B)
+        val singleChannel = RawDataDecoder(SamplingConfig(channelCount = 1))
+        val package1 = bytes(
+            0x1E, 1 + 4 + 3 + 3 + 1,
+            0x00,
+            0x01, 0x02, 0x03, 0x04,
+            0x05, 0x06, 0x07,
+            0x08, 0x09, 0x0A,
+            0x00,
+        )
+        val package2 = bytes(0x00, 1 + 4, 0x01, 0x11, 0x12, 0x13, 0x14)
+        val result = singleChannel.decode08(package1 + package2)
+        assertTrue(result.isSuccess, "result: $result")
+        val frames = result.getOrThrow()
+        assertEquals(2, frames.size)
+        assertEquals(0x01, frames[0].funcId)
+        assertEquals(0x00, frames[1].funcId)
     }
 }

@@ -41,6 +41,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
     private fun parseFrame08(dataType: Int, data: ByteArray, start: Int, end: Int): Pair<Int, Gh3220RawDataFrame>? {
         var pos = start
         fun take(n: Int): ByteArray? {
+            require(n >= 0)
             if (pos + n > end) return null
             val out = data.copyOfRange(pos, pos + n)
             pos += n
@@ -63,15 +64,15 @@ class RawDataDecoder(private val config: SamplingConfig) {
         val results = if (hasBit(dataType, 1)) {
             val byteNum = take(1)?.let { u8(it, 0) } ?: return null
             val resultBytes = take(byteNum) ?: return null
-            parseResults(resultBytes)
+            parseResults(resultBytes) ?: return null
         } else {
             emptyList()
         }
         return Pair(pos, Gh3220RawDataFrame(dataType, dataType shr 4, frameId, acc, rawdata, agc, amb, results))
     }
 
-    /** Result 段：[ResultByteNum(1)][(tag 1B + value 4B LE)*]。 */
-    private fun parseResults(data: ByteArray): List<Gh3220Result> {
+    /** Result 段：[ResultByteNum(1)][(tag 1B + value 4B LE)*]，段长非 5 的倍数时返回 null。 */
+    private fun parseResults(data: ByteArray): List<Gh3220Result>? {
         val results = ArrayList<Gh3220Result>()
         var pos = 0
         while (pos + 5 <= data.size) {
@@ -80,12 +81,13 @@ class RawDataDecoder(private val config: SamplingConfig) {
             results.add(Gh3220Result(tag, value))
             pos += 5
         }
-        return results
+        return if (pos == data.size) results else null
     }
 
-    /** ACC 6 字节 → 3 × int16 大端（与设备端 FillGsensorData 一致）。 */
+    /** ACC 6 字节 → 3 × int16 大端有符号（与设备端 FillGsensorData 一致）。 */
     private fun readAcc(data: ByteArray): IntArray = IntArray(3) { i ->
-        ((data[i * 2].toInt() and 0xFF) shl 8) or (data[i * 2 + 1].toInt() and 0xFF)
+        val v = ((data[i * 2].toInt() and 0xFF) shl 8) or (data[i * 2 + 1].toInt() and 0xFF)
+        v.toShort().toInt()
     }
 
     /** 每通道 4 字节大端 → Int（32bit 位型，高位在前）。 */

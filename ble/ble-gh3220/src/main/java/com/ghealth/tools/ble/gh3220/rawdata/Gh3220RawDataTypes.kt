@@ -12,7 +12,14 @@ data class SamplingConfig(
     val algoEnabled: Boolean = false,
 )
 
-/** 单帧 rawdata 数据。 */
+/**
+ * 单帧 rawdata 数据。
+ *
+ * - [acc]：每通道有符号 int16（大端）。
+ * - [rawdata]：原始无符号大端 32bit 位型。
+ * - [agc]/[amb]：原始无符号大端 24bit 值。
+ * - [results] 的 [Gh3220Result.value]：原始 32bit 小端位型。
+ */
 data class Gh3220RawDataFrame(
     val dataType: Int,
     val funcId: Int,
@@ -24,7 +31,7 @@ data class Gh3220RawDataFrame(
     val results: List<Gh3220Result>,
 )
 
-/** 算法结果项：ResultTag(1B) + ResultValue(4B LE)。 */
+/** 算法结果项：ResultTag(1B) + ResultValue(4B LE)；[value] 为原始 32bit 小端位型。 */
 data class Gh3220Result(val tag: Int, val value: Int)
 
 /** 0x2A FIFO 上报。 */
