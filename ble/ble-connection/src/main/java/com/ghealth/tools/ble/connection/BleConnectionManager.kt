@@ -923,6 +923,11 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun onGhFuncFrame(address: String, frame: GhFuncFrame) {
+        Timber.v(
+            "Parsed frame from $address: func=${frame.funcId}, cnt=${frame.frameCnt}, ts=${frame.timestamp}, " +
+                "acc=${frame.gsData.toList()}, ipd=${frame.phyValue.toList()}, raw=${frame.rawdata.toList()}, " +
+                "agc=${frame.agcInfo.toList()}, agcH=${frame.agcInfoHigh.toList()}"
+        )
         _ghFrameFlow.tryEmit(address to frame)
     }
 
