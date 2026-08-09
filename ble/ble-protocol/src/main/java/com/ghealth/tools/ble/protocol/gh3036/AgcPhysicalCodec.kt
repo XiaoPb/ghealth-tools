@@ -38,7 +38,10 @@ object AgcPhysicalCodec {
         val dcCancelCode: Int,    // [15:8]  DC 抵消校准码
         val ledCurrentSum: Int,   // [29:16] LED 总电流 (0.1mA)
         val ledCurrentDrv0: Int,  // [11:0]  DRV0 通道电流 (0.1mA)
-        val ledCurrentDrv1: Int   // [23:12] DRV1 通道电流 (0.1mA)
+        val ledCurrentDrv1: Int,  // [23:12] DRV1 通道电流 (0.1mA)
+        val ledDrvFs: Int = 0,    // [23:16] LED 驱动系数（原始码）
+        val ledDrv0: Int = 0,     // [31:24] DRV0 驱动码（原始码）
+        val ledDrv1: Int = 0      // [7:0]   DRV1 驱动码（原始码）
     )
 
     /**
@@ -60,7 +63,8 @@ object AgcPhysicalCodec {
         val ledCurrentSum = ledCurrentDrv0 + ledCurrentDrv1
         return Physical(
             gain, bgCancelLevel, dcCancelLevel, dcCancelCode,
-            ledCurrentSum, ledCurrentDrv0, ledCurrentDrv1
+            ledCurrentSum, ledCurrentDrv0, ledCurrentDrv1,
+            ledDrvFs, ledDrv0, ledDrv1
         )
     }
 

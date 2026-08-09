@@ -5,6 +5,7 @@ package com.ghealth.tools.ble.connection
 import com.ghealth.tools.ble.protocol.rpccore.GHealthExecutor
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.rpccore.Unpackage
+import com.ghealth.tools.ble.protocol.gh3036.AgcPhysicalCodec
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
@@ -923,10 +924,25 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun onGhFuncFrame(address: String, frame: GhFuncFrame, deviceType: DeviceType) {
+        val agcSuffix = if (deviceType == DeviceType.GH3036) {
+            val (packedAgc, packedLed) = AgcPhysicalCodec.encodeColumns(frame.agcInfo, frame.agcInfoHigh)
+            val physicals = (0 until maxOf(frame.agcInfo.size, frame.agcInfoHigh.size)).joinToString(",") { ch ->
+                val agcL = frame.agcInfo.getOrElse(ch) { 0 }
+                val agcH = frame.agcInfoHigh.getOrElse(ch) { 0 }
+                val p = AgcPhysicalCodec.decode(agcL, agcH)
+                val raw = String.format("0x%016X", ((agcH.toLong() and 0xFFFFFFFFL) shl 32) or (agcL.toLong() and 0xFFFFFFFFL))
+                "ch$ch{raw=$raw,g=${p.gain},bg=${p.bgCancelLevel},dc=${p.dcCancelLevel},code=${p.dcCancelCode}," +
+                    "fs=${p.ledDrvFs},drv0=${p.ledDrv0},drv1=${p.ledDrv1},sum=${p.ledCurrentSum}," +
+                    "ma0=${p.ledCurrentDrv0},ma1=${p.ledCurrentDrv1}}"
+            }
+            ", agcInfoCh=${packedAgc.toList()}, ledInfoCh=${packedLed.toList()}, agcPhys=[$physicals]"
+        } else {
+            ""
+        }
         Timber.v(
             "Parsed frame from $address chip=${deviceType.name}: func=${frame.funcId}, cnt=${frame.frameCnt}, ts=${frame.timestamp}, " +
                 "acc=${frame.gsData.toList()}, ipd=${frame.phyValue.toList()}, raw=${frame.rawdata.toList()}, " +
-                "agc=${frame.agcInfo.toList()}, agcH=${frame.agcInfoHigh.toList()}"
+                "agc=${frame.agcInfo.toList()}, agcH=${frame.agcInfoHigh.toList()}$agcSuffix"
         )
         _ghFrameFlow.tryEmit(address to frame)
     }
