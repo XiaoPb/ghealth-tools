@@ -1,6 +1,5 @@
 package com.ghealth.tools.ble.gh3220.flow
 
-import com.ghealth.tools.ble.gh3220.Gh3220Cmd
 import com.ghealth.tools.ble.gh3220.Gh3220Payload
 import com.ghealth.tools.ble.gh3220.commands.Gh3220CommandSpecs
 import com.ghealth.tools.ble.itlvc.core.CommandSpec
@@ -11,13 +10,12 @@ import com.ghealth.tools.ble.itlvc.core.ItlvcSession
  * 0x0F 固件升级流程：版本查询 → 设置组包大小 → 分包传输。
  * 分包解释（假设，待真机验证）：固件按 blockSize 分块，块内按 ≤56 字节分包；
  * Total Len = 当前块字节数，Current Index = 包在块内字节偏移。
+ * 多字节字段字节序按小端（文档 §3.11 未显式标注，与周边协议及计划约定一致）；C demo 无 0x0F 传输实现可对照。
  */
 class FwUpgradeFlow(
     private val session: ItlvcSession,
     private val spec: CommandSpec = Gh3220CommandSpecs.FW_UPGRADE,
 ) {
-    private val type = byteArrayOf(Gh3220Cmd.FW_UPGRADE.toByte())
-
     /** 0x01 获取固件版本：响应 [0x01][len][chars]。 */
     suspend fun getFirmwareVersion(): Result<String> =
         session.execute(spec, byteArrayOf(0x01)).mapCatching { resp ->

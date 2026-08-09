@@ -131,4 +131,43 @@ class FwUpgradeFlowTest {
         assertEquals(1, transport.sent.size)
         session.detach()
     }
+
+    @Test
+    fun `transferFirmware fails on echo mismatch`() = runTest {
+        val transport = InMemoryTransport()
+        val session = newSession(transport, this)
+        val flow = FwUpgradeFlow(session, CommandSpec(type = bytes(Gh3220Cmd.FW_UPGRADE), timeoutMs = 200))
+
+        val firmware = ByteArray(60) { it.toByte() }
+        val responder = launch {
+            while (transport.sent.isEmpty()) delay(1)
+            // status=1 但回显 total 不匹配（期望 60，回显 0x64=100）→ ParseError
+            transport.emit(responseFrame(Gh3220Cmd.FW_UPGRADE, bytes(0x03, 0x01, 0x64, 0x00, 0x00, 0x00, 0x38)))
+        }
+        val result = flow.transferFirmware(firmware, blockSize = 100)
+        responder.join()
+
+        assertTrue(result.isFailure)
+        assertIs<ItlvcError.ParseError>(result.exceptionOrNull())
+        assertEquals(1, transport.sent.size)
+        session.detach()
+    }
+
+    @Test
+    fun `getFirmwareVersion rejects invalid response`() = runTest {
+        val transport = InMemoryTransport()
+        val session = newSession(transport, this)
+        val flow = FwUpgradeFlow(session, CommandSpec(type = bytes(Gh3220Cmd.FW_UPGRADE), timeoutMs = 200))
+
+        val responder = launch {
+            // 首字节非 0x01 → ParseError
+            transport.emit(responseFrame(Gh3220Cmd.FW_UPGRADE, bytes(0x02, 0x01, 0x31)))
+        }
+        val result = flow.getFirmwareVersion()
+        responder.join()
+
+        assertTrue(result.isFailure)
+        assertIs<ItlvcError.ParseError>(result.exceptionOrNull())
+        session.detach()
+    }
 }
