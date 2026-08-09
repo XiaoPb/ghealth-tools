@@ -141,6 +141,8 @@ class RawDataDecoder(private val config: SamplingConfig) {
      * 与设备端 C 源码的已知偏差（真机抓包未验证）：C demo 端载荷为
      * [fifoId][len 1B][idChangeFlag 1B][data...]（数据同样从偏移 5 开始），
      * len 字段解释与文档 §3.35 的 4 字节小端不同。
+     * 按当前实现，C demo 格式的 0x2A 包（idChangeFlag 非 0 时 len 字段被放大）
+     * 将因 len overflow 被拒绝；接入真实数据流前需抓包裁决格式。
      */
     fun decode2A(payload: ByteArray): Result<Gh3220FifoReport> {
         if (payload.size < 5) return Result.failure(ItlvcError.ParseError("0x2A: header truncated"))

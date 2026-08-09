@@ -34,4 +34,12 @@ class RawDataDecoder2ATest {
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is ItlvcError.ParseError)
     }
+
+    @Test
+    fun `decode2A rejects negative len from high bit`() {
+        // len=0xFFFFFFFF（le32 高位 bit 置位 → Int -1）→ ParseError
+        val result = decoder.decode2A(bytes(0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0x01))
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is ItlvcError.ParseError)
+    }
 }
