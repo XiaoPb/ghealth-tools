@@ -7,18 +7,18 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 0x00 | NOP | H→D | spec 已注册 | 1000 | - | 门面未暴露 |
 | 0x01 | 操作响应 | D→H | （响应帧通用处理） | - | - | |
-| 0x02 | 状态查询 | - | （未实现） | - | - | spec 未注册 |
+| 0x02 | 状态查询 | - | raw passthrough（sendRaw） | - | - | 无格式说明，文档 §2 仅列命令 |
 | 0x03 | 读写寄存器 | H→D / D→H | 类型化 `RegisterCommands` | 1000 | - | |
-| 0x04 | 阻抗测试 | - | raw passthrough | - | - | 文档标注"略" |
+| 0x04 | 阻抗测试 | - | raw passthrough（sendRaw） | - | - | 文档标注"略" |
 | 0x05 | 通讯包测试 | H→D / D→H | 类型化 `BasicCommands.packageTest` | 1000 | - | 回显 |
-| 0x07 | 读 OTP | H→D / D→H | raw passthrough | - | - | 无格式说明 |
+| 0x07 | 读 OTP | H→D / D→H | raw passthrough（sendRaw） | - | - | 无格式说明 |
 | 0x08 | Rawdata | D→H | 解码 `RawDataDecoder.decode08` | - | - | 上报 |
 | 0x09 | Rawdata 压缩（偶） | D→H | 解码 `decode09` | - | - | 上报 |
 | 0x0A | Rawdata 压缩（奇） | D→H | 解码 `decode0A` | - | - | 上报 |
 | 0x0B | 新 Rawdata | D→H | 解码 `decode0B` | - | - | 上报，多通道分包 |
 | 0x0C | 启动 HBD | H→D / D→H | 类型化 `BasicCommands.startHbd` | 1000 | - | |
 | 0x0D | 电流电池 | D→H | 解码 `ReportDecoder.decodeCurrentBattery` | - | - | 上报 |
-| 0x0E | ECG 电压 | D→H | raw passthrough | - | - | 文档标注"略" |
+| 0x0E | ECG 电压 | D→H | raw passthrough（sendRaw） | - | - | 文档标注"略" |
 | 0x0F | 固件升级 | H→D / D→H | 流程 `FwUpgradeFlow` | 3000 | - | 版本/组包/分包 |
 | 0x10 | 工作模式 | H→D / D→H | 类型化 `ConfigCommands.workMode` | 1000 | - | |
 | 0x11 | G-sensor | H→D / D→H | 类型化 `ConfigCommands.gsensorSet` | 1000 | - | |
@@ -38,16 +38,17 @@
 | 0x1F | 驱动配置下发 | H→D / D→H | 流程 `DriverConfigFlow` | 3000 | - | 单包 ≤230 |
 | 0x20 | 应用模块 | H→D / D→H | 类型化 `BasicCommands.appModule` | 1000 | - | |
 | 0x21 | 从机 Log | D→H | 解码 `ReportDecoder.decodeSlaveLog` | - | ✅ | 上报 |
-| 0x22 | Lead 检测频率 | - | raw passthrough | - | - | 文档标注"略" |
-| 0x23 | Dump 模式 | - | raw passthrough | - | - | 文档标注"略" |
-| 0x24 | 软件调光 | - | raw passthrough | - | - | 文档标注"略" |
-| 0x25 | 获取采样状态 | - | raw passthrough | - | - | 文档标注"略" |
-| 0x26 | RTC 时间 | - | raw passthrough | - | - | 文档标注"略" |
+| 0x22 | Lead 检测频率 | - | raw passthrough（sendRaw） | - | - | 文档标注"略" |
+| 0x23 | Dump 模式 | - | raw passthrough（sendRaw） | - | - | 文档标注"略" |
+| 0x24 | 软件调光 | - | raw passthrough（sendRaw） | - | - | 文档标注"略" |
+| 0x25 | 获取采样状态 | - | raw passthrough（sendRaw） | - | - | 文档标注"略" |
+| 0x26 | RTC 时间 | - | raw passthrough（sendRaw） | - | - | 文档标注"略" |
+| 0x28 | 心电贴时间数据 | - | raw passthrough（sendRaw） | - | - | 无格式说明 |
 | 0x2A | Rawdata FIFO | D→H | 解码 `RawDataDecoder.decode2A` | - | ✅ | 上报 |
-| 0x2D | SPI Flash 测试 | - | raw passthrough | - | - | 文档标注"略" |
+| 0x2D | SPI Flash 测试 | - | raw passthrough（sendRaw） | - | - | 文档标注"略" |
 | 0x2E | 切换芯片 | H→D / D→H | 类型化 `BasicCommands.switchChip` | 1000 | - | |
 | 0xA1 | 写寄存器数组 | H→D / D→H | 类型化 `RegisterCommands.regArrayWrite` | 1000 | - | |
-| 0xA2 | Debug | H→D / D→H | raw passthrough | - | - | 无格式说明 |
+| 0xA2 | Debug | H→D / D→H | raw passthrough（sendRaw） | - | - | 无格式说明 |
 
 ## 透传模式（文档 §4.3.5）
 

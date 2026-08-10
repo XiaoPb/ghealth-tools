@@ -40,6 +40,7 @@ object Gh3220Cmd {
     const val SW_AGC = 0x24             // 略：raw passthrough
     const val SAMPLING_STATUS = 0x25    // 略：raw passthrough
     const val RTC_TIME = 0x26           // 略：raw passthrough
+    const val ECG_PATCH_TIME = 0x28     // 心电贴在线/离线时间（文档无格式：raw passthrough）
     const val RAWDATA_FIFO = 0x2A
     const val SPI_FLASH_TEST = 0x2D     // 略：raw passthrough
     const val SWITCH_CHIP = 0x2E

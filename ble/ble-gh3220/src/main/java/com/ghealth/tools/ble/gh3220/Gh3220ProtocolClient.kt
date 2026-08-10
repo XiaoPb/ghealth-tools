@@ -17,6 +17,8 @@ import com.ghealth.tools.ble.gh3220.rawdata.Gh3220RawDataFrame
 import com.ghealth.tools.ble.gh3220.rawdata.Gh3220RawDataPackage
 import com.ghealth.tools.ble.gh3220.rawdata.RawDataDecoder
 import com.ghealth.tools.ble.gh3220.rawdata.SamplingConfig
+import com.ghealth.tools.ble.itlvc.codec.ItlvcFrame
+import com.ghealth.tools.ble.itlvc.core.CommandSpec
 import com.ghealth.tools.ble.itlvc.core.ItlvcError
 import com.ghealth.tools.ble.itlvc.core.ItlvcSession
 import com.ghealth.tools.ble.itlvc.state.SessionState
@@ -62,89 +64,73 @@ class Gh3220ProtocolClient(
         get() = session.sessionState
 
     /**
-     * 注册全部上报处理器；需在 `session.attach(...)` 之后调用。
-     * 断线重连后必须重新调用本方法（内部执行 decoder.reset() 恢复差分解压基准）。
+     * 注册全部上报处理器（可重入/幂等）：每次调用重置差分解压基准并重新注册 handler。
+     * 注册为按 type 覆盖，重复调用不会产生双路由；断线重连（`session.attach(...)` 重建接收协程）
+     * 或 `session.reset()` 后再次调用均可安全恢复路由。
      */
     fun attach() {
         decoder.reset()
-        session.registerReportHandler(byteArrayOf(Gh3220Cmd.RAWDATA.toByte())) { frame ->
-            try {
-                decoder.decode08(frame.value).getOrThrow().forEach { _rawdataFrames.tryEmit(it) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _decodeErrors.tryEmit(e as? ItlvcError ?: ItlvcError.ParseError(e.message ?: "decode08 failed"))
-            }
+        registerReportHandler(Gh3220Cmd.RAWDATA) { frame ->
+            decoder.decode08(frame.value).getOrThrow().forEach { _rawdataFrames.tryEmit(it) }
         }
-        session.registerReportHandler(byteArrayOf(Gh3220Cmd.RAWDATA_ZIP_EVEN.toByte())) { frame ->
-            try {
-                decoder.decode09(frame.value).getOrThrow().forEach { _rawdataFrames.tryEmit(it) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _decodeErrors.tryEmit(e as? ItlvcError ?: ItlvcError.ParseError(e.message ?: "decode09 failed"))
-            }
+        registerReportHandler(Gh3220Cmd.RAWDATA_ZIP_EVEN) { frame ->
+            decoder.decode09(frame.value).getOrThrow().forEach { _rawdataFrames.tryEmit(it) }
         }
-        session.registerReportHandler(byteArrayOf(Gh3220Cmd.RAWDATA_ZIP_ODD.toByte())) { frame ->
-            try {
-                decoder.decode0A(frame.value).getOrThrow().forEach { _rawdataFrames.tryEmit(it) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _decodeErrors.tryEmit(e as? ItlvcError ?: ItlvcError.ParseError(e.message ?: "decode0A failed"))
-            }
+        registerReportHandler(Gh3220Cmd.RAWDATA_ZIP_ODD) { frame ->
+            decoder.decode0A(frame.value).getOrThrow().forEach { _rawdataFrames.tryEmit(it) }
         }
-        session.registerReportHandler(byteArrayOf(Gh3220Cmd.RAWDATA_NEW.toByte())) { frame ->
-            try {
-                val pkg = decoder.decode0B(frame.value).getOrThrow()
-                _rawdataPackages.tryEmit(pkg)
-                pkg.frames.forEach { _rawdataFrames.tryEmit(it) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _decodeErrors.tryEmit(e as? ItlvcError ?: ItlvcError.ParseError(e.message ?: "decode0B failed"))
-            }
+        registerReportHandler(Gh3220Cmd.RAWDATA_NEW) { frame ->
+            val pkg = decoder.decode0B(frame.value).getOrThrow()
+            _rawdataPackages.tryEmit(pkg)
+            pkg.frames.forEach { _rawdataFrames.tryEmit(it) }
         }
-        session.registerReportHandler(byteArrayOf(Gh3220Cmd.RAWDATA_FIFO.toByte())) { frame ->
-            try {
-                _fifoReports.tryEmit(decoder.decode2A(frame.value).getOrThrow())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _decodeErrors.tryEmit(e as? ItlvcError ?: ItlvcError.ParseError(e.message ?: "decode2A failed"))
-            }
+        registerReportHandler(Gh3220Cmd.RAWDATA_FIFO) { frame ->
+            _fifoReports.tryEmit(decoder.decode2A(frame.value).getOrThrow())
         }
-        session.registerReportHandler(byteArrayOf(Gh3220Cmd.CURRENT_BATTERY.toByte())) { frame ->
-            try {
-                _currentBattery.tryEmit(ReportDecoder.decodeCurrentBattery(frame.value).getOrThrow())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _decodeErrors.tryEmit(e as? ItlvcError ?: ItlvcError.ParseError(e.message ?: "decode0D failed"))
-            }
+        registerReportHandler(Gh3220Cmd.CURRENT_BATTERY) { frame ->
+            ReportDecoder.decodeCurrentBattery(frame.value).getOrThrow().let { _currentBattery.tryEmit(it) }
         }
-        session.registerReportHandler(byteArrayOf(Gh3220Cmd.DEVICE_EVENT.toByte())) { frame ->
-            try {
-                _deviceEvents.tryEmit(ReportDecoder.decodeDeviceEvent(frame.value).getOrThrow())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _decodeErrors.tryEmit(e as? ItlvcError ?: ItlvcError.ParseError(e.message ?: "decode14 failed"))
-            }
+        registerReportHandler(Gh3220Cmd.DEVICE_EVENT) { frame ->
+            ReportDecoder.decodeDeviceEvent(frame.value).getOrThrow().let { _deviceEvents.tryEmit(it) }
         }
-        session.registerReportHandler(byteArrayOf(Gh3220Cmd.SLAVE_LOG.toByte())) { frame ->
-            try {
-                _slaveLogs.tryEmit(ReportDecoder.decodeSlaveLog(frame.value).getOrThrow())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _decodeErrors.tryEmit(e as? ItlvcError ?: ItlvcError.ParseError(e.message ?: "decode21 failed"))
-            }
+        registerReportHandler(Gh3220Cmd.SLAVE_LOG) { frame ->
+            _slaveLogs.tryEmit(ReportDecoder.decodeSlaveLog(frame.value).getOrThrow())
         }
         eventAckHandler.attach()
     }
 
+    /** 注册上报处理器：统一捕获解码异常，CancellationException 原样上抛，其余进 [decodeErrors]。 */
+    private fun registerReportHandler(cmd: Int, onFrame: (ItlvcFrame) -> Unit) {
+        session.registerReportHandler(byteArrayOf(cmd.toByte())) { frame ->
+            try {
+                onFrame(frame)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                _decodeErrors.tryEmit(e as? ItlvcError ?: ItlvcError.ParseError(e.message ?: "decode failed"))
+            }
+        }
+    }
+
     // —— 命令 API ——
+
+    /**
+     * 原始透传（"略"/无格式命令）：按 [type] 原样发送 [payload] 并返回响应 V 字节，不做结构解析。
+     * 透传模式下仅白名单命令（文档 §4.3.5，见 [Gh3220CommandSpecs.passThroughWhitelist]）放行，
+     * 其余以 [ItlvcError.CommandError.Unsupported] 拒绝且不写入传输。
+     */
+    suspend fun sendRaw(
+        type: Int,
+        payload: ByteArray = ByteArray(0),
+        timeoutMs: Long = 1000,
+    ): Result<ByteArray> = session.execute(
+        CommandSpec(
+            byteArrayOf(type.toByte()),
+            timeoutMs = timeoutMs,
+            allowedInPassThrough = type.toByte() in Gh3220CommandSpecs.passThroughWhitelist,
+        ),
+        payload,
+    )
 
     suspend fun getConnectionStatus(): Result<Int> =
         session.execute(Gh3220CommandSpecs.CONN_STATUS, BasicCommands.getConnStatus()).mapCatching { resp ->

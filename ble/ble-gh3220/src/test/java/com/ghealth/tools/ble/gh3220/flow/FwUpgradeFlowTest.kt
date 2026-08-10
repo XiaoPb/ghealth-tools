@@ -8,6 +8,7 @@ import com.ghealth.tools.ble.itlvc.core.ItlvcConfig
 import com.ghealth.tools.ble.itlvc.core.ItlvcError
 import com.ghealth.tools.ble.itlvc.core.ItlvcSession
 import com.ghealth.tools.ble.itlvc.transport.InMemoryTransport
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -166,6 +167,22 @@ class FwUpgradeFlowTest {
         val result = flow.getFirmwareVersion()
         responder.join()
 
+        assertTrue(result.isFailure)
+        assertIs<ItlvcError.ParseError>(result.exceptionOrNull())
+        session.detach()
+    }
+
+    @Test
+    fun `transfer rejects unknown status after refactor`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+        val flow = FwUpgradeFlow(session)
+
+        val job = async { flow.setTransferParams(1024, 128) }
+        testScheduler.runCurrent()
+        transport.emit(responseFrame(0x0F, bytes(0x02, 0x03))) // status=3 未知
+        val result = job.await()
         assertTrue(result.isFailure)
         assertIs<ItlvcError.ParseError>(result.exceptionOrNull())
         session.detach()

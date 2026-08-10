@@ -78,10 +78,11 @@ class FwUpgradeFlow(
         if (resp.size < 2 || Gh3220Payload.readU8(resp, 0) != sub) {
             throw ItlvcError.ParseError("$label: response invalid")
         }
-        when (Gh3220Payload.readU8(resp, 1)) {
+        val status = Gh3220Payload.readU8(resp, 1)
+        when (status) {
             1 -> Unit
             2 -> throw ItlvcError.CommandError.DeviceError(2)
-            else -> throw ItlvcError.ParseError("$label: unknown status ${Gh3220Payload.readU8(resp, 1)}")
+            else -> throw ItlvcError.ParseError("$label: unknown status $status")
         }
     }
 
@@ -89,10 +90,11 @@ class FwUpgradeFlow(
         if (resp.size < 7 || Gh3220Payload.readU8(resp, 0) != 0x03) {
             throw ItlvcError.ParseError("fw transfer response invalid")
         }
-        when (Gh3220Payload.readU8(resp, 1)) {
+        val status = Gh3220Payload.readU8(resp, 1)
+        when (status) {
             1 -> Unit
             2 -> throw ItlvcError.CommandError.DeviceError(2)
-            else -> throw ItlvcError.ParseError("fw transfer: unknown status ${Gh3220Payload.readU8(resp, 1)}")
+            else -> throw ItlvcError.ParseError("fw transfer: unknown status $status")
         }
         val echoTotal = Gh3220Payload.readU16le(resp, 2)
         val echoIndex = Gh3220Payload.readU16le(resp, 4)
