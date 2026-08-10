@@ -21,6 +21,7 @@
 | 4 | 0x2A len | 4B 小端 | 文档 4B 小端；C 端 `[len 1B][idChangeFlag 1B]` | 抓 0x2A 上报，比对长度字段宽度 | `RawDataDecoder.decode2A`；测试 `RawDataDecoder2ATest` |
 | 5 | 0x0F 分包 / 0x0D 字节序 | blockSize 分块 + 块内 ≤56B；Total Len=块字节数；0x0D 小端 | 计划假设；文档 §3.11 未标注 | 真机升级 + 电流电池上报比对 | `FwUpgradeFlow`；`ReportDecoder.decodeCurrentBattery`（`Gh3220ReportModels.kt`）；测试 `FwUpgradeFlowTest`、`EventAckHandlerTest` |
 | 6 | 0x0C 启动载荷 | **已裁决（7B）**：`[onOff][mode][slotEn 占位][function u32le]` | 文档 §3.8 写 6B（无 slot_en）；C 端 `gh_uprotocol.h` `UPROTOCOL_START_CTRL_SLOT_EN_INDEX=2`、`UPROTOCOL_START_CTRL_FUNCTION_INDEX=3`（处理器仅用 function） | 真机 2026-08-10：按文档 6B 下发 0x0C，设备返回 1=失败（function 读到上一包 `0x19` 版本串残留字节作高位，非 `g_unAllFuncMode` 子集）；同会话标准 APP 抓包 0x0C 返回 0=成功，且其前序 0x0D 残留 `payload[6]=0x08` 证明标准 APP 必为 7B 下发 | `BasicCommands.startHbd`；测试 `BasicCommandsTest` |
+| 7 | 0x19 算法版本类型 | **已裁决（`0x12 + 功能偏移`）**：PWA=0x17、SpO2=0x18、ECG=0x19、PWTT=0x1A、SOFTADT=0x1B、BT=0x1C | 文档 §3.21 从 PWA 起多写 2（PWA=0x19）；C 端 `gh_uprotocol.h` `UPROTOCOL_GET_VER_TYPE_ALGO_VER=0x12`、`GH3X2X_GetVersion` 按 `verType - 0x12` 索引功能偏移 | 真机 2026-08-10：设备信息页查 PWA(0x19) 返回 ECG 版本串，与 `0x19-0x12=7=ECG` 吻合，文档表被推翻 | `DeviceInfoViewModel.GH3220_VERSION_QUERIES`、`Gh3220CommandMeta.VERSION_TYPE_OPTIONS`；测试 `Gh3220VersionResolverTest`、`Gh3220CommandMetaTest` |
 
 **裁决要点说明（补充，不改变上表含义）：**
 
@@ -30,6 +31,7 @@
 - 第 4 项：`gh_drv_control.c` 打包 `[fifoId 1B][len 1B][idChangeFlag 1B][00 00][data...]`（数据偏移 5）；文档 §3.35 为 `[fifoId 1B][len 4B][data]`，当前实现按 4B 小端解析，C 格式下会因 len overflow 拒绝，抓包可直接分辨。
 - 第 5 项：`FwUpgradeFlow` 按 blockSize 分块、块内 ≤56B 分包，`Total Len`=当前块字节数、`Current Index`=块内字节偏移，多字节字段小端；`ReportDecoder.decodeCurrentBattery` 对 0x0D 按 u16le 解析（CardiffCurrent/TxCurrent/BleSendPackageCnt）。C demo 无 0x0F 传输实现可对照，文档 §3.11/§3.9 未标注字节序。注意文档 §3.9 字段列名 `Cardiff电流_H|_L`、`BleSendPackageCnt_H|_L` 按惯例暗示高字节在前：真机比对时需判别字节到达顺序是 H-first（按文档列名命名）还是 L-first（按当前实现 u16le）。
 - 第 6 项：**已裁决（2026-08-10 真机 + 标准 APP 抓包）**。0x0C 必须按设备端 7B 布局下发 `[onOff][mode][slotEn=0][function u32le]`（`BasicCommands.startHbd`）。设备端处理器从 `FUNCTION_INDEX=3` 起读 4B；按文档 6B 下发时 `payload[6]` 为上一包残留字节（真机日志中为 `0x19` GET_VER 版本串 `GHealth...` 的 `'l'=0x6C`），作为 function 最高字节导致 `g_unTargetFuncMode` 非 `g_unAllFuncMode` 子集 → 返回 1=失败。标准 APP 抓包中 0x0C 返回 0=成功，且其前序 0x0D（9B payload）残留 `payload[6]=0x08`，若标准 APP 按 6B 下发同样会失败，据此判定标准 APP 亦为 7B 下发。
+- 第 7 项：**已裁决（2026-08-10 真机）**。0x19 算法版本类型按 C 端公式 `0x12 + GH3X2X_FUNC_OFFSET_*` 计算（ADT=0x12 … BT=0x1C），与 `Gh3220Function.bit` 偏移一致；协议文档 §3.21 从 PWA 起多写 2（0x17/0x18 被跳过），真机查询 PWA=0x19 返回 ECG 版本串证实文档表错误。APP 侧 `GH3220_VERSION_QUERIES` 与 `VERSION_TYPE_OPTIONS` 均已按 C 端修正。
 - 备注：`RawDataDecoder.decode0B` KDoc 另列 flag 位位置（bit2/bit5）、AGC 3B/4B、多功能 FifoID 等次要偏差，不在本清单 6 项内，可在同一抓包会话顺带记录供后续复核。
 
 ## 抓包前置准备

@@ -134,7 +134,9 @@ data class Gh3220CommandMeta(
         // ── 选项常量（值参考 .claude/gh3220_protocol/gh3220 protocol.md，真机待验证）──
         // 功能位定义以 ble-gh3220 `Gh3220Function`（C 端宏映射）为准。
 
-        /** 0x19 获取版本类型（协议文档 §3.21；0x00 与 0x01 等价，此处取 0x01）。 */
+        /** 0x19 获取版本类型：算法类型 = `0x12 + GH3X2X_FUNC_OFFSET_*`（C 端
+         *  `GH3X2X_GetVersion` 按 `verType - 0x12` 作功能偏移索引）；协议文档 §3.21
+         *  从 PWA 起多写 2，真机 2026-08-10 验证 0x19 返回 ECG，已按 C 端修正。 */
         val VERSION_TYPE_OPTIONS: List<CommandParamDef.OptionItem> = listOf(
             CommandParamDef.OptionItem("EVK 版本 (0x00/0x01)", 0x01),
             CommandParamDef.OptionItem("虚拟寄存器版本 (0x0B)", 0x0B),
@@ -149,12 +151,12 @@ data class Gh3220CommandMeta(
             CommandParamDef.OptionItem("HRV (0x14)", 0x14),
             CommandParamDef.OptionItem("HSM (0x15)", 0x15),
             CommandParamDef.OptionItem("FPBP (0x16)", 0x16),
-            CommandParamDef.OptionItem("PWA (0x19)", 0x19),
-            CommandParamDef.OptionItem("SPO2 (0x1A)", 0x1A),
-            CommandParamDef.OptionItem("ECG (0x1B)", 0x1B),
-            CommandParamDef.OptionItem("PWTT (0x1C)", 0x1C),
-            CommandParamDef.OptionItem("SOFTADT (0x1D)", 0x1D),
-            CommandParamDef.OptionItem("BT (0x1E)", 0x1E),
+            CommandParamDef.OptionItem("PWA (0x17)", 0x17),
+            CommandParamDef.OptionItem("SPO2 (0x18)", 0x18),
+            CommandParamDef.OptionItem("ECG (0x19)", 0x19),
+            CommandParamDef.OptionItem("PWTT (0x1A)", 0x1A),
+            CommandParamDef.OptionItem("SOFTADT (0x1B)", 0x1B),
+            CommandParamDef.OptionItem("BT (0x1C)", 0x1C),
         )
 
         /** 0x10 下位机工作模式（协议文档 §3.12）。 */

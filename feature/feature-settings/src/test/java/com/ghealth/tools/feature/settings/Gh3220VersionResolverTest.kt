@@ -21,7 +21,9 @@ class Gh3220VersionResolverTest {
     }
 
     @Test
-    fun `gh3220 version queries match protocol doc version types`() {
+    fun `gh3220 version queries follow C firmware algo ver type = 0x12 plus func offset`() {
+        // 设备端 GH3X2X_GetVersion：verType - 0x12 = 功能偏移（ADT=0…BT=10）；
+        // 协议文档 §3.21 从 PWA 起多写 2（0x19），真机验证 0x19 返回 ECG，已按 C 端修正。
         val byLabel = GH3220_VERSION_QUERIES.associateBy { it.label }
         assertEquals(0x01, byLabel.getValue("固件版本").verType.toInt())
         assertEquals(0x0B, byLabel.getValue("虚拟寄存器版本").verType.toInt())
@@ -36,12 +38,12 @@ class Gh3220VersionResolverTest {
         assertEquals(0x14, byLabel.getValue("HRV").verType.toInt())
         assertEquals(0x15, byLabel.getValue("HSM").verType.toInt())
         assertEquals(0x16, byLabel.getValue("FPBP").verType.toInt())
-        assertEquals(0x19, byLabel.getValue("PWA").verType.toInt())
-        assertEquals(0x1A, byLabel.getValue("SpO2").verType.toInt())
-        assertEquals(0x1B, byLabel.getValue("ECG").verType.toInt())
-        assertEquals(0x1C, byLabel.getValue("PWTT").verType.toInt())
-        assertEquals(0x1D, byLabel.getValue("SOFTADT").verType.toInt())
-        assertEquals(0x1E, byLabel.getValue("BT").verType.toInt())
+        assertEquals(0x17, byLabel.getValue("PWA").verType.toInt())
+        assertEquals(0x18, byLabel.getValue("SpO2").verType.toInt())
+        assertEquals(0x19, byLabel.getValue("ECG").verType.toInt())
+        assertEquals(0x1A, byLabel.getValue("PWTT").verType.toInt())
+        assertEquals(0x1B, byLabel.getValue("SOFTADT").verType.toInt())
+        assertEquals(0x1C, byLabel.getValue("BT").verType.toInt())
     }
 
     @Test

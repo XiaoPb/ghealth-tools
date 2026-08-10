@@ -62,7 +62,11 @@ internal val ALGO_VERSION_QUERIES = listOf(
     VersionQuery("NADT", 0x24),
 )
 
-/** GH3220 0x19 版本类型（协议文档 §3.21）。 */
+/** GH3220 0x19 版本类型。
+ *  算法版本类型 = `0x12 + GH3X2X_FUNC_OFFSET_*`（C 端 `gh_uprotocol.h`
+ *  `UPROTOCOL_GET_VER_TYPE_ALGO_VER=0x12`，`GH3X2X_GetVersion` 按
+ *  `verType - 0x12` 作功能偏移索引）。注意协议文档 §3.21 从 PWA 起多写 2
+ *  （PWA=0x19），真机 2026-08-10 验证 0x19 返回的是 ECG 版本，文档有误。 */
 internal val GH3220_VERSION_QUERIES = listOf(
     VersionQuery("固件版本", 0x01),
     VersionQuery("虚拟寄存器版本", 0x0B),
@@ -77,12 +81,12 @@ internal val GH3220_VERSION_QUERIES = listOf(
     VersionQuery("HRV", 0x14),
     VersionQuery("HSM", 0x15),
     VersionQuery("FPBP", 0x16),
-    VersionQuery("PWA", 0x19),
-    VersionQuery("SpO2", 0x1A),
-    VersionQuery("ECG", 0x1B),
-    VersionQuery("PWTT", 0x1C),
-    VersionQuery("SOFTADT", 0x1D),
-    VersionQuery("BT", 0x1E),
+    VersionQuery("PWA", 0x17),
+    VersionQuery("SpO2", 0x18),
+    VersionQuery("ECG", 0x19),
+    VersionQuery("PWTT", 0x1A),
+    VersionQuery("SOFTADT", 0x1B),
+    VersionQuery("BT", 0x1C),
 )
 
 /** 解析 0x19 响应 [verType][len][text(UTF-8)]；空文本/解析失败返回 null。 */
