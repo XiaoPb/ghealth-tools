@@ -20,7 +20,7 @@ import kotlin.test.assertFailsWith
  */
 class Gh3220FrameAdapterTest {
 
-    /** 单帧构造 helper，参数顺序对应 Gh3220RawDataFrame(dataType, funcId, frameId, acc, rawdata, agc, amb, results, channel)。 */
+    /** 单帧构造 helper，参数顺序对应 Gh3220RawDataFrame(dataType, funcId, frameId, acc, rawdata, agc, amb, results, channel, gyro)。 */
     private fun frame(
         dataType: Int = 0,
         funcId: Int = 0,
@@ -31,6 +31,7 @@ class Gh3220FrameAdapterTest {
         amb: IntArray? = null,
         results: List<Gh3220Result> = emptyList(),
         channel: Int? = null,
+        gyro: IntArray? = null,
     ) = Gh3220RawDataFrame(
         dataType = dataType,
         funcId = funcId,
@@ -41,6 +42,7 @@ class Gh3220FrameAdapterTest {
         amb = amb,
         results = results,
         channel = channel,
+        gyro = gyro,
     )
 
     @Test
@@ -65,7 +67,7 @@ class Gh3220FrameAdapterTest {
                     rawdata = intArrayOf(11),
                     agc = intArrayOf(101),
                     amb = intArrayOf(201),
-                    results = listOf(Gh3220Result(1, 0xDEADBEEF.toInt())),
+                    results = listOf(Gh3220Result(0x81, 0xDEADBEEF.toInt())),
                     channel = 0,
                 ),
                 frame(
@@ -186,6 +188,44 @@ class Gh3220FrameAdapterTest {
     }
 
     @Test
+    fun `flag results fill flags columns and gyro maps to gyro columns`() {
+        val gh = Gh3220FrameAdapter.toGhFuncFrame(
+            frame(
+                frameId = 1,
+                acc = intArrayOf(1, 2, 3),
+                gyro = intArrayOf(4, 5, 6),
+                results = listOf(
+                    Gh3220Result(0, 7),        // Soft AGC 主通道标志 → FLAG0
+                    Gh3220Result(2, 8),        // flag2 → FLAG2
+                    Gh3220Result(3, 9),        // flag3 → FLAG3
+                    Gh3220Result(0x81, 70),    // 算法结果 → ALGO_RESULT0
+                ),
+            ),
+        )
+        val expectedFlags = IntArray(8).also { it[0] = 7; it[2] = 8; it[3] = 9 }
+        assertContentEquals(expectedFlags, gh.flags)
+        assertContentEquals(intArrayOf(4, 5, 6), gh.gyro)
+        assertContentEquals(intArrayOf(70), gh.algoData)
+    }
+
+    @Test
+    fun `only algo-bit results are mapped into algoData and flag values are filtered out`() {
+        val gh = Gh3220FrameAdapter.toGhFuncFrame(
+            frame(
+                frameId = 1,
+                results = listOf(
+                    Gh3220Result(0, 1),       // Soft AGC 主通道标志（bit7=0）→ 过滤
+                    Gh3220Result(2, 5),       // flag2（bit7=0）→ 过滤
+                    Gh3220Result(3, 0),       // flag3（bit7=0）→ 过滤
+                    Gh3220Result(0x81, 70),   // 算法结果 resultCnt=1（hba_out）→ 保留
+                    Gh3220Result(0x82, 3),    // 算法结果 resultCnt=2 → 保留
+                ),
+            ),
+        )
+        assertContentEquals(intArrayOf(70, 3), gh.algoData)
+    }
+
+    @Test
     fun `0x08 single frame maps directly without slot expansion`() {
         val gh = Gh3220FrameAdapter.toGhFuncFrame(
             frame(
@@ -195,7 +235,7 @@ class Gh3220FrameAdapterTest {
                 rawdata = intArrayOf(0x01020304, 0x05060708),
                 agc = intArrayOf(0x010203),
                 amb = intArrayOf(0x0A, 0x0B),
-                results = listOf(Gh3220Result(1, 0xDEADBEEF.toInt())),
+                results = listOf(Gh3220Result(0x81, 0xDEADBEEF.toInt())),
                 channel = null,
             ),
         )

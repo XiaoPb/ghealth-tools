@@ -52,6 +52,7 @@ data class GhFuncFrame(
     var rawdata: IntArray = IntArray(0),
     var phyValue: IntArray = IntArray(0),
     var gsData: IntArray = IntArray(0),
+    var gyro: IntArray = IntArray(0),
     var flags: IntArray = IntArray(0),
     var algoData: IntArray = IntArray(0),
     var agcInfo: IntArray = IntArray(0),
@@ -68,6 +69,7 @@ data class GhFuncFrame(
         if (!rawdata.contentEquals(other.rawdata)) return false
         if (!phyValue.contentEquals(other.phyValue)) return false
         if (!gsData.contentEquals(other.gsData)) return false
+        if (!gyro.contentEquals(other.gyro)) return false
         if (!flags.contentEquals(other.flags)) return false
         if (!algoData.contentEquals(other.algoData)) return false
         if (!agcInfo.contentEquals(other.agcInfo)) return false
@@ -83,6 +85,7 @@ data class GhFuncFrame(
         result = 31 * result + rawdata.contentHashCode()
         result = 31 * result + phyValue.contentHashCode()
         result = 31 * result + gsData.contentHashCode()
+        result = 31 * result + gyro.contentHashCode()
         result = 31 * result + flags.contentHashCode()
         result = 31 * result + algoData.contentHashCode()
         result = 31 * result + agcInfo.contentHashCode()

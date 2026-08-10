@@ -74,11 +74,13 @@ class RawDataDecoder(private val config: SamplingConfig) {
      *   bits3-4 分包计数 / bit5 分包结束。
      *
      * 帧布局（C 端 gh_zip.c `Gh2x2xUploadDataToMaster`，2026-08-10 标准 APP 抓包逐字节验证）：
-     * - 压缩 + oddeven 的首帧：`[frameId][GS?][rawdata 4B/通道绝对值][agc 4B/通道绝对值][amb?][result]`，
+     * - 压缩 + oddeven 的首帧：`[frameId][GS?][gyro 6B?][rawdata 4B/通道绝对值][agc 4B/通道绝对值][amb?][result]`，
      *   rawdata 高字节为 tag（LED adj 等标志），值本体 24bit，作差分解压基准时掩码到 24bit；
-     * - 其余压缩帧：`[frameId][GS?][rawLen][tagFlag][tag×通道?][nibble 差分][agcLen][agc 差分][amb?][result]`；
-     * - 未压缩帧：`[frameId][GS?][rawdata 4B/通道][agc 3B/通道][amb 3B/通道][result]`；
+     * - 其余压缩帧：`[frameId][GS?][gyro 6B?][rawLen][tagFlag][tag×通道?][nibble 差分][agcLen][agc 差分][amb?][result]`；
+     * - 未压缩帧：`[frameId][GS?][gyro 6B?][rawdata 4B/通道][agc 3B/通道][amb 3B/通道][result]`；
      * - result：`[byteNum][内容 byteNum 字节]`，内容为 flag0/flag2/flag3 与算法结果（tag+4B LE）。
+     *   gyro 存在性由 dataType bit4 控制（C 端 `uchGsGyroEnable = g_uchGyroEnable & uchGsEnable`，紧接 GS 之后）；
+     *   cap/temp（bit5/bit6）暂未解析。
      */
     fun decode0B(payload: ByteArray): Result<Gh3220RawDataPackage> {
         if (payload.size < 8) {
@@ -119,6 +121,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
         val algoEnabled = hasBit(dataType, 1)
         val agcEnabled = hasBit(dataType, 2)
         val ambEnabled = hasBit(dataType, 3)
+        val gyroEnabled = hasBit(dataType, 4)
         // C 端 g_uchOddEvenChangeFlag 置位时本包首帧为绝对值（rawdata/agc 各 4B/通道）
         val evenFirst = compressed && oddPacket
         val frames = ArrayList<Gh3220RawDataFrame>()
@@ -127,13 +130,13 @@ class RawDataDecoder(private val config: SamplingConfig) {
         while (pos < end) {
             val parsed = when {
                 compressed && first && evenFirst ->
-                    parseEvenFirstFrame(payload, pos, end, channelCount, funcId, dataType, gsEnabled, agcEnabled, ambEnabled, algoEnabled)
+                    parseEvenFirstFrame(payload, pos, end, channelCount, funcId, dataType, gsEnabled, gyroEnabled, agcEnabled, ambEnabled, algoEnabled)
                 compressed ->
-                    parseZipFrame(payload, pos, end, channelCount, null, funcId, dataType, gsEnabled, agcEnabled, ambEnabled, algoEnabled)
+                    parseZipFrame(payload, pos, end, channelCount, null, funcId, dataType, gsEnabled, gyroEnabled, agcEnabled, ambEnabled, algoEnabled)
                 multiFunction ->
                     parseFrame0BMulti(dataType, payload, pos, end, channel, funcId)
                 else ->
-                    parseFrame08(dataType, payload, pos, end, channelCount, funcId)
+                    parseFrame08(dataType, payload, pos, end, channelCount, funcId, gyroEnabled)
             } ?: return Result.failure(ItlvcError.ParseError("0x0B: frame truncated"))
             pos = parsed.first
             frames.add(parsed.second)
@@ -201,6 +204,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
         funcId: Int = 0,
         dataType: Int = 0,
         gsEnabled: Boolean = config.gsEnabled,
+        gyroEnabled: Boolean = config.gyroEnabled,
         agcEnabled: Boolean = config.agcEnabled,
         ambEnabled: Boolean = config.ambEnabled,
         algoEnabled: Boolean = config.algoEnabled,
@@ -215,6 +219,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
         }
         val frameId = take(1)?.let { u8(it, 0) } ?: return null
         val acc = if (gsEnabled) take(6)?.let { readAcc(it) } else null
+        val gyro = if (gyroEnabled) take(6)?.let { readAcc(it) } else null
         if (multiChannel != null) {
             take(1) ?: return null // FifoID，仅结构校验（通道归属以 chMask 为准）
         }
@@ -253,6 +258,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
             amb = amb,
             results = results,
             channel = multiChannel,
+            gyro = gyro,
         )
         return Pair(pos, frame)
     }
@@ -267,6 +273,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
         funcId: Int,
         dataType: Int,
         gsEnabled: Boolean,
+        gyroEnabled: Boolean,
         agcEnabled: Boolean,
         ambEnabled: Boolean,
         algoEnabled: Boolean,
@@ -281,6 +288,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
         }
         val frameId = take(1)?.let { u8(it, 0) } ?: return null
         val acc = if (gsEnabled) take(6)?.let { readAcc(it) } else null
+        val gyro = if (gyroEnabled) take(6)?.let { readAcc(it) } else null
         val rawBytes = take(channelCount * 4) ?: return null
         val rawdata = readChannels32(rawBytes, channelCount).map { it and 0x00FFFFFF }.toIntArray()
         diff.setBaseline(rawdata)
@@ -300,7 +308,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
         } else {
             emptyList()
         }
-        return Pair(pos, Gh3220RawDataFrame(dataType, funcId, frameId, acc, rawdata, agc, amb, results))
+        return Pair(pos, Gh3220RawDataFrame(dataType, funcId, frameId, acc, rawdata, agc, amb, results, gyro = gyro))
     }
 
     /** 解析 0x08 的一个 FrameData，返回 (新位置, 帧)。 */
@@ -311,6 +319,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
         end: Int,
         channelCount: Int = config.channelCount,
         funcId: Int = dataType shr 4,
+        gyroEnabled: Boolean = false,
     ): Pair<Int, Gh3220RawDataFrame>? {
         var pos = start
         fun take(n: Int): ByteArray? {
@@ -325,6 +334,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
             val accBytes = take(6) ?: return null
             readAcc(accBytes)
         } else null
+        val gyro = if (gyroEnabled) take(6)?.let { readAcc(it) } else null
         val rawdata = take(channelCount * 4)?.let { readChannels32(it, channelCount) } ?: return null
         diff.setBaseline(rawdata)
         val agc = if (hasBit(dataType, 2)) {
@@ -343,7 +353,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
         } else {
             emptyList()
         }
-        return Pair(pos, Gh3220RawDataFrame(dataType, funcId, frameId, acc, rawdata, agc, amb, results))
+        return Pair(pos, Gh3220RawDataFrame(dataType, funcId, frameId, acc, rawdata, agc, amb, results, gyro = gyro))
     }
 
     /** 解析 0x0B 多功能未压缩帧：`[frameId][ACC?][FifoID(1B)][RawData(4B)][AgcData(3B)?][AmbData(3B)?][Result?]`；
@@ -369,6 +379,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
             val accBytes = take(6) ?: return null
             readAcc(accBytes)
         } else null
+        val gyro = if (hasBit(dataType, 4)) take(6)?.let { readAcc(it) } else null
         take(1) ?: return null // FifoID，仅结构校验
         val rawdata = take(4)?.let { readChannels32(it, 1) } ?: return null
         diff.setBaselineChannel(channel, rawdata[0])
@@ -388,7 +399,7 @@ class RawDataDecoder(private val config: SamplingConfig) {
         } else {
             emptyList()
         }
-        return Pair(pos, Gh3220RawDataFrame(dataType, funcId, frameId, acc, rawdata, agc, amb, results, channel = channel))
+        return Pair(pos, Gh3220RawDataFrame(dataType, funcId, frameId, acc, rawdata, agc, amb, results, channel = channel, gyro = gyro))
     }
 
     /** Result 段：[ResultByteNum(1)][(tag 1B + value 4B LE)*]，段长非 5 的倍数时返回 null。 */

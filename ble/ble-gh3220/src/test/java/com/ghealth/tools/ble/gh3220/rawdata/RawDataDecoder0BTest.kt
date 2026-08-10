@@ -107,6 +107,26 @@ class RawDataDecoder0BTest {
         assertContentEquals(intArrayOf(0x91B7584A.toInt()), odd[0].rawdata)
     }
 
+
+    @Test
+    fun `decode0B parses gyro when dataType bit4 set`() {
+        // dataType=0x11（GS+gyro），chMask=1，未压缩：帧 = [frameId][GS 6B][gyro 6B][rawdata 4B][result 0]
+        // dataType 未置 algo 位，帧不含 result 段
+        val frame = bytes(
+            0x00,
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06,      // gsx/gsy/gsz int16 BE
+            0x11, 0x12, 0x13, 0x14, 0x15, 0x16,      // gyrox/gyroy/gyroz int16 BE
+            0x22, 0x33, 0x44, 0x55,                  // rawdata 4B
+        )
+        val payload = bytes(0x00, 0x11, 0x00, 0x00, 0x00, 0x01, 0x00, frame.size) + frame
+        val dec = RawDataDecoder(SamplingConfig(channelCount = 1))
+        val pkg = dec.decode0B(payload).getOrThrow()
+        val f = pkg.frames[0]
+        assertContentEquals(intArrayOf(0x0102, 0x0304, 0x0506), f.acc)
+        assertContentEquals(intArrayOf(0x1112, 0x1314, 0x1516), f.gyro)
+        assertContentEquals(intArrayOf(0x22334455), f.rawdata)
+    }
+
     @Test
     fun `decode0B rejects truncated header and data overflow`() {
         assertTrue(decoder.decode0B(bytes(0x0E, 0x00, 0x00)).isFailure)

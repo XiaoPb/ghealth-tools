@@ -10,12 +10,14 @@ data class SamplingConfig(
     val agcEnabled: Boolean = false,
     val ambEnabled: Boolean = false,
     val algoEnabled: Boolean = false,
+    val gyroEnabled: Boolean = false,
 )
 
 /**
  * 单帧 rawdata 数据。
  *
  * - [acc]：每通道有符号 int16（大端）。
+ * - [gyro]：三轴角速度有符号 int16（大端，与 [acc] 同构），dataType bit4=gyro 置位时存在。
  * - [rawdata]：原始无符号大端 32bit 位型。
  * - [agc]/[amb]：原始无符号大端 24bit 值。
  * - [results] 的 [Gh3220Result.value]：原始 32bit 小端位型。
@@ -31,6 +33,7 @@ data class Gh3220RawDataFrame(
     val amb: IntArray?,
     val results: List<Gh3220Result>,
     val channel: Int? = null,
+    val gyro: IntArray? = null,
 )
 
 /** 算法结果项：ResultTag(1B) + ResultValue(4B LE)；[value] 为原始 32bit 小端位型。 */

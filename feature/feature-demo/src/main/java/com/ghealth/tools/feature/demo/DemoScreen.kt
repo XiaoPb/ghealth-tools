@@ -772,6 +772,28 @@ private fun AlgorithmResultCard(
                         )
                     )
                 }
+                masterResult is AlgorithmResult.BT || slaveResult is AlgorithmResult.BT -> {
+                    val mr = masterResult as? AlgorithmResult.BT
+                    val sr = slaveResult as? AlgorithmResult.BT
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "NTC0" to { idx: Int -> btNtc0Cell(resultFor(idx, mr, sr)) },
+                            "NTC1" to { idx: Int -> btNtc1Cell(resultFor(idx, mr, sr)) }
+                        )
+                    )
+                }
+                masterResult is AlgorithmResult.ECG || slaveResult is AlgorithmResult.ECG -> {
+                    val mr = masterResult as? AlgorithmResult.ECG
+                    val sr = slaveResult as? AlgorithmResult.ECG
+                    AlgoGrid(
+                        deviceColumns = deviceColumns,
+                        rows = listOf(
+                            "HR" to { idx: Int -> ecgHrCell(resultFor(idx, mr, sr)) },
+                            "SNR" to { idx: Int -> ecgSnrCell(resultFor(idx, mr, sr)) }
+                        )
+                    )
+                }
                 else -> {
                     Text("--", style = MaterialTheme.typography.bodyMedium)
                 }
@@ -800,7 +822,7 @@ private fun rCell(r: AlgorithmResult): String {
 
 private fun spo2HrCell(r: AlgorithmResult): String {
     val s = r as? AlgorithmResult.SPO2 ?: return "--"
-    return if (s.hbMean > 0) "${s.hbMean} BPM" else "--"
+    return if (s.heartRate > 0) "${s.heartRate} BPM" else "--"
 }
 
 private fun rriCell(r: AlgorithmResult): String {
@@ -836,12 +858,34 @@ private fun ctrCell(r: AlgorithmResult): String {
 
 private fun nadtWearCell(r: AlgorithmResult): String {
     val n = r as? AlgorithmResult.NADT ?: return "--"
-    return n.wearOffDetectRes.toString()
+    if (n.wearStatus == 0) return "--"
+    val marker = if (n.suspectOff > 0) "(~)" else ""
+    return nadtWearStatusLabel(n.wearStatus) + marker
 }
 
 private fun nadtLiveCell(r: AlgorithmResult): String {
     val n = r as? AlgorithmResult.NADT ?: return "--"
     return n.liveBodyConf.toString()
+}
+
+private fun btNtc0Cell(r: AlgorithmResult): String {
+    val b = r as? AlgorithmResult.BT ?: return "--"
+    return if (b.ntc0 != 0) btTemp(b.ntc0) else "--"
+}
+
+private fun btNtc1Cell(r: AlgorithmResult): String {
+    val b = r as? AlgorithmResult.BT ?: return "--"
+    return if (b.ntc1 != 0) btTemp(b.ntc1) else "--"
+}
+
+private fun ecgHrCell(r: AlgorithmResult): String {
+    val e = r as? AlgorithmResult.ECG ?: return "--"
+    return if (e.heartRate > 0) "${e.heartRate} BPM" else "--"
+}
+
+private fun ecgSnrCell(r: AlgorithmResult): String {
+    val e = r as? AlgorithmResult.ECG ?: return "--"
+    return if (e.snr > 0) e.snr.toString() else "--"
 }
 
 /** Pick the result for a given column index (0=Master, 1=Slave, >=2=compare). */

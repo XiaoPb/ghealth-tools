@@ -9,6 +9,9 @@ import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 /**
  * 把新 ITLVC GH3220 帧映射为演示层既有的 [GhFuncFrame]，列对齐 .claude/csv_rules/gh3220.yaml：
  * rawdata→CH{0-31}、acc→ACCX/Y/Z、agc→AGC_INFO_CH{0-31}、amb→AMB_CH{0-15}、results→ALGO_RESULT{0-15}。
+ * 注意：0x0B 结果段为 (tag 1B + value 4B LE) 对，tag bit7=0 的是设备内部标志（0=Soft AGC 主通道、
+ * 2/3/4=flag2/3/4），按 tag 填进 flags（FLAG{0-7} 列）；仅 tag bit7=1（低位=resultCnt）的算法结果
+ * 按序映射进 algoData（ALGO_RESULT 列）。gyro（dataType bit4，紧接 GS 的 3×int16 BE）映射为 gyro。
  * funcId 必须经 [Gh3220FrameDecoder.mapToCommonFuncId] 翻译：GH3220 数字 ID 与公共 GhFuncId 空间不对齐
  * （如 GH3220 6=SPO2、7=ECG，公共 6=TEST1、7=TEST2），直接透传会让演示层按错误功能路由。
  *
@@ -31,6 +34,9 @@ object Gh3220FrameAdapter {
     /** amb 槽位数，对应消费方 `DemoViewModel.toColumnMap`（DeviceType.GH3220/GH3300 分支）AMB_CH{0-15} 列。 */
     const val AMB_CHANNEL_SLOTS = 16
 
+    /** flag 槽位数，对应 FLAG{0-7} 列；0x0B 结果段 tag bit7=0 的标志按 tag 索引填入。 */
+    const val FLAG_SLOTS = 8
+
     fun toGhFuncFrame(frame: Gh3220RawDataFrame): GhFuncFrame = GhFuncFrame().apply {
         funcId = Gh3220FrameDecoder.mapToCommonFuncId(Gh3220FuncId.from(frame.funcId))
         frameCnt = frame.frameId
@@ -42,6 +48,10 @@ object Gh3220FrameAdapter {
             frame.rawdata ?: IntArray(0)
         }
         gsData = frame.acc ?: IntArray(0)
+        gyro = frame.gyro ?: IntArray(0)
+        flags = IntArray(FLAG_SLOTS).also { arr ->
+            frame.results.forEach { if (it.tag < 0x80 && it.tag < FLAG_SLOTS) arr[it.tag] = it.value }
+        }
         agcInfo = if (channel != null) {
             (frame.agc ?: IntArray(0)).expandToChannelSlots(channel, AGC_CHANNEL_SLOTS)
         } else {
@@ -52,7 +62,9 @@ object Gh3220FrameAdapter {
         } else {
             frame.amb ?: IntArray(0)
         }
-        algoData = frame.results.map { it.value }.toIntArray()
+        // 结果段按 (tag 1B + value 4B LE) 组织：tag bit7=0 为内部标志（0=Soft AGC、2/3/4=flag2/3/4），
+        // 仅 bit7=1（低位 resultCnt）的算法结果按序映射，避免标志值污染 ALGO_RESULT 列（如 HR 误显示 1 BPM）。
+        algoData = frame.results.filter { (it.tag and 0x80) != 0 }.map { it.value }.toIntArray()
     }
 
     /**

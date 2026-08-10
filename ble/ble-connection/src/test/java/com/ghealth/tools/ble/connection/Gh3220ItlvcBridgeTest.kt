@@ -57,7 +57,7 @@ class Gh3220ItlvcBridgeTest {
                 rawdata = intArrayOf(0x01020304, 0x05060708),
                 agc = intArrayOf(0x010203),
                 amb = intArrayOf(0x0A, 0x0B),
-                results = listOf(Gh3220Result(1, 0xDEADBEEF.toInt())),
+                results = listOf(Gh3220Result(0x81, 0xDEADBEEF.toInt())),
             ),
         )
         // GH3220 6=SPO2：映射到公共枚举必须是 SPO2（公共 6 是 TEST1），直接透传会路由错误。
