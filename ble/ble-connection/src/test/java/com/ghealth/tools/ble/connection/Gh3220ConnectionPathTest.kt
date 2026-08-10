@@ -1,7 +1,6 @@
 package com.ghealth.tools.ble.connection
 
 import com.ghealth.tools.ble.gh3220.Gh3220Layout
-import com.ghealth.tools.ble.gh3220.rawdata.Gh3220RawDataPackage
 import com.ghealth.tools.ble.itlvc.codec.ItlvcFrame
 import com.ghealth.tools.ble.itlvc.codec.ItlvcFrameCodec
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
@@ -97,15 +96,18 @@ class Gh3220ConnectionPathTest {
         bridge.attach(this)
 
         val framesReported = mutableListOf<GhFuncFrame>()
-        val packages = mutableListOf<Gh3220RawDataPackage>()
+        val packageReports = mutableListOf<GhFuncFrame>()
         val framesSubscription = launch {
             bridge.client.rawdataFrames.collect { rawFrame ->
                 framesReported += Gh3220FrameAdapter.toGhFuncFrame(rawFrame)
             }
         }
-        // 仅作对照：0x0B 包同时出现在 rawdataPackages，证明若 manager 同时订阅两会重复上报。
+        // 对照：0x0B 包同时出现在 rawdataPackages（逐帧也转发到 rawdataFrames），
+        // 证明若 manager 同时订阅两流，单次 notify 会产生重复上报。
         val packagesSubscription = launch {
-            bridge.client.rawdataPackages.collect { packages += it }
+            bridge.client.rawdataPackages.collect { pkg ->
+                packageReports += Gh3220FrameAdapter.toGhFuncFrames(pkg)
+            }
         }
         testScheduler.runCurrent()
 
@@ -115,8 +117,13 @@ class Gh3220ConnectionPathTest {
         notify.emit(frame(0x0B, payload))
         testScheduler.runCurrent()
 
-        assertEquals(1, packages.size, "0x0B 包应出现在 rawdataPackages（与 rawdataFrames 双路由，需去重）")
+        assertEquals(1, packageReports.size, "0x0B 包经 rawdataPackages 映射同样产生 1 次上报（双路由，需去重）")
         assertEquals(1, framesReported.size, "manager 仅订阅 rawdataFrames 时，单次 notify 只产生一次上报")
+        assertEquals(
+            2,
+            framesReported.size + packageReports.size,
+            "若误同时订阅 rawdataPackages 与 rawdataFrames，单次 0x0B notify 会重复上报（总量 2），去重契约不允许",
+        )
 
         framesSubscription.cancel()
         packagesSubscription.cancel()

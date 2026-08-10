@@ -727,7 +727,12 @@ class BleConnectionManager @Inject constructor(
                                 // 会重复/错位解析。onDataReceived 保持既有 GH3036/GH3300 逻辑不动。
                                 val mtu = (peripheral as? AndroidPeripheral)?.mtu?.value ?: 240
                                 val bridge = Gh3220ItlvcBridge(
-                                    notifyFlow = peripheral.observe(notifyChar),
+                                    // RX 侧日志与旧通路保持一致（pull_debug_data.sh 依赖 LOG 调试数据）；
+                                    // NotifyTransport 本身不粘日志。
+                                    notifyFlow = peripheral.observe(notifyChar).onEach { data ->
+                                        logManager.logBle(address, "RX", data)
+                                        Timber.v("Notify received ${data.size} bytes from $address")
+                                    },
                                     writer = { data ->
                                         try {
                                             kotlinx.coroutines.runBlocking { writeToDevice(address, data) }
