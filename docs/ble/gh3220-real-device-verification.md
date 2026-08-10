@@ -121,7 +121,7 @@
 
 | 步骤 | 操作 | 预期结果 |
 | --- | --- | --- |
-| 1 | 0x15 通道映射 + 0x1B 采样率 + 0x0C 启动采集（含多通道配置） | 波形区 CH 列持续滚动，帧速率与采样率匹配；CH 列数量与 activeChannels 一致 |
+| 1 | 0x15 通道映射 + 0x1B 采样率 + 0x0C 启动采集（含多通道配置） | 波形区 CH 列持续滚动，帧速率与采样率匹配；CH 列数量与 rawdata 通道数组宽度一致（单功能路径 = channelCount；0x0B 多功能 = 展开后 32 槽） |
 | 2 | 切换波形列 | 波形 1/2 可选列包含 CH{0-31} 与 ALGO_RESULT{0-15}；0x0B 多功能帧下各 CH 列值落在对应通道槽位 |
 | 3 | 录制 CSV | 列头命名与顺序对照 `.claude/csv_rules/gh3220.yaml`：TimeStamp / FRAME_ID / ACCX / ACCY / ACCZ / CH{0-15} / FLAG{0-7} / REF_RESULT{0-15} / ALGO_RESULT{0-7} / AGC_INFO_CH{0-15} / AMB_CH{0-15} / GYRO_X / GYRO_Y / GYRO_Z / CH16-31 / ALGO_RESULT{8-15} / AGC_INFO_CH{16-31} / CAP_CH{0-3} / TEMP_CH{0-3} |
 | 4 | 核对列值来源 | AGC_INFO_CH 与 agcInfo、AMB_CH 与 phyValue、ALGO_RESULT 与 algoData、CH 与 rawdata 槽位值一致（可与抓包/设备 LOG 交叉对照） |
