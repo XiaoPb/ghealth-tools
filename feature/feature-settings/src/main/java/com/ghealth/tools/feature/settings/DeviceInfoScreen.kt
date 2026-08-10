@@ -97,8 +97,10 @@ fun DeviceInfoScreen(
             ConnectionStatusCard(state)
             Spacer(modifier = Modifier.height(16.dp))
             VersionGroupCard(title = "基本版本", versions = state.basicVersions)
-            Spacer(modifier = Modifier.height(12.dp))
-            VersionGroupCard(title = "算法版本", versions = state.algoVersions)
+            if (state.algoVersions.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                VersionGroupCard(title = "算法版本", versions = state.algoVersions)
+            }
 
             state.errorMessage?.let { error ->
                 Spacer(modifier = Modifier.height(16.dp))

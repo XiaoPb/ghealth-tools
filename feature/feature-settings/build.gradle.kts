@@ -23,6 +23,7 @@ dependencies {
     implementation(project(":core:core-storage"))
     implementation(project(":ble:ble-connection"))
     implementation(project(":ble:ble-protocol"))
+    implementation(project(":ble:ble-gh3220"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.navigation.compose)
@@ -33,5 +34,6 @@ dependencies {
     implementation(libs.timber)
 
     testImplementation(libs.junit5)
+    testImplementation(kotlin("test"))
     testRuntimeOnly(libs.junit.platform.launcher)
 }

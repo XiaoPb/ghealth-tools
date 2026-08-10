@@ -4,9 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.DeviceRole
+import com.ghealth.tools.ble.gh3220.Gh3220Cmd
+import com.ghealth.tools.ble.gh3220.commands.BasicCommands
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_GET_VERSION
 import com.ghealth.tools.ble.protocol.gh3036.parseGh3036VersionString
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.DeviceType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,12 +37,12 @@ data class DeviceInfoUiState(
     val errorMessage: String? = null
 )
 
-private data class VersionQuery(
+internal data class VersionQuery(
     val label: String,
     val verType: Byte
 )
 
-private val BASIC_VERSION_QUERIES = listOf(
+internal val BASIC_VERSION_QUERIES = listOf(
     VersionQuery("固件版本", 0x01),
     VersionQuery("虚拟寄存器版本", 0x03),
     VersionQuery("Bootloader版本", 0x04),
@@ -51,13 +54,48 @@ private val BASIC_VERSION_QUERIES = listOf(
     VersionQuery("算法Demo版本", 0x0A)
 )
 
-private val ALGO_VERSION_QUERIES = listOf(
+internal val ALGO_VERSION_QUERIES = listOf(
     VersionQuery("HR", 0x20),
     VersionQuery("HRV", 0x21),
     VersionQuery("SpO2", 0x22),
     VersionQuery("ADT", 0x23),
     VersionQuery("NADT", 0x24),
 )
+
+/** GH3220 0x19 版本类型（协议文档 §3.21）。 */
+internal val GH3220_VERSION_QUERIES = listOf(
+    VersionQuery("固件版本", 0x01),
+    VersionQuery("虚拟寄存器版本", 0x0B),
+    VersionQuery("Bootloader版本", 0x0C),
+    VersionQuery("BLE版本", 0x0D),
+    VersionQuery("协议版本", 0x0E),
+    VersionQuery("支持功能", 0x0F),
+    VersionQuery("驱动库版本", 0x10),
+    VersionQuery("芯片版本", 0x11),
+    VersionQuery("ADT", 0x12),
+    VersionQuery("HR", 0x13),
+    VersionQuery("HRV", 0x14),
+    VersionQuery("HSM", 0x15),
+    VersionQuery("FPBP", 0x16),
+    VersionQuery("PWA", 0x19),
+    VersionQuery("SpO2", 0x1A),
+    VersionQuery("ECG", 0x1B),
+    VersionQuery("PWTT", 0x1C),
+    VersionQuery("SOFTADT", 0x1D),
+    VersionQuery("BT", 0x1E),
+)
+
+/** 解析 0x19 响应 [verType][len][text(UTF-8)]；空文本/解析失败返回 null。 */
+internal fun parseGh3220VersionText(raw: ByteArray): String? =
+    BasicCommands.parseVersion(raw).getOrNull()?.text?.takeIf { it.isNotBlank() }
+
+/** 按设备类型返回 (basicQueries, algoQueries) 版本查询计划：GH3220 无独立算法版本区。 */
+internal fun versionPlan(isGh3220: Boolean): Pair<List<VersionQuery>, List<VersionQuery>> =
+    if (isGh3220) {
+        GH3220_VERSION_QUERIES to emptyList()
+    } else {
+        BASIC_VERSION_QUERIES to ALGO_VERSION_QUERIES
+    }
 
 @HiltViewModel
 class DeviceInfoViewModel @Inject constructor(
@@ -106,24 +144,19 @@ class DeviceInfoViewModel @Inject constructor(
 
     private fun fetchAllVersions(masterAddress: String) {
         viewModelScope.launch {
+            val isGh3220 = connectionManager.devices.value[masterAddress]?.deviceType == DeviceType.GH3220
+            val (basicQueries, algoQueries) = versionPlan(isGh3220)
             _uiState.update {
                 it.copy(
                     isReading = true,
                     errorMessage = null,
-                    basicVersions = BASIC_VERSION_QUERIES.map { VersionEntry(it.label, isLoading = true) },
-                    algoVersions = ALGO_VERSION_QUERIES.map { VersionEntry(it.label, isLoading = true) }
+                    basicVersions = basicQueries.map { VersionEntry(it.label, isLoading = true) },
+                    algoVersions = algoQueries.map { VersionEntry(it.label, isLoading = true) }
                 )
             }
 
-            val basicResults = mutableListOf<VersionEntry>()
-            for (query in BASIC_VERSION_QUERIES) {
-                basicResults.add(fetchSingleVersion(masterAddress, query))
-            }
-
-            val algoResults = mutableListOf<VersionEntry>()
-            for (query in ALGO_VERSION_QUERIES) {
-                algoResults.add(fetchSingleVersion(masterAddress, query))
-            }
+            val basicResults = basicQueries.map { fetchSingleVersion(masterAddress, it, isGh3220) }
+            val algoResults = algoQueries.map { fetchSingleVersion(masterAddress, it, isGh3220) }
 
             _uiState.update {
                 it.copy(
@@ -137,33 +170,37 @@ class DeviceInfoViewModel @Inject constructor(
 
     private suspend fun fetchSingleVersion(
         masterAddress: String,
-        query: VersionQuery
+        query: VersionQuery,
+        isGh3220: Boolean,
     ): VersionEntry {
         return try {
-            val result = withTimeoutOrNull(2000L) {
-                connectionManager.sendCommand(
-                    address = masterAddress,
-                    key = KEY_GH3X_GET_VERSION,
-                    param = byteArrayOf(query.verType)
-                )
+            val raw = withTimeoutOrNull(2000L) {
+                if (isGh3220) {
+                    connectionManager.sendGh3220Command(masterAddress, Gh3220Cmd.GET_VER, byteArrayOf(query.verType))
+                } else {
+                    connectionManager.sendCommand(masterAddress, KEY_GH3X_GET_VERSION, byteArrayOf(query.verType))
+                }
             }
 
             when {
-                result == null -> {
+                raw == null -> {
                     Timber.w("Version query timeout: ${query.label}")
                     VersionEntry(query.label, value = "超时", isError = true)
                 }
-                result.isFailure -> {
-                    Timber.w("Version query failed: ${query.label} - ${result.exceptionOrNull()?.message}")
+                raw.isFailure -> {
+                    Timber.w("Version query failed: ${query.label} - ${raw.exceptionOrNull()?.message}")
                     VersionEntry(query.label, value = "失败", isError = true)
                 }
-                result.isSuccess -> {
-                    val data = result.getOrThrow()
-                    val versionStr = parseGh3036VersionString(data)
+                else -> {
+                    val data = raw.getOrThrow()
+                    val versionStr = if (isGh3220) {
+                        parseGh3220VersionText(data) ?: "-"
+                    } else {
+                        parseGh3036VersionString(data)
+                    }
                     Timber.d("Version ${query.label}: $versionStr")
                     VersionEntry(query.label, value = versionStr)
                 }
-                else -> VersionEntry(query.label, value = "-", isError = true)
             }
         } catch (e: Exception) {
             Timber.w(e, "Version query exception: ${query.label}")
