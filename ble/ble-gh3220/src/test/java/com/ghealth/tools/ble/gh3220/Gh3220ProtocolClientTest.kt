@@ -229,4 +229,23 @@ class Gh3220ProtocolClientTest {
     fun `0x28 time data command constant is defined`() {
         assertEquals(0x28, Gh3220Cmd.ECG_PATCH_TIME)
     }
+
+    @Test
+    fun `attach is idempotent and handlers stay registered`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+        val client = Gh3220ProtocolClient(session)
+        client.attach()
+        client.attach() // 第二次调用不得重复注册/重置解码基准导致异常
+
+        val frames = mutableListOf<Gh3220RawDataFrame>()
+        val collect = launch { client.rawdataFrames.collect { frames.add(it) } }
+        testScheduler.runCurrent()
+        transport.emit(responseFrame(0x08, bytes(0x00, 0x05, 0x00, 0x01, 0x02, 0x03, 0x04)))
+        delay(10)
+        collect.cancel()
+        assertEquals(1, frames.size) // 每帧恰好一条上报，无重复路由
+        session.detach()
+    }
 }
