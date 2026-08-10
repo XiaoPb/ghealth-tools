@@ -9,7 +9,6 @@ import com.ghealth.tools.ble.protocol.gh3036.AgcPhysicalCodec
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.Gh3036Executor
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
-import com.ghealth.tools.ble.protocol.gh3220.Gh3220Executor
 import com.ghealth.tools.ble.protocol.gh3300.Gh3300Executor
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.model.ConnectionState
@@ -17,6 +16,7 @@ import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.TestConfig
 import com.ghealth.tools.core.storage.LogManager
 import com.juul.kable.Advertisement
+import com.juul.kable.AndroidPeripheral
 import com.juul.kable.ExperimentalApi
 import com.juul.kable.Peripheral
 import com.juul.kable.Scanner
@@ -107,7 +107,8 @@ data class GHealthPeripheral(
     val peripheral: Peripheral,
     val role: DeviceRole,
     val executor: GHealthExecutor?,
-    val deviceType: DeviceType = DeviceType.GH3036
+    val deviceType: DeviceType = DeviceType.GH3036,
+    val itlvcBridge: Gh3220ItlvcBridge? = null,
 ) {
     val address: String get() = peripheral.identifier.toString()
     val name: String? get() = peripheral.name
@@ -717,21 +718,56 @@ class BleConnectionManager @Inject constructor(
                             return
                         }
 
+                        val deviceType = peripherals[address]?.deviceType ?: DeviceType.GH3036
                         try {
-                            peripheral.observe(notifyChar)
-                                .onEach { data ->
-                                    Timber.v("Notify received ${data.size} bytes from $address")
-                                    onDataReceived(address, data)
+                            if (deviceType == DeviceType.GH3220) {
+                                // GH3220 新 ITLVC 通路：bridge 独占接收通路（NotifyTransport 收集
+                                // peripheral.observe(notifyChar) → session.onReceive），因此不走下方既有
+                                // onDataReceived RPC 订阅分支；否则同一字节被喂两次，ReceiveStateMachine
+                                // 会重复/错位解析。onDataReceived 保持既有 GH3036/GH3300 逻辑不动。
+                                val mtu = (peripheral as? AndroidPeripheral)?.mtu?.value ?: 240
+                                val bridge = Gh3220ItlvcBridge(
+                                    notifyFlow = peripheral.observe(notifyChar),
+                                    writer = { data ->
+                                        try {
+                                            kotlinx.coroutines.runBlocking { writeToDevice(address, data) }
+                                            Result.success(Unit)
+                                        } catch (e: Exception) {
+                                            Timber.e(e, "Failed to write to device $address")
+                                            Result.failure(e)
+                                        }
+                                    },
+                                    mtu = mtu,
+                                )
+                                peripherals.computeIfPresent(address) { _, existing ->
+                                    existing.copy(itlvcBridge = bridge)
                                 }
-                                .onCompletion { cause ->
-                                    if (cause != null) {
-                                        Timber.w("Notify observation completed with error: $cause")
-                                    } else {
-                                        Timber.d("Notify observation completed for $address")
+                                // rawdataFrames 是 replay=0 的 SharedFlow：必须先订阅再 attach，避免丢帧。
+                                // 只订阅 rawdataFrames 一个流（0x0B 包逐帧也转发到此流），不订阅
+                                // rawdataPackages，否则 0x0B 帧会重复上报到 ghFrameFlow（多通道展开留 Task 6）。
+                                scope.launch {
+                                    bridge.client.rawdataFrames.collect { frame ->
+                                        onGh3220Frames(address, listOf(Gh3220FrameAdapter.toGhFuncFrame(frame)))
                                     }
                                 }
-                                .launchIn(scope)
-                            Timber.i("Subscribed to notify characteristic $notifyUuidStr (service ${result.notifyServiceUuid}) for $address")
+                                bridge.attach(scope)
+                                Timber.i("Subscribed GH3220 ITLVC bridge (mtu=$mtu) to notify characteristic $notifyUuidStr for $address")
+                            } else {
+                                peripheral.observe(notifyChar)
+                                    .onEach { data ->
+                                        Timber.v("Notify received ${data.size} bytes from $address")
+                                        onDataReceived(address, data)
+                                    }
+                                    .onCompletion { cause ->
+                                        if (cause != null) {
+                                            Timber.w("Notify observation completed with error: $cause")
+                                        } else {
+                                            Timber.d("Notify observation completed for $address")
+                                        }
+                                    }
+                                    .launchIn(scope)
+                                Timber.i("Subscribed to notify characteristic $notifyUuidStr (service ${result.notifyServiceUuid}) for $address")
+                            }
                         } catch (e: NoSuchElementException) {
                             Timber.e(e, "Notify characteristic does not support notify/indicate: $notifyUuidStr")
                             notifySubscriptions.unregister(address)
@@ -845,6 +881,16 @@ class BleConnectionManager @Inject constructor(
         }
     }
 
+    /**
+     * GH3220 新通路临时直连命令入口：经设备桥的 `client.sendRaw` 发送原始类型命令并返回响应 V 字节，
+     * 不做结构解析。临时方案，Task 4 收敛到 Gh3220CommandMeta 驱动后移除。
+     */
+    suspend fun sendGh3220Command(address: String, type: Int, payload: ByteArray = ByteArray(0)): Result<ByteArray> {
+        val bridge = peripherals[address]?.itlvcBridge
+            ?: return Result.failure(Exception("GH3220 bridge not available for $address"))
+        return bridge.client.sendRaw(type, payload)
+    }
+
     @OptIn(ExperimentalUuidApi::class)
     suspend fun sendCommand(address: String, key: String, param: ByteArray = ByteArray(0)): Result<ByteArray> {
         val executor = peripherals[address]?.executor
@@ -891,12 +937,15 @@ class BleConnectionManager @Inject constructor(
         Timber.d("Wrote ${data.size} bytes to $address (writeType=$writeType): ${data.toHexString()}")
     }
 
-    private suspend fun createExecutor(address: String): Pair<GHealthExecutor, DeviceType> {
+    private suspend fun createExecutor(address: String): Pair<GHealthExecutor?, DeviceType> {
         val chipName = blePreferences.effectiveChip.first()
         val deviceType = DeviceType.entries.find { it.chipName == chipName } ?: DeviceType.GH3036
+        if (deviceType == DeviceType.GH3220) {
+            // 新 ITLVC 通路：不创建旧 RPC Gh3220Executor；bridge 在 validateServices 接线处创建。
+            return null to deviceType
+        }
         val executor: GHealthExecutor = when (deviceType) {
             DeviceType.GH3300 -> Gh3300Executor()
-            DeviceType.GH3220 -> com.ghealth.tools.ble.protocol.gh3220.Gh3220Executor()
             else -> Gh3036Executor()
         }
         setupExecutor(executor, address, deviceType)
@@ -921,6 +970,10 @@ class BleConnectionManager @Inject constructor(
         scope.launch {
             executor.registerGHandler()
         }
+    }
+
+    private fun onGh3220Frames(address: String, frames: List<GhFuncFrame>) {
+        frames.forEach { _ghFrameFlow.tryEmit(address to it) }
     }
 
     private fun onGhFuncFrame(address: String, frame: GhFuncFrame, deviceType: DeviceType) {
