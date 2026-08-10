@@ -17,6 +17,7 @@ import com.ghealth.tools.ble.gh3220.rawdata.Gh3220RawDataFrame
 import com.ghealth.tools.ble.gh3220.rawdata.Gh3220RawDataPackage
 import com.ghealth.tools.ble.gh3220.rawdata.RawDataDecoder
 import com.ghealth.tools.ble.gh3220.rawdata.SamplingConfig
+import com.ghealth.tools.ble.itlvc.core.CommandSpec
 import com.ghealth.tools.ble.itlvc.core.ItlvcError
 import com.ghealth.tools.ble.itlvc.core.ItlvcSession
 import com.ghealth.tools.ble.itlvc.state.SessionState
@@ -145,6 +146,24 @@ class Gh3220ProtocolClient(
     }
 
     // —— 命令 API ——
+
+    /**
+     * 原始透传（"略"/无格式命令）：按 [type] 原样发送 [payload] 并返回响应 V 字节，不做结构解析。
+     * 透传模式下仅白名单命令（文档 §4.3.5，见 [Gh3220CommandSpecs.passThroughWhitelist]）放行，
+     * 其余以 [ItlvcError.CommandError.Unsupported] 拒绝且不写入传输。
+     */
+    suspend fun sendRaw(
+        type: Int,
+        payload: ByteArray = ByteArray(0),
+        timeoutMs: Long = 1000,
+    ): Result<ByteArray> = session.execute(
+        CommandSpec(
+            byteArrayOf(type.toByte()),
+            timeoutMs = timeoutMs,
+            allowedInPassThrough = type.toByte() in Gh3220CommandSpecs.passThroughWhitelist,
+        ),
+        payload,
+    )
 
     suspend fun getConnectionStatus(): Result<Int> =
         session.execute(Gh3220CommandSpecs.CONN_STATUS, BasicCommands.getConnStatus()).mapCatching { resp ->

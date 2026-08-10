@@ -7,6 +7,7 @@ import com.ghealth.tools.ble.itlvc.core.ItlvcConfig
 import com.ghealth.tools.ble.itlvc.core.ItlvcSession
 import com.ghealth.tools.ble.itlvc.state.SessionState
 import com.ghealth.tools.ble.itlvc.transport.InMemoryTransport
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -181,5 +182,51 @@ class Gh3220ProtocolClientTest {
         assertTrue(result.isFailure)
         assertIs<com.ghealth.tools.ble.itlvc.core.ItlvcError.CommandError.DeviceError>(result.exceptionOrNull())
         session.detach()
+    }
+
+    @Test
+    fun `sendRaw sends raw payload and returns raw response bytes`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+        val client = Gh3220ProtocolClient(session)
+        client.attach()
+
+        val job = async { client.sendRaw(0x23, bytes(0xDE, 0xAD)) }
+        testScheduler.runCurrent()
+        // 0x23 无格式说明：原始字节收发
+        assertContentEquals(responseFrame(0x23, bytes(0xDE, 0xAD)), transport.sent.single())
+        transport.emit(responseFrame(0x23, bytes(0xBE, 0xEF)))
+        val result = job.await()
+        assertTrue(result.isSuccess)
+        assertContentEquals(bytes(0xBE, 0xEF), result.getOrThrow())
+        session.detach()
+    }
+
+    @Test
+    fun `sendRaw respects pass-through whitelist`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig(passThroughMode = true))
+        session.attach(transport, this)
+        val client = Gh3220ProtocolClient(session)
+        client.attach()
+
+        // 白名单 0x19 放行（无响应则超时，但已写入传输）
+        val allowed = launch { client.sendRaw(0x19, bytes(0x01)) }
+        testScheduler.runCurrent()
+        assertEquals(1, transport.sent.size)
+        allowed.cancel()
+        session.detach()
+
+        // 非白名单 0x23 拒绝且不写入传输
+        val blocked = client.sendRaw(0x23, bytes(0xDE))
+        assertTrue(blocked.isFailure)
+        assertIs<com.ghealth.tools.ble.itlvc.core.ItlvcError.CommandError.Unsupported>(blocked.exceptionOrNull())
+        assertEquals(1, transport.sent.size)
+    }
+
+    @Test
+    fun `0x28 time data command constant is defined`() {
+        assertEquals(0x28, Gh3220Cmd.ECG_PATCH_TIME)
     }
 }
