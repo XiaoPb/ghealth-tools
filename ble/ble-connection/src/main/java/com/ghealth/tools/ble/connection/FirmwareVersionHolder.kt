@@ -1,8 +1,11 @@
 package com.ghealth.tools.ble.connection
 
+import com.ghealth.tools.ble.gh3220.Gh3220Cmd
+import com.ghealth.tools.ble.gh3220.commands.BasicCommands
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_GET_VERSION
 import com.ghealth.tools.ble.protocol.gh3036.parseGh3036VersionString
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.DeviceType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -50,6 +53,17 @@ internal suspend fun resolveFirmwareVersion(
 }
 
 /**
+ * GH3220 版本读取：0x19 响应 [verType][len][text(UTF-8)]；verType 0x00/0x01 均为 EVK 版本，
+ * 此处固定取 0x01；读取失败或文本为空返回 null。
+ */
+internal suspend fun resolveGh3220Version(
+    fetchRaw: suspend (verType: Byte) -> ByteArray?
+): String? {
+    val raw = fetchRaw(VER_TYPE_FW) ?: return null
+    return BasicCommands.parseVersion(raw).getOrNull()?.text?.takeIf { it.isNotBlank() }
+}
+
+/**
  * 主设备固件版本共享状态持有者（@Singleton）。
  *
  * - 单一数据源：连接页与设置页共享同一份版本状态，避免重复下发 BLE 版本读取命令。
@@ -93,10 +107,15 @@ class FirmwareVersionHolder @Inject constructor(
         fetchJob = scope.launch {
             delay(VERSION_FETCH_DELAY_MS)
             if (!isStillCurrentMaster(address)) return@launch
+            val isGh3220 = connectionManager.devices.value[address]?.deviceType == DeviceType.GH3220
             val sendCmd: suspend (Byte) -> ByteArray? = { verType ->
                 try {
                     withTimeoutOrNull(VERSION_READ_TIMEOUT_MS) {
-                        connectionManager.sendCommand(address, KEY_GH3X_GET_VERSION, byteArrayOf(verType))
+                        if (isGh3220) {
+                            connectionManager.sendGh3220Command(address, Gh3220Cmd.GET_VER, byteArrayOf(verType))
+                        } else {
+                            connectionManager.sendCommand(address, KEY_GH3X_GET_VERSION, byteArrayOf(verType))
+                        }
                     }?.getOrNull()
                 } catch (e: CancellationException) {
                     throw e
@@ -105,7 +124,7 @@ class FirmwareVersionHolder @Inject constructor(
                     null
                 }
             }
-            val version = resolveFirmwareVersion(sendCmd)
+            val version = if (isGh3220) resolveGh3220Version(sendCmd) else resolveFirmwareVersion(sendCmd)
             if (isStillCurrentMaster(address)) {
                 _state.update { it.copy(version = version, isReading = false) }
                 Timber.d("Firmware version for $address: $version")
