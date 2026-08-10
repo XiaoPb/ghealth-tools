@@ -1,5 +1,6 @@
 package com.ghealth.tools.feature.connection
 
+import com.ghealth.tools.ble.gh3220.Gh3220Function
 import com.ghealth.tools.ble.gh3220.Gh3220ProtocolClient
 import com.ghealth.tools.ble.protocol.gh3036.CommandGroup
 import com.ghealth.tools.ble.protocol.gh3036.CommandMeta
@@ -273,7 +274,7 @@ data class Gh3220CommandMeta(
                 key = "GH3220_START_HBD",
                 type = 0x0C,
                 displayName = "启动 HBD",
-                description = "0x0C 启动/停止 HBD 采集",
+                description = "0x0C 启动/停止 HBD 采集（需先发 0x10 工作模式并勾选包含本次所选功能，否则设备返回 1=设置失败）",
                 params = listOf(
                     CommandParamDef(
                         name = "on",
@@ -334,8 +335,8 @@ data class Gh3220CommandMeta(
                         name = "function",
                         label = "功能选择",
                         type = ParamType.FUNC_MODE_BITS,
-                        description = "按 C 端 GH3X2X_FUNCTION_* 宏映射（ADT=bit0 … LEAD_DET=bit19），多选；0=无功能",
-                        defaultValue = 0L,
+                        description = "按 C 端 GH3X2X_FUNCTION_* 宏映射（ADT=bit0 … LEAD_DET=bit19），多选；0=无功能。该字段写入设备 function_enable（g_unAllFuncMode），0x0C 启动的功能必须为其子集：请先发 0x10 设置掩码，再发 0x0C。",
+                        defaultValue = Gh3220Function.allMask,
                     ),
                 ),
                 responseFormat = STATUS_RESPONSE_FORMAT,

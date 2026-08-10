@@ -149,7 +149,12 @@ class Gh3220ProtocolClient(
 
     suspend fun startHbd(on: Boolean, mode: Int, function: Long): Result<Int> =
         session.execute(Gh3220CommandSpecs.START_CTRL, BasicCommands.startHbd(on, mode, function))
-            .mapCatching { BasicCommands.parseStatus(it, "start hbd").getOrThrow() }
+            .mapCatching { resp ->
+                if (resp.isEmpty()) throw ItlvcError.ParseError("start hbd: status payload too short")
+                val status = Gh3220Payload.readU8(resp, 0)
+                if (status != 0) throw ItlvcError.CommandError.DeviceError(status)
+                status
+            }
 
     suspend fun chipReset(resetType: Int): Result<Int> =
         session.execute(Gh3220CommandSpecs.CHIP_CTRL, BasicCommands.chipCtrl(resetType))

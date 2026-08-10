@@ -73,7 +73,7 @@ class Gh3220CommandMetaTest {
     }
 
     @Test
-    fun `function params of gh3220 control commands use func mode bits with zero default`() {
+    fun `function params of gh3220 control commands use func mode bits`() {
         val functionParam = { key: String ->
             Gh3220CommandMeta.getCommandByKey(key)!!.params.single { it.name == "function" }
         }
@@ -84,8 +84,12 @@ class Gh3220CommandMetaTest {
                 def.type,
                 "命令 $key 的 function 参数类型应为 FUNC_MODE_BITS",
             )
-            assertEquals(0L, def.defaultValue, "命令 $key 的 function 参数默认值应为 0L")
         }
+        // 0x10 WORK_MODE 的 function 会写入设备 g_unAllFuncMode（0x0C 启动功能必须是其子集），
+        // 默认全功能避免「0x0C 必然设置失败」。
+        assertEquals(Gh3220Function.allMask, functionParam("GH3220_WORK_MODE").defaultValue)
+        assertEquals(0L, functionParam("GH3220_START_HBD").defaultValue)
+        assertEquals(0L, functionParam("GH3220_SLOT_EN").defaultValue)
     }
 
     @Test

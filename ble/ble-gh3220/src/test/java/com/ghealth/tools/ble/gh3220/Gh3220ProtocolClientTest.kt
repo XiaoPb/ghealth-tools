@@ -248,4 +248,24 @@ class Gh3220ProtocolClientTest {
         assertEquals(1, frames.size) // 每帧恰好一条上报，无重复路由
         session.detach()
     }
+
+    @Test
+    fun `startHbd surfaces device status 1 as DeviceError`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+        val client = Gh3220ProtocolClient(session)
+        client.attach()
+
+        val responder = launch {
+            while (transport.sent.isEmpty()) delay(1)
+            transport.emit(responseFrame(0x0C, bytes(0x01)))
+        }
+        val result = client.startHbd(on = true, mode = 0, function = 2)
+        responder.join()
+
+        assertTrue(result.isFailure)
+        assertIs<com.ghealth.tools.ble.itlvc.core.ItlvcError.CommandError.DeviceError>(result.exceptionOrNull())
+        session.detach()
+    }
 }
