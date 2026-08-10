@@ -62,30 +62,60 @@ data class Gh3220CommandMeta(
     val group: CommandGroup get() = meta.group
 
     companion object {
-        // ── 选项常量（值参考 .claude/gh_protocol/cmd.yaml，真机待验证）──
+        // ── 选项常量（值参考 .claude/gh3220_protocol/gh3220 protocol.md，真机待验证）──
 
+        /** 0x19 获取版本类型（协议文档 §3.21；0x00 与 0x01 等价，此处取 0x01）。 */
         val VERSION_TYPE_OPTIONS: List<CommandParamDef.OptionItem> = listOf(
-            CommandParamDef.OptionItem("固件版本 (0x01)", 0x01),
-            CommandParamDef.OptionItem("虚拟寄存器版本 (0x03)", 0x03),
-            CommandParamDef.OptionItem("Bootloader版本 (0x04)", 0x04),
-            CommandParamDef.OptionItem("协议版本 (0x05)", 0x05),
-            CommandParamDef.OptionItem("驱动功能支持 (0x06)", 0x06),
-            CommandParamDef.OptionItem("驱动版本 (0x07)", 0x07),
-            CommandParamDef.OptionItem("芯片版本 (0x08)", 0x08),
-            CommandParamDef.OptionItem("BLE版本 (0x09)", 0x09),
-            CommandParamDef.OptionItem("算法调用Demo版本 (0x0A)", 0x0A),
-            CommandParamDef.OptionItem("算法版本 (0x20)", 0x20),
+            CommandParamDef.OptionItem("EVK 版本 (0x00/0x01)", 0x01),
+            CommandParamDef.OptionItem("虚拟寄存器版本 (0x0B)", 0x0B),
+            CommandParamDef.OptionItem("Bootloader 版本 (0x0C)", 0x0C),
+            CommandParamDef.OptionItem("BLE 版本 (0x0D)", 0x0D),
+            CommandParamDef.OptionItem("协议版本 (0x0E)", 0x0E),
+            CommandParamDef.OptionItem("支持功能 (0x0F)", 0x0F),
+            CommandParamDef.OptionItem("驱动库版本 (0x10)", 0x10),
+            CommandParamDef.OptionItem("芯片版本 (0x11)", 0x11),
+            CommandParamDef.OptionItem("ADT (0x12)", 0x12),
+            CommandParamDef.OptionItem("HR (0x13)", 0x13),
+            CommandParamDef.OptionItem("HRV (0x14)", 0x14),
+            CommandParamDef.OptionItem("HSM (0x15)", 0x15),
+            CommandParamDef.OptionItem("FPBP (0x16)", 0x16),
+            CommandParamDef.OptionItem("PWA (0x19)", 0x19),
+            CommandParamDef.OptionItem("SPO2 (0x1A)", 0x1A),
+            CommandParamDef.OptionItem("ECG (0x1B)", 0x1B),
+            CommandParamDef.OptionItem("PWTT (0x1C)", 0x1C),
+            CommandParamDef.OptionItem("SOFTADT (0x1D)", 0x1D),
+            CommandParamDef.OptionItem("BT (0x1E)", 0x1E),
         )
 
+        /** 0x10 下位机工作模式（协议文档 §3.12）。 */
         val WORK_MODE_OPTIONS: List<CommandParamDef.OptionItem> = listOf(
-            CommandParamDef.OptionItem("EVK模式 (0)", 0),
-            CommandParamDef.OptionItem("APP模式 (1,弃用)", 1),
-            CommandParamDef.OptionItem("MCU在线模式 (2)", 2),
-            CommandParamDef.OptionItem("MCU离线模式 (3)", 3),
-            CommandParamDef.OptionItem("测试调谐模式 (4,弃用)", 4),
-            CommandParamDef.OptionItem("透传模式 (5)", 5),
-            CommandParamDef.OptionItem("获取工作模式 (6,弃用)", 6),
-            CommandParamDef.OptionItem("工厂模式 (7)", 7),
+            CommandParamDef.OptionItem("EVK mode (0)", 0),
+            CommandParamDef.OptionItem("APP mode (1)", 1),
+            CommandParamDef.OptionItem("MCU online mode (2)", 2),
+            CommandParamDef.OptionItem("MCU offline mode (3)", 3),
+            CommandParamDef.OptionItem("验证工具工作模式 (4)", 4),
+            CommandParamDef.OptionItem("Pass Through mode (5)", 5),
+            CommandParamDef.OptionItem("获取下位机工作模式 (6)", 6),
+        )
+
+        /** 0x17 Cardiff 复位类型（协议文档 §3.19）。 */
+        val CHIP_RESET_OPTIONS: List<CommandParamDef.OptionItem> = listOf(
+            CommandParamDef.OptionItem("硬复位 (0x5A)", 0x5A),
+            CommandParamDef.OptionItem("软复位 (0xC2)", 0xC2),
+            CommandParamDef.OptionItem("wakeup (0xC3)", 0xC3),
+            CommandParamDef.OptionItem("sleep 模式 (0xC4)", 0xC4),
+        )
+
+        /** 0x18 电流校准模式（协议文档 §3.20）。 */
+        val CALIBRATE_MODE_OPTIONS: List<CommandParamDef.OptionItem> = listOf(
+            CommandParamDef.OptionItem("自动校准 (0)", 0),
+            CommandParamDef.OptionItem("手动校准 (1)", 1),
+        )
+
+        /** 0x2E 切换 Cardiff 芯片（协议文档 §3.37）。 */
+        val SWITCH_CHIP_OPTIONS: List<CommandParamDef.OptionItem> = listOf(
+            CommandParamDef.OptionItem("Cardiff 1 (1)", 1),
+            CommandParamDef.OptionItem("Cardiff 2 (2)", 2),
         )
 
         /** 启动/停止（0x0C 启动 HBD）：表单值 1=启动 0=停止，编码层映射为 0x00=启动 0x01=停止。 */
@@ -108,7 +138,7 @@ data class Gh3220CommandMeta(
                 CommandMeta(
                     key = "GH3220_GET_VERSION",
                     displayName = "获取版本",
-                    description = "0x19 获取指定类型的版本信息（固件/协议/驱动等）",
+                    description = "0x19 获取指定类型的版本信息（协议文档 §3.21）",
                     requestFormat = "",
                     params = listOf(
                         CommandParamDef(
@@ -345,7 +375,12 @@ data class Gh3220CommandMeta(
                     description = "0x17 Cardiff 芯片复位",
                     requestFormat = "",
                     params = listOf(
-                        CommandParamDef(name = "resetType", label = "复位类型", type = ParamType.U8),
+                        CommandParamDef(
+                            name = "resetType",
+                            label = "复位类型",
+                            type = ParamType.U8,
+                            options = CHIP_RESET_OPTIONS,
+                        ),
                     ),
                     hasResponse = true,
                     responseFormat = STATUS_RESPONSE_FORMAT,
@@ -361,7 +396,12 @@ data class Gh3220CommandMeta(
                     description = "0x18 电流校准",
                     requestFormat = "",
                     params = listOf(
-                        CommandParamDef(name = "mode", label = "校准模式", type = ParamType.U8),
+                        CommandParamDef(
+                            name = "mode",
+                            label = "校准模式",
+                            type = ParamType.U8,
+                            options = CALIBRATE_MODE_OPTIONS,
+                        ),
                     ),
                     hasResponse = true,
                     responseFormat = STATUS_RESPONSE_FORMAT,
@@ -471,7 +511,12 @@ data class Gh3220CommandMeta(
                     description = "0x2E 切换 Cardiff 芯片",
                     requestFormat = "",
                     params = listOf(
-                        CommandParamDef(name = "cmd", label = "切换命令", type = ParamType.U8),
+                        CommandParamDef(
+                            name = "cmd",
+                            label = "切换命令",
+                            type = ParamType.U8,
+                            options = SWITCH_CHIP_OPTIONS,
+                        ),
                     ),
                     hasResponse = true,
                     responseFormat = STATUS_RESPONSE_FORMAT,

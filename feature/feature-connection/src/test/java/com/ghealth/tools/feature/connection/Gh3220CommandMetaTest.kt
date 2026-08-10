@@ -11,6 +11,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -64,9 +65,42 @@ class Gh3220CommandMetaTest {
     }
 
     @Test
-    fun `every command exposes executor and expects a response`() {
-        assertTrue(Gh3220CommandMeta.all.all { it.executor != null })
+    fun `every command is reachable via key lookup and expects a response`() {
+        Gh3220CommandMeta.all.forEach {
+            assertSame(it, Gh3220CommandMeta.getCommandByKey(it.key))
+        }
         assertTrue(Gh3220CommandMeta.all.all { it.meta.hasResponse })
+    }
+
+    @Test
+    fun `version type options follow gh3220 protocol section 3_21`() {
+        val values = Gh3220CommandMeta.VERSION_TYPE_OPTIONS.map { it.value as Int }.toSet()
+        assertEquals(
+            setOf(0x01, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E),
+            values,
+        )
+    }
+
+    @Test
+    fun `work mode options follow gh3220 protocol section 3_12`() {
+        val values = Gh3220CommandMeta.WORK_MODE_OPTIONS.map { it.value as Int }.toSet()
+        assertEquals((0..6).toSet(), values)
+    }
+
+    @Test
+    fun `reset calibrate and switch chip options follow protocol docs`() {
+        assertEquals(
+            setOf(0x5A, 0xC2, 0xC3, 0xC4),
+            Gh3220CommandMeta.CHIP_RESET_OPTIONS.map { it.value as Int }.toSet(),
+        )
+        assertEquals(
+            setOf(0, 1),
+            Gh3220CommandMeta.CALIBRATE_MODE_OPTIONS.map { it.value as Int }.toSet(),
+        )
+        assertEquals(
+            setOf(1, 2),
+            Gh3220CommandMeta.SWITCH_CHIP_OPTIONS.map { it.value as Int }.toSet(),
+        )
     }
 
     @Test
