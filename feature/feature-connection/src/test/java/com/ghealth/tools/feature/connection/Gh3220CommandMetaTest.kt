@@ -296,4 +296,74 @@ class Gh3220CommandMetaTest {
             client.sendRaw(eq(0x23), match { it.contentEquals(byteArrayOf(0x01, 0x02)) })
         }
     }
+
+    @Test
+    fun `payload builder encodes every command with legal params`() {
+        Gh3220CommandMeta.all.forEach { meta ->
+            val result = Gh3220CommandPayloadBuilder.build(meta, legalParams(meta))
+            assertTrue(result.isSuccess, "${meta.key} 应能编码: ${result.exceptionOrNull()?.message}")
+        }
+    }
+
+    @Test
+    fun `payload builder accepts unsigned int param values`() {
+        val getVersion = Gh3220CommandMeta.getCommandByKey("GH3220_GET_VERSION")!!
+        assertTrue(Gh3220CommandPayloadBuilder.build(getVersion, listOf(1u.toUByte())).isSuccess)
+
+        val readReg = Gh3220CommandMeta.getCommandByKey("GH3220_READ_REG")!!
+        assertTrue(
+            Gh3220CommandPayloadBuilder.build(readReg, listOf(0x10u.toUShort(), 1u.toUByte())).isSuccess,
+        )
+
+        val workMode = Gh3220CommandMeta.getCommandByKey("GH3220_WORK_MODE")!!
+        assertTrue(
+            Gh3220CommandPayloadBuilder.build(workMode, listOf(1u.toUByte(), 0x01020304u)).isSuccess,
+        )
+
+        val startHbd = Gh3220CommandMeta.getCommandByKey("GH3220_START_HBD")!!
+        assertTrue(
+            Gh3220CommandPayloadBuilder.build(startHbd, listOf(1u.toUByte(), 0u.toUByte(), 1uL)).isSuccess,
+        )
+    }
+
+    @Test
+    fun `executor converts unsigned param values`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        coEvery { client.getVersion(1) } returns Result.success(BasicCommands.VersionInfo(1, "A"))
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_GET_VERSION")!!.executor(
+            client,
+            listOf(1u.toUByte()),
+        )
+        assertTrue(result.isSuccess)
+        coVerify { client.getVersion(1) }
+    }
+
+    @Test
+    fun `executor returns failure for missing params instead of throwing`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_GET_VERSION")!!.executor(client, emptyList())
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `executor returns failure for wrong param type instead of throwing`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_START_HBD")!!.executor(client, listOf("x", 0, 0L))
+        assertTrue(result.isFailure)
+    }
+
+    private fun legalParams(meta: Gh3220CommandMeta): List<Any?> = meta.params.map { def ->
+        when (def.type) {
+            ParamType.U8 -> 1
+            ParamType.U16 -> 0x10
+            ParamType.U32 -> 1L
+            ParamType.U8_ARRAY -> when (meta.key) {
+                "GH3220_FUNC_MAP" -> ByteArray(64)
+                "GH3220_SAMPLE_RATES" -> byteArrayOf(0x11, 0x23)
+                "GH3220_REG_ARRAY_WRITE" -> byteArrayOf(0x00, 0x01, 0x12, 0x34)
+                else -> byteArrayOf(0x01)
+            }
+            else -> def.defaultValue
+        }
+    }
 }
