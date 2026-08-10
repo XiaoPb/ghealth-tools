@@ -30,6 +30,28 @@ data class WriteTask(
     val timestamp: Long
 )
 
+/**
+ * 判断当前帧是否触发 server CSV 轮转（开启新文件）。
+ * - 帧声明 NEW_TEST 列（GH3220/GH3300：结果段 flag2 bit1(0x02)=首帧，即一次新测试开始）时，
+ *   以 NEW_TEST==true 为准，不再使用 FRAME_ID（8 位帧计数每 256 帧自然回绕，会误轮转）；
+ * - 未声明（GH3036 等）时保持 FRAME_ID==0 轮转：首次不计，之后帧计数复位即轮转。
+ */
+internal fun shouldRotateServerFile(
+    columnMap: Map<String, Any?>,
+    frameZeroCounts: MutableMap<String, Int>,
+    writerKey: String,
+): Boolean {
+    val newTest = columnMap["NEW_TEST"]
+    if (newTest != null) {
+        return newTest == true
+    }
+    val frameId = (columnMap["FRAME_ID"] as? Number)?.toInt() ?: -1
+    if (frameId != 0) return false
+    val count = frameZeroCounts.getOrDefault(writerKey, 0) + 1
+    frameZeroCounts[writerKey] = count
+    return count > 1
+}
+
 @Singleton
 class RecordingManager @Inject constructor(
     @Named("storageBaseDir") private val baseDir: File,
@@ -288,19 +310,13 @@ class RecordingManager @Inject constructor(
         var currentRecordsWriter = recordsWriter
         val writerKey = "${task.deviceAddress}_$mode"
 
-        // FRAME_ID=0 rotation: close current file, create new one with fresh timestamp
-        val frameId = (task.columnMap["FRAME_ID"] as? Number)?.toInt() ?: -1
-        if (frameId == 0) {
-            val count = frameZeroCounts.getOrDefault(writerKey, 0) + 1
-            frameZeroCounts[writerKey] = count
-            Timber.d("FRAME_ID=0 detected for key=$writerKey, count=$count")
-            if (count > 1) {
-                serverWriters[writerKey]?.let { old ->
-                    old.close()
-                    Timber.d("Closed rotated file for key=$writerKey")
-                }
-                serverWriters.remove(writerKey)
+        // Server CSV segmentation: close current file, create new one with fresh timestamp
+        if (shouldRotateServerFile(task.columnMap, frameZeroCounts, writerKey)) {
+            serverWriters[writerKey]?.let { old ->
+                old.close()
+                Timber.d("Closed rotated server file for key=$writerKey")
             }
+            serverWriters.remove(writerKey)
         }
 
         // Lazy-create server CSV writer on first frame for this device+mode

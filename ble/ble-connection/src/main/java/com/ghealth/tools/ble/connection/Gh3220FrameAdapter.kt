@@ -37,6 +37,18 @@ object Gh3220FrameAdapter {
     /** flag 槽位数，对应 FLAG{0-7} 列；0x0B 结果段 tag bit7=0 的标志按 tag 索引填入。 */
     const val FLAG_SLOTS = 8
 
+    /**
+     * GH3220 结果段 flag2 的 bit1(0x02) = 首帧标志（frameCnt==0），即一次新测试的开始
+     * （设备端 Gh3x2xSetFrameFlag2：`if (frameCnt==0) flag[2] |= 0x02`）。
+     * RecordingManager 以此轮转 server CSV，而不再用 FRAME_ID（8 位帧计数每 256 帧自然回绕，
+     * 用 FRAME_ID==0 会把同一个测试误切成多个文件）。
+     */
+    const val GH3220_FLAG2_NEW_TEST_MASK = 0x02
+
+    /** 该帧是否标记了一次新测试的开始（FLAG2 bit1 置位）。 */
+    fun isNewTestFrame(frame: GhFuncFrame): Boolean =
+        (frame.flags.getOrNull(2) ?: 0) and GH3220_FLAG2_NEW_TEST_MASK != 0
+
     fun toGhFuncFrame(frame: Gh3220RawDataFrame): GhFuncFrame = GhFuncFrame().apply {
         funcId = Gh3220FrameDecoder.mapToCommonFuncId(Gh3220FuncId.from(frame.funcId))
         frameCnt = frame.frameId

@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * [Gh3220FrameAdapter] 帧桥映射测试：0x0B 分包/多通道帧槽位展开 + 单功能包直映射回归。
@@ -223,6 +225,23 @@ class Gh3220FrameAdapterTest {
             ),
         )
         assertContentEquals(intArrayOf(70, 3), gh.algoData)
+    }
+
+    @Test
+    fun `flag2 bit1 0x02 marks new test start and bit2 0x04 does not`() {
+        val firstFrame = Gh3220FrameAdapter.toGhFuncFrame(
+            frame(frameId = 0, results = listOf(Gh3220Result(2, 0x02))),
+        )
+        val midStream = Gh3220FrameAdapter.toGhFuncFrame(
+            frame(frameId = 5, results = listOf(Gh3220Result(2, 0))),
+        )
+        val wearStatus = Gh3220FrameAdapter.toGhFuncFrame(
+            frame(frameId = 6, results = listOf(Gh3220Result(2, 0x04))),
+        )
+
+        assertTrue(Gh3220FrameAdapter.isNewTestFrame(firstFrame))
+        assertFalse(Gh3220FrameAdapter.isNewTestFrame(midStream))
+        assertFalse(Gh3220FrameAdapter.isNewTestFrame(wearStatus))
     }
 
     @Test

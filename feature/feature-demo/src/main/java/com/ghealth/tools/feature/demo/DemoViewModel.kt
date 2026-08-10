@@ -512,6 +512,10 @@ class DemoViewModel @Inject constructor(
                 putCached(map, cache, "GYRO_Z", null)
             }
             DeviceType.GH3220, DeviceType.GH3300 -> {
+                // GH3220 分段：结果段 flag2 bit1(0x02)=首帧（frameCnt==0），即一次新测试开始；
+                // RecordingManager 据此轮转 server CSV（NEW_TEST=true），不再按 FRAME_ID==0
+                // （8 位帧计数每 256 帧自然回绕会误轮转）。
+                map["NEW_TEST"] = Gh3220FrameAdapter.isNewTestFrame(this)
                 fillRangeCached(map, cache, "CH", 0, 31, rawdata)
                 fillRangeCached(map, cache, "FLAG", 0, 7, flags)
                 fillRangeCached(map, cache, "REF_RESULT", 0, 15, null)
