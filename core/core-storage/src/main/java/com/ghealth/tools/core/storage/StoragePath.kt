@@ -23,11 +23,11 @@ data class StoragePath(
     val deviceAddress: String = "",
     val phoneDevice: String = "",
     val appVersion: String = "1.0.0",
-    val sdkVersion: String = "1.0.0",
-    val hrVersion: String = "1.0.0",
-    val spo2Version: String = "1.0.0",
-    val nadtVersion: String = "1.0.0",
-    val hrvVersion: String = "1.0.0",
+    val sdkVersion: String? = null,
+    val hrVersion: String? = null,
+    val spo2Version: String? = null,
+    val nadtVersion: String? = null,
+    val hrvVersion: String? = null,
     val projectName: String = "",
     val projectId: Int = 0,
     val username: String = "",
@@ -66,6 +66,9 @@ data class StoragePath(
         return "records/$mode/${status}_records_${mode}_$dateStr.csv"
     }
 
+    private fun jsonStringOrNull(value: String?): String =
+        if (value == null) "null" else "\"$value\""
+
     fun infoJson(): String {
         return buildString {
             append("{\"MAC\":\"$deviceAddress\",")
@@ -76,11 +79,11 @@ data class StoragePath(
             append("\"scenario\":\"$scenario\",")
             append("\"chip\":\"$chip\",")
             append("\"iPhone-device\":\"$phoneDevice\",")
-            append("\"SDK-Version\":\"$sdkVersion\",")
-            append("\"HR-Version\":\"$hrVersion\",")
-            append("\"SPO2-Version\":\"$spo2Version\",")
-            append("\"NADT-Version\":\"$nadtVersion\",")
-            append("\"HRV-Version\":\"$hrvVersion\",")
+            append("\"SDK-Version\":${jsonStringOrNull(sdkVersion)},")
+            append("\"HR-Version\":${jsonStringOrNull(hrVersion)},")
+            append("\"SPO2-Version\":${jsonStringOrNull(spo2Version)},")
+            append("\"NADT-Version\":${jsonStringOrNull(nadtVersion)},")
+            append("\"HRV-Version\":${jsonStringOrNull(hrvVersion)},")
             append("\"project_name\":\"$projectName\",")
             append("\"project_id\":$projectId,")
             append("\"tester\":\"$tester\",")

@@ -135,11 +135,20 @@ class ConnectionViewModel @Inject constructor(
                 }
 
                 if (newMaster != null && !_uiState.value.dataMonitorState.isMonitoring) {
-                    _uiState.update {
-                        it.copy(
-                            showTestConfigDialog = true,
-                            masterDeviceName = newMaster.value.name
-                        )
+                    // 先等待版本读取完成（含 2s 延迟 + 各版本查询），再弹测试信息输入框
+                    viewModelScope.launch {
+                        firmwareVersionHolder.awaitVersionRead()
+                        val stillConnected = devices.values.any {
+                            it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED
+                        }
+                        if (stillConnected) {
+                            _uiState.update {
+                                it.copy(
+                                    showTestConfigDialog = true,
+                                    masterDeviceName = newMaster.value.name
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -612,7 +621,12 @@ class ConnectionViewModel @Inject constructor(
                         .map { it.address },
                     projectName = projectName,
                     projectId = projectId,
-                    username = userInfo.username
+                    username = userInfo.username,
+                    sdkVersion = firmwareVersionHolder.state.value.sdkVersion,
+                    hrVersion = firmwareVersionHolder.state.value.hrVersion,
+                    spo2Version = firmwareVersionHolder.state.value.spo2Version,
+                    nadtVersion = firmwareVersionHolder.state.value.nadtVersion,
+                    hrvVersion = firmwareVersionHolder.state.value.hrvVersion
                 )
             }
         }

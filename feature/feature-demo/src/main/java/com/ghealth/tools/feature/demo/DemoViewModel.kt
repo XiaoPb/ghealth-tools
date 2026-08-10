@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.DeviceRole
+import com.ghealth.tools.ble.connection.FirmwareVersionHolder
+import com.ghealth.tools.ble.connection.Gh3220FrameAdapter
 import com.ghealth.tools.ble.protocol.gh3036.AgcPhysicalCodec
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncFrame
 import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
@@ -138,6 +140,7 @@ class DemoViewModel @Inject constructor(
     private val connectionManager: BleConnectionManager,
     private val recordingManager: RecordingManager,
     private val blePreferences: BlePreferences,
+    private val firmwareVersionHolder: FirmwareVersionHolder,
     @Named("app_version") private val appVersion: String
 ) : ViewModel() {
 
@@ -577,8 +580,11 @@ class DemoViewModel @Inject constructor(
             connectionManager.notifyRecordingStopped()
             viewModelScope.launch { recordingManager.endSession() }
         } else {
-            // Show config dialog for tester info before starting
-            _uiState.update { it.copy(showRestartConfigDialog = true) }
+            // 先等待版本读取完成，再弹测试信息输入框
+            viewModelScope.launch {
+                firmwareVersionHolder.awaitVersionRead()
+                _uiState.update { it.copy(showRestartConfigDialog = true) }
+            }
         }
     }
 
@@ -607,7 +613,12 @@ class DemoViewModel @Inject constructor(
                     .map { it.name ?: it.address },
                 compareDeviceAddresses = devices.values
                     .filter { it.role == DeviceRole.COMPARE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED }
-                    .map { it.address }
+                    .map { it.address },
+                sdkVersion = firmwareVersionHolder.state.value.sdkVersion,
+                hrVersion = firmwareVersionHolder.state.value.hrVersion,
+                spo2Version = firmwareVersionHolder.state.value.spo2Version,
+                nadtVersion = firmwareVersionHolder.state.value.nadtVersion,
+                hrvVersion = firmwareVersionHolder.state.value.hrvVersion
             )
         }
         _uiState.update { it.copy(showRestartConfigDialog = false) }

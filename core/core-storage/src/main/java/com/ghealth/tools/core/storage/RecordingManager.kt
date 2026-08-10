@@ -34,6 +34,7 @@ data class WriteTask(
 class RecordingManager @Inject constructor(
     @Named("storageBaseDir") private val baseDir: File,
     @Named("app_version") private val appVersion: String,
+    @Named("phone_device") private val phoneDevice: String,
     private val csvUploadManager: CsvUploadManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -58,7 +59,12 @@ class RecordingManager @Inject constructor(
         val masterAddress: String,
         val slaveNames: Map<String, String>,
         val compareNames: List<String>,
-        val compareAddresses: List<String>
+        val compareAddresses: List<String>,
+        val sdkVersion: String?,
+        val hrVersion: String?,
+        val spo2Version: String?,
+        val nadtVersion: String?,
+        val hrvVersion: String?
     )
 
     private class ModeState(
@@ -96,7 +102,12 @@ class RecordingManager @Inject constructor(
         compareDeviceAddresses: List<String> = emptyList(),
         projectName: String = "",
         projectId: Int = 0,
-        username: String = ""
+        username: String = "",
+        sdkVersion: String? = null,
+        hrVersion: String? = null,
+        spo2Version: String? = null,
+        nadtVersion: String? = null,
+        hrvVersion: String? = null
     ) {
         runBlocking { endSession() }
 
@@ -109,7 +120,12 @@ class RecordingManager @Inject constructor(
             masterAddress = masterDeviceAddress,
             slaveNames = slaveDevices,
             compareNames = compareDeviceNames,
-            compareAddresses = compareDeviceAddresses
+            compareAddresses = compareDeviceAddresses,
+            sdkVersion = sdkVersion,
+            hrVersion = hrVersion,
+            spo2Version = spo2Version,
+            nadtVersion = nadtVersion,
+            hrvVersion = hrvVersion
         )
         currentProjectName = projectName
         currentProjectId = projectId
@@ -356,7 +372,13 @@ class RecordingManager @Inject constructor(
             chip = cfg.chip,
             deviceName = deviceName,
             deviceAddress = task.deviceAddress,
+            phoneDevice = phoneDevice,
             appVersion = appVersion,
+            sdkVersion = cfg.sdkVersion,
+            hrVersion = cfg.hrVersion,
+            spo2Version = cfg.spo2Version,
+            nadtVersion = cfg.nadtVersion,
+            hrvVersion = cfg.hrvVersion,
             projectName = currentProjectName,
             projectId = currentProjectId,
             username = currentUsername,

@@ -9,6 +9,9 @@ import com.ghealth.tools.core.model.DeviceType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,12 +25,17 @@ import javax.inject.Singleton
 
 data class FirmwareVersionState(
     val version: String? = null,
+    val sdkVersion: String? = null,
+    val hrVersion: String? = null,
+    val spo2Version: String? = null,
+    val nadtVersion: String? = null,
+    val hrvVersion: String? = null,
     val isReading: Boolean = false,
 )
 
 internal const val VER_TYPE_BLE: Byte = 0x09
 internal const val VER_TYPE_FW: Byte = 0x01
-private const val VERSION_FETCH_DELAY_MS = 5_000L
+private const val VERSION_FETCH_DELAY_MS = 2_000L
 private const val VERSION_READ_TIMEOUT_MS = 3_000L
 
 /**
@@ -62,6 +70,36 @@ internal suspend fun resolveGh3220Version(
     val raw = fetchRaw(VER_TYPE_FW) ?: return null
     return BasicCommands.parseVersion(raw).getOrNull()?.text?.takeIf { it.isNotBlank() }
 }
+
+/** CSV 元数据版本字段 → 设备版本查询类型。 */
+internal data class CsvVersionQuery(val label: String, val verType: Byte)
+
+/**
+ * CSV 元数据（SDK/HR/SPO2/NADT/HRV）按芯片的版本查询计划。
+ *
+ * GH3036/GH3300（RPC GH3X_GetVersion，.claude/gh_protocol/c/user/gh_protocol_cmd.h）：
+ *   SDK=0x0A 算法Demo版本，HR=0x20，SPO2=0x22，NADT=0x24，HRV=0x21。
+ * GH3220（0x19 响应 [verType][len][text]，算法版本 = 0x12 + gh_drv.h GH3X2X_FUNC_OFFSET_*）：
+ *   SDK=0x0A 算法Demo版本，HR=0x13，SPO2=0x18，NADT=0x1B(SOFT_ADT_GREEN 活体检测)，HRV=0x14。
+ */
+internal fun csvVersionPlan(isGh3220: Boolean): List<CsvVersionQuery> =
+    if (isGh3220) {
+        listOf(
+            CsvVersionQuery("SDK", 0x0A),
+            CsvVersionQuery("HR", 0x13),
+            CsvVersionQuery("SPO2", 0x18),
+            CsvVersionQuery("NADT", 0x1B),
+            CsvVersionQuery("HRV", 0x14),
+        )
+    } else {
+        listOf(
+            CsvVersionQuery("SDK", 0x0A),
+            CsvVersionQuery("HR", 0x20),
+            CsvVersionQuery("SPO2", 0x22),
+            CsvVersionQuery("NADT", 0x24),
+            CsvVersionQuery("HRV", 0x21),
+        )
+    }
 
 /**
  * 主设备固件版本共享状态持有者（@Singleton）。
@@ -103,7 +141,12 @@ class FirmwareVersionHolder @Inject constructor(
 
     private fun scheduleFetch(address: String) {
         fetchJob?.cancel()
-        _state.update { it.copy(isReading = true, version = null) }
+        _state.update {
+            it.copy(
+                isReading = true, version = null,
+                sdkVersion = null, hrVersion = null, spo2Version = null, nadtVersion = null, hrvVersion = null
+            )
+        }
         fetchJob = scope.launch {
             delay(VERSION_FETCH_DELAY_MS)
             if (!isStillCurrentMaster(address)) return@launch
@@ -125,11 +168,58 @@ class FirmwareVersionHolder @Inject constructor(
                 }
             }
             val version = if (isGh3220) resolveGh3220Version(sendCmd) else resolveFirmwareVersion(sendCmd)
+            val csvVersions = readCsvVersions(sendCmd, isGh3220)
             if (isStillCurrentMaster(address)) {
-                _state.update { it.copy(version = version, isReading = false) }
-                Timber.d("Firmware version for $address: $version")
+                _state.update {
+                    it.copy(
+                        version = version,
+                        sdkVersion = csvVersions["SDK"],
+                        hrVersion = csvVersions["HR"],
+                        spo2Version = csvVersions["SPO2"],
+                        nadtVersion = csvVersions["NADT"],
+                        hrvVersion = csvVersions["HRV"],
+                        isReading = false
+                    )
+                }
+                Timber.d("Firmware version for $address: $version, csvVersions=$csvVersions")
             }
         }
+    }
+
+    /** 并行读取 CSV 元数据所需的 5 个版本字段；读取失败/无响应的字段为 null。 */
+    private suspend fun readCsvVersions(
+        sendCmd: suspend (Byte) -> ByteArray?,
+        isGh3220: Boolean
+    ): Map<String, String?> = coroutineScope {
+        csvVersionPlan(isGh3220).map { query ->
+            async {
+                val raw = sendCmd(query.verType) ?: return@async query.label to null
+                val text = if (isGh3220) {
+                    BasicCommands.parseVersion(raw).getOrNull()?.text?.takeIf { it.isNotBlank() }
+                } else {
+                    parseGh3036VersionString(raw).takeIf { it != "no_ver" }
+                }
+                query.label to text
+            }
+        }.awaitAll().toMap()
+    }
+
+    /**
+     * 等待主设备版本读取完成后再返回当前状态。
+     * 用于"连接后先读取版本再弹窗"流程：主设备已连接但读取尚未调度时立即触发读取；
+     * 读取已在途时挂起等待；读取已完成或主设备未连接时直接返回。
+     */
+    suspend fun awaitVersionRead(): FirmwareVersionState {
+        val master = connectionManager.devices.value.values.find {
+            it.role == DeviceRole.MASTER && it.state == ConnectionState.CONNECTED
+        }
+        if (master != null && currentMasterAddress != master.address) {
+            // 先登记地址再调度，避免与 init 收集器并发调度时互相取消读取
+            currentMasterAddress = master.address
+            scheduleFetch(master.address)
+        }
+        fetchJob?.join()
+        return _state.value
     }
 
     private fun isStillCurrentMaster(address: String): Boolean {

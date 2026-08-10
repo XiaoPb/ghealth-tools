@@ -111,4 +111,33 @@ class FirmwareVersionResolverTest {
         val fetchRaw: suspend (Byte) -> ByteArray? = { null }
         assertNull(resolveGh3220Version(fetchRaw))
     }
+
+    @Test
+    fun `csvVersionPlan GH3036 使用 RPC 算法版本类型`() {
+        assertEquals(
+            listOf(
+                CsvVersionQuery("SDK", 0x0A),
+                CsvVersionQuery("HR", 0x20),
+                CsvVersionQuery("SPO2", 0x22),
+                CsvVersionQuery("NADT", 0x24),
+                CsvVersionQuery("HRV", 0x21),
+            ),
+            csvVersionPlan(isGh3220 = false)
+        )
+    }
+
+    @Test
+    fun `csvVersionPlan GH3220 使用 0x12+功能偏移 算法版本类型`() {
+        assertEquals(
+            listOf(
+                CsvVersionQuery("SDK", 0x0A),
+                CsvVersionQuery("HR", 0x13),
+                CsvVersionQuery("SPO2", 0x18),
+                CsvVersionQuery("NADT", 0x1B),
+                CsvVersionQuery("HRV", 0x14),
+            ),
+            csvVersionPlan(isGh3220 = true)
+        )
+    }
+
 }

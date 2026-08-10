@@ -56,6 +56,7 @@ class ConnectionViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
     private lateinit var recordingManagerMock: RecordingManager
+    private lateinit var firmwareVersionHolderMock: FirmwareVersionHolder
 
     @BeforeEach
     fun setUp() {
@@ -83,6 +84,9 @@ class ConnectionViewModelTest {
 
         val firmwareVersionHolder = mockk<FirmwareVersionHolder>(relaxed = true)
         every { firmwareVersionHolder.state } returns MutableStateFlow(FirmwareVersionState())
+        coEvery { firmwareVersionHolder.awaitVersionRead() } returns
+            FirmwareVersionState(version = "V1", sdkVersion = "SDK1", hrVersion = "HR1")
+        firmwareVersionHolderMock = firmwareVersionHolder
 
         val recordingManager = mockk<RecordingManager>(relaxed = true)
         recordingManagerMock = recordingManager
@@ -127,6 +131,25 @@ class ConnectionViewModelTest {
     }
 
     @Test
+    fun `master 连接后先等待版本读取完成再弹出测试配置框`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220")
+        devicesFlow.value = mapOf(
+            "AA:BB" to ConnectedDevice(
+                address = "AA:BB",
+                name = "TestDevice",
+                role = DeviceRole.MASTER,
+                state = ConnectionState.CONNECTED,
+                deviceType = DeviceType.GH3220
+            )
+        )
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.showTestConfigDialog)
+        assertEquals("TestDevice", viewModel.uiState.value.masterDeviceName)
+        coVerify { firmwareVersionHolderMock.awaitVersionRead() }
+    }
+
+    @Test
     fun `confirmTestConfig passes master device chip to recording session`() = runTest(dispatcher) {
         val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220")
         devicesFlow.value = mapOf(
@@ -156,7 +179,12 @@ class ConnectionViewModelTest {
                 compareDeviceAddresses = emptyList(),
                 projectName = "",
                 projectId = 0,
-                username = "tester"
+                username = "tester",
+                sdkVersion = null,
+                hrVersion = null,
+                spo2Version = null,
+                nadtVersion = null,
+                hrvVersion = null
             )
         }
     }
