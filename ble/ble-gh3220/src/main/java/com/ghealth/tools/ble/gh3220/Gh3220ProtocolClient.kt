@@ -69,6 +69,10 @@ class Gh3220ProtocolClient(
     /**
      * 注册全部上报处理器（幂等）：仅首次调用注册；重复调用仅重置差分解压基准，
      * 用于断线重连后恢复（对应 `session.attach(...)` 重新建立接收协程）。
+     *
+     * 使用前提：调用后不得执行 `session.reset()` —— reset 会清空 session 的 reportHandlers，
+     * 而本类注册标志仍为 true，后续 `attach()` 将跳过重新注册，上报会落入
+     * `ItlvcEvent.FrameReceived` 而非本类各 flow（当前仓库无 reset 调用点，属潜在风险契约）。
      */
     fun attach() {
         decoder.reset()
