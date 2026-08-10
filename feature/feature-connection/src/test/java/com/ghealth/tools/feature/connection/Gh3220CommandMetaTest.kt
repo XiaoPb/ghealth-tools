@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.connection
 
 import com.ghealth.tools.ble.gh3220.Gh3220Payload
+import com.ghealth.tools.ble.gh3220.Gh3220Function
 import com.ghealth.tools.ble.gh3220.Gh3220ProtocolClient
 import com.ghealth.tools.ble.gh3220.commands.BasicCommands
 import com.ghealth.tools.ble.gh3220.commands.ConfigCommands
@@ -8,6 +9,7 @@ import com.ghealth.tools.ble.gh3220.commands.RegisterCommands
 import com.ghealth.tools.ble.protocol.gh3036.CommandGroup
 import com.ghealth.tools.ble.protocol.gh3036.CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.CommandParamDef
+import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.ParamType
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -68,6 +70,33 @@ class Gh3220CommandMetaTest {
         val meta = Gh3220CommandMeta.getCommandByKey("GH3220_GET_VERSION")!!
         assertEquals(1, meta.params.size)
         assertEquals(ParamType.U8, meta.params[0].type)
+    }
+    @Test
+
+    fun `function params of gh3220 control commands use func mode bits with zero default`() {
+        val functionParam = { key: String ->
+            Gh3220CommandMeta.getCommandByKey(key)!!.params.single { it.name == "function" }
+        }
+        listOf("GH3220_START_HBD", "GH3220_WORK_MODE", "GH3220_SLOT_EN").forEach { key ->
+            val def = functionParam(key)
+            assertEquals(
+                ParamType.FUNC_MODE_BITS,
+                def.type,
+                "命令 $key 的 function 参数类型应为 FUNC_MODE_BITS",
+            )
+            assertEquals(0L, def.defaultValue, "命令 $key 的 function 参数默认值应为 0L")
+        }
+    }
+
+    @Test
+    fun `panel func mode bits gh3220 match protocol gh3220 function entries`() {
+        // 面板元数据（Gh3036CommandMeta.FUNC_MODE_BITS_GH3220）与协议层权威映射
+        // （ble-gh3220 Gh3220Function，C 端 GH3X2X_FUNCTION_* 宏）必须完全同步。
+        val panelBits = Gh3036CommandMeta.FUNC_MODE_BITS_GH3220.map { it.name to it.bit }
+        val protocolBits = Gh3220Function.entries.map { it.name to it.bit }
+        assertEquals(20, Gh3220Function.entries.size, "Gh3220Function 应含全部 20 个功能位")
+        assertEquals(20, panelBits.size, "FUNC_MODE_BITS_GH3220 应含全部 20 个功能位")
+        assertEquals(protocolBits, panelBits)
     }
 
     @Test
@@ -364,6 +393,7 @@ class Gh3220CommandMetaTest {
             ParamType.U8 -> 1
             ParamType.U16 -> 0x10
             ParamType.U32 -> 1L
+            ParamType.FUNC_MODE_BITS -> 1L
             ParamType.U8_ARRAY -> when (meta.key) {
                 "GH3220_FUNC_MAP" -> ByteArray(64)
                 "GH3220_SAMPLE_RATES" -> byteArrayOf(0x11, 0x23)
@@ -452,3 +482,4 @@ class Gh3220CommandMetaTest {
         assertNotNull(validateGh3220Params(listOf(def), listOf("x")))
     }
 }
+
