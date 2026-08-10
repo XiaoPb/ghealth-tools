@@ -15,9 +15,9 @@
 
 | # | 差异点 | 实现侧假设 | 文档/源码依据 | 真机裁决方法 | 涉及代码 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 0x0B 包头 | 7B：`[dataType][chMask 4B BE][flag][len]` | 文档 §3.7.2 7B；`gh_datatrans.c` 8B（FunctionID 独立字节） | 抓 0x0B 首包，比对第 2 字节是否为 FunctionID | `RawDataDecoder.decode0B` |
+| 1 | 0x0B 包头 | 7B：`[dataType][chMask 4B BE][flag][len]` | 文档 §3.7.2 7B；`gh_uprotocol.c` 8B（FunctionID 独立字节） | 抓 0x0B 首包，比对第 2 字节是否为 FunctionID | `RawDataDecoder.decode0B` |
 | 2 | 0x0B chMask | 大端位掩码 | C 端大端掩码；文档 §3.7.4 seq/chnlCnt | 比对多通道上报的通道掩码 | `RawDataDecoder.decode0B`（`be32`/`activeChannelIndices`）、`Gh3220RawDataTypes.Gh3220RawDataPackage.channelMask` |
-| 3 | 0x09/0x0A 偶数包首帧 | 从 0 差分（类型 14） | 文档=0 差分；`gh_zip.c` 写 4B/通道原始绝对值 | 抓偶数包首帧，比对差值字段 | `RawDataDecoder.decode09/decode0A`、`DiffDecoder`；测试 `RawDataDecoderZipTest` |
+| 3 | 0x09/0x0A 偶数包首帧 | 从 0 差分（类型 14） | 文档 §3.5/§3.7.7 首帧=绝对值（编码未定义）；`gh_zip.c` 写 4B/通道原始绝对值 | 抓偶数包首帧，比对差值字段 | `RawDataDecoder.decode09/decode0A`、`DiffDecoder`；测试 `RawDataDecoderZipTest` |
 | 4 | 0x2A len | 4B 小端 | 文档 4B 小端；C 端 `[len 1B][idChangeFlag 1B]` | 抓 0x2A 上报，比对长度字段宽度 | `RawDataDecoder.decode2A`；测试 `RawDataDecoder2ATest` |
 | 5 | 0x0F 分包 / 0x0D 字节序 | blockSize 分块 + 块内 ≤56B；Total Len=块字节数；0x0D 小端 | 计划假设；文档 §3.11 未标注 | 真机升级 + 电流电池上报比对 | `FwUpgradeFlow`；`ReportDecoder.decodeCurrentBattery`（`Gh3220ReportModels.kt`）；测试 `FwUpgradeFlowTest`、`EventAckHandlerTest` |
 
@@ -25,9 +25,9 @@
 
 - 第 1 项：C 端 8B 包头为 `[FunctionID][dataType][mask 4B][flag][len]`（`gh_uprotocol.c` `Gh2x2xPackPakcageHeader()`，`UPROTOCOL_FUNCTION_ID_INDEX=0` 独立 1B），文档/实现 7B 包头为 `[dataType][chMask 4B BE][flag][len]`（FunctionID 并入 dataType 高 nibble）。实际判别以 FrameData 起始偏移（8 或 7）及第 2 字节（payload[1]）语义为准：若为独立 FunctionID/dataType 位型字段而非通道掩码/计数起始字节 → C 端 8B 格式。
 - 第 2 项：C 端按 `unCompeletMask |= 1 << unCnt` 组 32bit 大端位掩码（`00 00 00 03` 表示通道 0/1）；文档 §3.7.4 为 `[seq 1B][chnlCnt 1B][预留 2B]`（如 `00 02 00 00`）。多通道连续抓包可同时观察 seq 是否递增。
-- 第 3 项：`gh_zip.c` 偶数包首帧（`uchEvenFirstFrameFlag` 分支）直接写 4B/通道大端原始绝对值、无 rawLen/tagFlag 前缀；文档 §3.5/§3.7.7 描述为压缩算法编码的绝对值，当前实现以从 0 差分（类型 14 = 32bit 正差分）解码。
+- 第 3 项：`gh_zip.c` 偶数包首帧（`uchEvenFirstFrameFlag` 分支）直接写 4B/通道大端原始绝对值、无 rawLen/tagFlag 前缀；文档 §3.5/§3.7.7 描述为压缩算法编码的绝对值，当前实现以从 0 差分（类型 14 = 32bit 正差分）解码。类型 14/15 是按文档压缩表 0–13 规律外推的 32bit 差分码（不在文档表中），需在真机上确认。
 - 第 4 项：`gh_drv_control.c` 打包 `[fifoId 1B][len 1B][idChangeFlag 1B][00 00][data...]`（数据偏移 5）；文档 §3.35 为 `[fifoId 1B][len 4B][data]`，当前实现按 4B 小端解析，C 格式下会因 len overflow 拒绝，抓包可直接分辨。
-- 第 5 项：`FwUpgradeFlow` 按 blockSize 分块、块内 ≤56B 分包，`Total Len`=当前块字节数、`Current Index`=块内字节偏移，多字节字段小端；`ReportDecoder.decodeCurrentBattery` 对 0x0D 按 u16le 解析（CardiffCurrent/TxCurrent/BleSendPackageCnt）。C demo 无 0x0F 传输实现可对照，文档 §3.11/§3.9 未标注字节序。
+- 第 5 项：`FwUpgradeFlow` 按 blockSize 分块、块内 ≤56B 分包，`Total Len`=当前块字节数、`Current Index`=块内字节偏移，多字节字段小端；`ReportDecoder.decodeCurrentBattery` 对 0x0D 按 u16le 解析（CardiffCurrent/TxCurrent/BleSendPackageCnt）。C demo 无 0x0F 传输实现可对照，文档 §3.11/§3.9 未标注字节序。注意文档 §3.9 字段列名 `Cardiff电流_H|_L`、`BleSendPackageCnt_H|_L` 按惯例暗示高字节在前：真机比对时需判别字节到达顺序是 H-first（按文档列名命名）还是 L-first（按当前实现 u16le）。
 - 备注：`RawDataDecoder.decode0B` KDoc 另列 flag 位位置（bit2/bit5）、AGC 3B/4B、多功能 FifoID 等次要偏差，不在本清单 5 项内，可在同一抓包会话顺带记录供后续复核。
 
 ## 抓包前置准备
