@@ -137,7 +137,7 @@ class RegisterConfigDownloadTest {
     }
 
     @Test
-    fun `gh3220 config download routes to driver config with block stream`() = runTest(dispatcher) {
+    fun `gh3220 config download routes to reg array config with block stream`() = runTest(dispatcher) {
         val parser = mockk<RegisterConfigParser>(relaxed = true)
         coEvery { parser.parseByChip(any(), eq("gh3220"), any()) } returns RegisterConfig(
             listOf(
@@ -149,7 +149,7 @@ class RegisterConfigDownloadTest {
         connectMaster(devicesFlow)
 
         viewModel.selectRegisterConfigFile(writeConfig())
-        coEvery { connectionManager.sendGh3220DriverConfig("AA:BB", any(), save = true, onProgress = any()) } returns Result.success(Unit)
+        coEvery { connectionManager.sendGh3220RegArrayConfig("AA:BB", any(), onProgress = any()) } returns Result.success(Unit)
 
         viewModel.executeRegisterConfigDownload()
         awaitDownloadSettled(viewModel)
@@ -159,7 +159,7 @@ class RegisterConfigDownloadTest {
             0x33, 0xC2.toByte(), 0x56, 0x78,
         )
         coVerify(exactly = 1) {
-            connectionManager.sendGh3220DriverConfig("AA:BB", expected, save = true, onProgress = any())
+            connectionManager.sendGh3220RegArrayConfig("AA:BB", expected, onProgress = any())
         }
         val state = viewModel.uiState.value.registerConfigDownloadState
         assertEquals(DownloadStatus.COMPLETED, state.status)

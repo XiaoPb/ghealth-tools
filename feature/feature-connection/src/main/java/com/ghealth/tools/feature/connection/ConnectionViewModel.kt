@@ -740,7 +740,7 @@ class ConnectionViewModel @Inject constructor(
                 )
 
                 if (configInfo.chipName == DeviceType.GH3220.chipName) {
-                    // GH3220：0x1F 驱动配置下发（分包），协议无 download_config 开始/结束阶段命令。
+                    // GH3220：0xA1 写寄存器数组（分帧 ≤59 block，RegArrayConfigFlow 处理），协议无 download_config 开始/结束阶段命令。
                     val blocks = registerConfig.registers.map { entry ->
                         intArrayOf(
                             (entry.addr shr 8) and 0xFF, entry.addr and 0xFF,
@@ -758,7 +758,7 @@ class ConnectionViewModel @Inject constructor(
                         }
                     }
                     val step1 = withTimeoutOrNull(GH3220_DOWNLOAD_TIMEOUT_MS) {
-                        connectionManager.sendGh3220DriverConfig(masterAddress, data, save = true)
+                        connectionManager.sendGh3220RegArrayConfig(masterAddress, data)
                     } ?: Result.failure(Exception("配置下发超时"))
                     if (step1.isFailure) {
                         throw IllegalStateException("配置下发失败: ${step1.exceptionOrNull()?.message}")

@@ -916,6 +916,19 @@ class BleConnectionManager @Inject constructor(
     ): Result<Unit> = peripherals[address]?.itlvcBridge
         .sendDriverConfigOrFailure(address, data, save, onProgress)
 
+    /**
+     * GH3220 配置下发（0xA1 寄存器数组）：数据为 4 字节块流 [addrHi, addrLo, valHi, valLo]
+     * （见 RegisterCommands.regArrayWrite），内部按 ≤59 block/帧 分帧下发（见 RegArrayConfigFlow）。
+     */
+    suspend fun sendGh3220RegArrayConfig(
+        address: String,
+        data: ByteArray,
+        onProgress: suspend (sentBytes: Int, totalBytes: Int) -> Unit = { _, _ -> },
+    ): Result<Unit> = peripherals[address]?.itlvcBridge
+        ?.client?.regArrayConfig()
+        ?.sendRegArrayConfig(data, onProgress = onProgress)
+        ?: Result.failure(Exception("GH3220 bridge not available for $address"))
+
     @OptIn(ExperimentalUuidApi::class)
     suspend fun sendCommand(address: String, key: String, param: ByteArray = ByteArray(0)): Result<ByteArray> {
         val peripheral = peripherals[address]
