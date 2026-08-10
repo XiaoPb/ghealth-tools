@@ -904,10 +904,30 @@ class BleConnectionManager @Inject constructor(
         return bridge.client.sendRaw(type, payload)
     }
 
+    /**
+     * GH3220 配置下发：寄存器配置按 0x1F 驱动配置下发（分包 ≤230B，pos u16le + handleFlag 收尾），
+     * 数据为 4 字节块流 [addrHi, addrLo, valHi, valLo]（与 0xA1 block 一致，见 RegisterCommands.regArrayWrite）。
+     */
+    suspend fun sendGh3220DriverConfig(
+        address: String,
+        data: ByteArray,
+        save: Boolean = true,
+        onProgress: suspend (sentBytes: Int, totalBytes: Int) -> Unit = { _, _ -> },
+    ): Result<Unit> = peripherals[address]?.itlvcBridge
+        .sendDriverConfigOrFailure(address, data, save, onProgress)
+
     @OptIn(ExperimentalUuidApi::class)
     suspend fun sendCommand(address: String, key: String, param: ByteArray = ByteArray(0)): Result<ByteArray> {
-        val executor = peripherals[address]?.executor
-            ?: return Result.failure(Exception("Executor not available for $address"))
+        val peripheral = peripherals[address]
+        val executor = peripheral?.executor
+        if (executor == null) {
+            val hint = if (peripheral?.deviceType == DeviceType.GH3220) {
+                "GH3220 设备无旧 RPC executor，命令/配置请走 ITLVC 新通路（sendGh3220Command / sendGh3220DriverConfig）"
+            } else {
+                "Executor not available for $address"
+            }
+            return Result.failure(Exception(hint))
+        }
         val meta = Gh3036CommandMeta.getCommandByKey(key)
         val format = meta?.requestFormat ?: return Result.failure(Exception("Unknown command: $key"))
         val hasResponse = meta.hasResponse

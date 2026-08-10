@@ -98,4 +98,17 @@ class FirmwareVersionResolverTest {
             ((bytes.size shr 8) and 0xFF).toByte()
         ) + bytes
     }
+
+    @Test
+    fun `GH3220 版本解析 0x19 verType len text`() = runBlocking {
+        val raw = byteArrayOf(0x01, 0x06) + "EVK_12".toByteArray()
+        val fetchRaw: suspend (Byte) -> ByteArray? = { if (it == 0x01.toByte()) raw else null }
+        assertEquals("EVK_12", resolveGh3220Version(fetchRaw))
+    }
+
+    @Test
+    fun `GH3220 版本读取失败返回 null`() = runBlocking {
+        val fetchRaw: suspend (Byte) -> ByteArray? = { null }
+        assertNull(resolveGh3220Version(fetchRaw))
+    }
 }

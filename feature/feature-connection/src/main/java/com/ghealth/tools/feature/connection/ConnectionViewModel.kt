@@ -8,6 +8,7 @@ import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.ConnectionError
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.connection.FirmwareVersionHolder
+import com.ghealth.tools.ble.gh3220.commands.RegisterCommands
 import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
@@ -34,10 +35,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Named
+
+private const val GH3220_DOWNLOAD_TIMEOUT_MS = 60_000L
 
 data class ConfigFileInfo(
     val fileName: String,
@@ -734,6 +738,45 @@ class ConnectionViewModel @Inject constructor(
                         "0x%04X=0x%04X".format(entry.addr, entry.value)
                     }
                 )
+
+                if (configInfo.chipName == DeviceType.GH3220.chipName) {
+                    // GH3220：0x1F 驱动配置下发（分包），协议无 download_config 开始/结束阶段命令。
+                    val blocks = registerConfig.registers.map { entry ->
+                        intArrayOf(
+                            (entry.addr shr 8) and 0xFF, entry.addr and 0xFF,
+                            (entry.value shr 8) and 0xFF, entry.value and 0xFF,
+                        )
+                    }
+                    val data = RegisterCommands.regArrayWrite(blocks)
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                registerConfigDownloadState = it.registerConfigDownloadState.copy(
+                                    activeStep = DownloadStep.WRITE_REGS
+                                )
+                            )
+                        }
+                    }
+                    val step1 = withTimeoutOrNull(GH3220_DOWNLOAD_TIMEOUT_MS) {
+                        connectionManager.sendGh3220DriverConfig(masterAddress, data, save = true)
+                    } ?: Result.failure(Exception("配置下发超时"))
+                    if (step1.isFailure) {
+                        throw IllegalStateException("配置下发失败: ${step1.exceptionOrNull()?.message}")
+                    }
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                registerConfigDownloadState = it.registerConfigDownloadState.copy(
+                                    status = DownloadStatus.COMPLETED,
+                                    activeStep = null,
+                                    completedSteps = setOf(DownloadStep.WRITE_REGS),
+                                    error = null
+                                )
+                            )
+                        }
+                    }
+                    return@launch
+                }
 
                 // Step 1: download_config stage 0
                 withContext(Dispatchers.Main) {
