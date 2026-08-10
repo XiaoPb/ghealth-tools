@@ -113,7 +113,12 @@ class Gh3220ItlvcBridgeTest {
         assertTrue(frames.all { it.funcId == GhFuncId.SPO2 })
         assertEquals(0, frames[0].frameCnt)
         assertEquals(1, frames[1].frameCnt)
-        assertContentEquals(intArrayOf(11), frames[0].rawdata)
-        assertContentEquals(intArrayOf(22), frames[1].rawdata)
+        // 多功能 0x0B：单通道帧按 channel 展开到 CH{0-31} 槽位（其余补 0），避免演示层通道列错位
+        val expectedRaw0 = IntArray(32).also { it[0] = 11 }
+        val expectedRaw1 = IntArray(32).also { it[2] = 22 }
+        assertContentEquals(expectedRaw0, frames[0].rawdata)
+        assertContentEquals(expectedRaw1, frames[1].rawdata)
+        assertContentEquals(IntArray(32), frames[0].agcInfo)
+        assertContentEquals(IntArray(16), frames[0].phyValue)
     }
 }
