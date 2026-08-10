@@ -99,6 +99,8 @@ class Gh3220BridgeLifecycleTest {
 
         collectJob.cancel()
         testScheduler.runCurrent()
+        // 会话仍存活：仅 manager 侧 collect Job 被取消，bridge 接收协程不受影响。
+        assertEquals(SessionState.CONNECTED, bridge.session.sessionState, "取消 collect Job 不影响会话状态")
 
         // bridge 仍 attach（接收协程存活），但 manager 侧 collect Job 已取消 → 不再转发到 ghFrameFlow。
         notify.emit(gh3220Frame())
