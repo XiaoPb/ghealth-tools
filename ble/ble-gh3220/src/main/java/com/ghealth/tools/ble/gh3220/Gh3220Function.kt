@@ -6,7 +6,7 @@ package com.ghealth.tools.ble.gh3220
  * 位定义来源于 C 端 `.claude/gh3220_protocol/c_to_mcu/demo_kernel_code/driver/inc/gh_drv.h`
  * 的 `GH3X2X_FUNC_OFFSET_*` / `GH3X2X_FUNCTION_*` 宏；
  * 位序与 0x0C/0x10/0x1C 的 function 字段（u32le 位掩码）、
- * 0x0B rawdata dataType 高 4bit Function ID（同源，位序即功能号）一致。
+ * 0x0B rawdata dataType 高 4bit Function ID 同源（4bit 仅可对应 bit0-15 功能号）。
  */
 enum class Gh3220Function(val bit: Int, val displayName: String) {
     ADT(0, "ADT"),

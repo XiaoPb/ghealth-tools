@@ -71,8 +71,8 @@ class Gh3220CommandMetaTest {
         assertEquals(1, meta.params.size)
         assertEquals(ParamType.U8, meta.params[0].type)
     }
-    @Test
 
+    @Test
     fun `function params of gh3220 control commands use func mode bits with zero default`() {
         val functionParam = { key: String ->
             Gh3220CommandMeta.getCommandByKey(key)!!.params.single { it.name == "function" }
@@ -482,4 +482,3 @@ class Gh3220CommandMetaTest {
         assertNotNull(validateGh3220Params(listOf(def), listOf("x")))
     }
 }
-
