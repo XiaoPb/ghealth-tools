@@ -1,0 +1,265 @@
+package com.ghealth.tools.feature.connection
+
+import com.ghealth.tools.ble.gh3220.Gh3220ProtocolClient
+import com.ghealth.tools.ble.gh3220.commands.BasicCommands
+import com.ghealth.tools.ble.protocol.gh3036.CommandGroup
+import com.ghealth.tools.ble.protocol.gh3036.CommandMeta
+import com.ghealth.tools.ble.protocol.gh3036.ParamType
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+
+class Gh3220CommandMetaTest {
+
+    private val expectedKeys = listOf(
+        "GH3220_GET_VERSION",
+        "GH3220_CONN_STATUS",
+        "GH3220_START_HBD",
+        "GH3220_READ_REG",
+        "GH3220_WORK_MODE",
+        "GH3220_RAW_SEND",
+        "GH3220_PACKAGE_TEST",
+        "GH3220_GSENSOR_SET",
+        "GH3220_FIFO_THRESHOLD",
+        "GH3220_EVENT_SET",
+        "GH3220_FUNC_MAP",
+        "GH3220_CHIP_RESET",
+        "GH3220_CALIBRATE_CURRENT",
+        "GH3220_SAMPLE_RATES",
+        "GH3220_SLOT_EN",
+        "GH3220_ECG_CTRL",
+        "GH3220_WORK_MODE_SET",
+        "GH3220_APP_MODULE",
+        "GH3220_SWITCH_CHIP",
+        "GH3220_REG_ARRAY_WRITE",
+    )
+
+    @Test
+    fun `meta covers core command set`() {
+        val keys = Gh3220CommandMeta.all.map { it.key }.toSet()
+        assertTrue("GH3220_GET_VERSION" in keys)
+        assertTrue("GH3220_CONN_STATUS" in keys)
+        assertTrue("GH3220_READ_REG" in keys)
+        assertTrue("GH3220_START_HBD" in keys)
+        assertTrue("GH3220_WORK_MODE" in keys)
+        assertTrue("GH3220_RAW_SEND" in keys)
+    }
+
+    @Test
+    fun `all command keys match planned full set and are unique`() {
+        assertEquals(expectedKeys, Gh3220CommandMeta.all.map { it.key })
+        assertEquals(expectedKeys.size, Gh3220CommandMeta.all.map { it.key }.toSet().size)
+    }
+
+    @Test
+    fun `get version meta has version type param`() {
+        val meta = Gh3220CommandMeta.getCommandByKey("GH3220_GET_VERSION")!!
+        assertEquals(1, meta.params.size)
+        assertEquals(ParamType.U8, meta.params[0].type)
+    }
+
+    @Test
+    fun `every command exposes executor and expects a response`() {
+        assertTrue(Gh3220CommandMeta.all.all { it.executor != null })
+        assertTrue(Gh3220CommandMeta.all.all { it.meta.hasResponse })
+    }
+
+    @Test
+    fun `group lookup returns only matching commands`() {
+        val register = Gh3220CommandMeta.getCommandsByGroup(CommandGroup.REGISTER).map { it.key }.toSet()
+        assertEquals(setOf("GH3220_READ_REG", "GH3220_REG_ARRAY_WRITE"), register)
+    }
+
+    @Test
+    fun `payload builder encodes get version`() {
+        val payload = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_GET_VERSION")!!,
+            listOf(0x01),
+        ).getOrThrow()
+        assertTrue(payload.contentEquals(byteArrayOf(0x01)))
+    }
+
+    @Test
+    fun `payload builder encodes conn status as empty body`() {
+        val payload = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_CONN_STATUS")!!,
+            emptyList(),
+        ).getOrThrow()
+        assertTrue(payload.isEmpty())
+    }
+
+    @Test
+    fun `payload builder encodes start hbd`() {
+        val payload = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_START_HBD")!!,
+            listOf(1, 2, 0x01020304L),
+        ).getOrThrow()
+        // on=启动(1) 编码为 0x00，mode=2，function u32le
+        assertArrayEquals(byteArrayOf(0x00, 0x02, 0x04, 0x03, 0x02, 0x01), payload)
+    }
+
+    @Test
+    fun `payload builder encodes read reg`() {
+        val payload = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_READ_REG")!!,
+            listOf(0x1234, 2),
+        ).getOrThrow()
+        assertArrayEquals(byteArrayOf(0x00, 0x02, 0x12, 0x34), payload)
+    }
+
+    @Test
+    fun `payload builder encodes raw send as type plus payload`() {
+        val payload = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_RAW_SEND")!!,
+            listOf(0x23, byteArrayOf(0x01, 0x02)),
+        ).getOrThrow()
+        assertArrayEquals(byteArrayOf(0x23, 0x01, 0x02), payload)
+    }
+
+    @Test
+    fun `payload builder encodes sample rates from raw bytes`() {
+        val payload = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_SAMPLE_RATES")!!,
+            listOf(byteArrayOf(0x11, 0x23)),
+        ).getOrThrow()
+        // 1 项：高 4bit=1，低 12bit=0x123 → 0x1123 → [0x11, 0x23]，前导 funcNum=0x01
+        assertArrayEquals(byteArrayOf(0x01, 0x11, 0x23), payload)
+    }
+
+    @Test
+    fun `payload builder encodes reg array write blocks`() {
+        val payload = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_REG_ARRAY_WRITE")!!,
+            listOf(byteArrayOf(0x00, 0x01, 0x12, 0x34)),
+        ).getOrThrow()
+        assertArrayEquals(byteArrayOf(0x00, 0x01, 0x12, 0x34), payload)
+    }
+
+    @Test
+    fun `payload builder rejects unknown key`() {
+        val unknown = Gh3220CommandMeta(
+            CommandMeta(
+                key = "GH3220_UNKNOWN",
+                displayName = "未知",
+                description = "测试用",
+                requestFormat = "",
+                params = emptyList(),
+                hasResponse = true,
+            ),
+        ) { _, _ -> Result.success(ByteArray(0)) }
+        assertTrue(Gh3220CommandPayloadBuilder.build(unknown, emptyList()).isFailure)
+    }
+
+    @Test
+    fun `payload builder rejects missing required params`() {
+        val result = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_GET_VERSION")!!,
+            emptyList(),
+        )
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `payload builder rejects wrong param type`() {
+        val result = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_GET_VERSION")!!,
+            listOf("0x01"),
+        )
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `payload builder rejects malformed sample rates bytes`() {
+        val result = Gh3220CommandPayloadBuilder.build(
+            Gh3220CommandMeta.getCommandByKey("GH3220_SAMPLE_RATES")!!,
+            listOf(byteArrayOf(0x01, 0x02, 0x03)),
+        )
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `get version executor maps version info to bytes`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        coEvery { client.getVersion(1) } returns Result.success(BasicCommands.VersionInfo(1, "AB"))
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_GET_VERSION")!!.executor(client, listOf(1))
+        assertTrue(result.isSuccess)
+        assertArrayEquals(byteArrayOf(0x01, 0x41, 0x42), result.getOrThrow())
+    }
+
+    @Test
+    fun `conn status executor maps int response to single byte`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        coEvery { client.getConnectionStatus() } returns Result.success(0)
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_CONN_STATUS")!!.executor(client, emptyList())
+        assertTrue(result.isSuccess)
+        assertArrayEquals(byteArrayOf(0x00), result.getOrThrow())
+    }
+
+    @Test
+    fun `read reg executor splits registers into big endian bytes`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        coEvery { client.readRegisters(0x1234, 1) } returns Result.success(intArrayOf(0x0A0B))
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_READ_REG")!!.executor(client, listOf(0x1234, 1))
+        assertTrue(result.isSuccess)
+        assertArrayEquals(byteArrayOf(0x0A, 0x0B), result.getOrThrow())
+    }
+
+    @Test
+    fun `start hbd executor converts form values to client args`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        coEvery { client.startHbd(any(), any(), any()) } returns Result.success(0)
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_START_HBD")!!.executor(client, listOf(1, 2, 3L))
+        assertTrue(result.isSuccess)
+        coVerify { client.startHbd(true, 2, 3L) }
+        assertArrayEquals(byteArrayOf(0x00), result.getOrThrow())
+    }
+
+    @Test
+    fun `sample rates executor parses raw bytes into pairs`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        coEvery { client.sampleRates(any()) } returns Result.success(0)
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_SAMPLE_RATES")!!.executor(
+            client,
+            listOf(byteArrayOf(0x11, 0x23)),
+        )
+        assertTrue(result.isSuccess)
+        coVerify { client.sampleRates(listOf(1 to 0x123)) }
+    }
+
+    @Test
+    fun `reg array write executor parses blocks and returns empty response`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        coEvery { client.regArrayWrite(any()) } returns Result.success(Unit)
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_REG_ARRAY_WRITE")!!.executor(
+            client,
+            listOf(byteArrayOf(0x00, 0x01, 0x12, 0x34)),
+        )
+        assertTrue(result.isSuccess)
+        assertTrue(result.getOrThrow().isEmpty())
+        coVerify {
+            client.regArrayWrite(match { blocks ->
+                blocks.size == 1 && blocks[0].contentEquals(intArrayOf(0x00, 0x01, 0x12, 0x34))
+            })
+        }
+    }
+
+    @Test
+    fun `raw send executor passes type and payload and returns raw response`() = runTest {
+        val client = mockk<Gh3220ProtocolClient>()
+        coEvery { client.sendRaw(any(), any()) } returns Result.success(byteArrayOf(0x7F))
+        val result = Gh3220CommandMeta.getCommandByKey("GH3220_RAW_SEND")!!.executor(
+            client,
+            listOf(0x23, byteArrayOf(0x01, 0x02)),
+        )
+        assertTrue(result.isSuccess)
+        assertArrayEquals(byteArrayOf(0x7F), result.getOrThrow())
+        coVerify {
+            client.sendRaw(eq(0x23), match { it.contentEquals(byteArrayOf(0x01, 0x02)) })
+        }
+    }
+}

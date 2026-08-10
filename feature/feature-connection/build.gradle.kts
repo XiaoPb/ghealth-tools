@@ -28,6 +28,7 @@ dependencies {
     implementation(project(":ble:ble-scanner"))
     implementation(project(":ble:ble-connection"))
     implementation(project(":ble:ble-protocol"))
+    implementation(project(":ble:ble-gh3220"))
     implementation(project(":feature:feature-factory"))
 
     implementation(platform(libs.compose.bom))
