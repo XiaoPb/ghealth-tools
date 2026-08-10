@@ -12,6 +12,7 @@ import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.WorkMode
 import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.network.ConfigPathProvider
 import com.ghealth.tools.core.storage.RecordingManager
@@ -164,6 +165,46 @@ class RegisterConfigDownloadTest {
         val state = viewModel.uiState.value.registerConfigDownloadState
         assertEquals(DownloadStatus.COMPLETED, state.status)
         assertEquals(setOf(DownloadStep.WRITE_REGS), state.completedSteps)
+        assertNull(state.error)
+    }
+
+    @Test
+    fun `mcu online reasserts 0x10 work mode after config download`() = runTest(dispatcher) {
+        val parser = mockk<RegisterConfigParser>(relaxed = true)
+        coEvery { parser.parseByChip(any(), eq("gh3220"), any()) } returns RegisterConfig(
+            listOf(RegEntry(0x33C0, 0x1234))
+        )
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220", parser = parser)
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendGh3220Command(any(), any(), any()) } returns
+            Result.success(ByteArray(0))
+
+        // 先进入 MCU online：应先复位 0x17
+        viewModel.setWorkMode(WorkMode.MCU_ONLINE)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            connectionManager.sendGh3220Command(
+                eq("AA:BB"), eq(0x17), match { it.contentEquals(byteArrayOf(0x5A)) }
+            )
+        }
+
+        // 配置下载完成后主动重发 0x10 mode=2 + 全功能位掩码
+        viewModel.selectRegisterConfigFile(writeConfig())
+        coEvery { connectionManager.sendGh3220RegArrayConfig("AA:BB", any(), onProgress = any()) } returns Result.success(Unit)
+
+        viewModel.executeRegisterConfigDownload()
+        awaitDownloadSettled(viewModel)
+
+        coVerify(exactly = 1) {
+            connectionManager.sendGh3220Command(
+                eq("AA:BB"), eq(0x10),
+                match { it.contentEquals(byteArrayOf(0x02, 0xFF.toByte(), 0xFF.toByte(), 0x0F, 0x00)) }
+            )
+        }
+        val state = viewModel.uiState.value.registerConfigDownloadState
+        assertEquals(DownloadStatus.COMPLETED, state.status)
         assertNull(state.error)
     }
 }

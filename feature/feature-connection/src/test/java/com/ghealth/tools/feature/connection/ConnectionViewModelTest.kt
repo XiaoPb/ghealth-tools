@@ -8,12 +8,15 @@ import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.connection.FirmwareVersionHolder
 import com.ghealth.tools.ble.connection.FirmwareVersionState
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_GET_MODE
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_CHIP_CTRL
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH_SET_WORK_MODE_CMD
 import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.rpccore.ProtocolError
 import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.WorkMode
 import com.ghealth.tools.core.network.ConfigPathProvider
 import com.ghealth.tools.core.storage.RecordingManager
 import com.ghealth.tools.feature.factory.parser.RegisterConfigParser
@@ -297,6 +300,100 @@ class ConnectionViewModelTest {
         assertEquals(false, executionState?.isExecuting)
         assertTrue(executionState?.error?.contains("Unknown GH3220 command") == true)
 
+        coVerify(exactly = 0) { connectionManager.sendGh3220Command(any(), any(), any()) }
+        coVerify(exactly = 0) { connectionManager.sendCommand(any(), any(), any()) }
+    }
+
+    @Test
+    fun `setWorkMode pass through sends real gh3036 work mode command`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3036")
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendCommand(any(), eq(KEY_GH_SET_WORK_MODE_CMD), any()) } returns
+            Result.success(ByteArray(0))
+
+        viewModel.setWorkMode(WorkMode.PASS_THROUGH)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            connectionManager.sendCommand(eq("AA:BB"), eq(KEY_GH_SET_WORK_MODE_CMD), match {
+                it.contentEquals(byteArrayOf(0x05))
+            })
+        }
+        coVerify(exactly = 0) { connectionManager.sendGh3220Command(any(), any(), any()) }
+        assertEquals(WorkMode.PASS_THROUGH, viewModel.uiState.value.currentWorkMode)
+    }
+
+    @Test
+    fun `setWorkMode pass through sends gh3220 0x10 with full function mask`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220")
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendGh3220Command(any(), any(), any()) } returns
+            Result.success(byteArrayOf(0x00))
+
+        viewModel.setWorkMode(WorkMode.PASS_THROUGH)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            connectionManager.sendGh3220Command(
+                eq("AA:BB"),
+                eq(0x10),
+                match { it.contentEquals(byteArrayOf(0x05, 0xFF.toByte(), 0xFF.toByte(), 0x0F, 0x00)) }
+            )
+        }
+        coVerify(exactly = 0) { connectionManager.sendCommand(any(), any(), any()) }
+        assertNull(viewModel.uiState.value.commandErrorToast)
+    }
+
+    @Test
+    fun `setWorkMode mcu online resets gh3220 chip via 0x17 first`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220")
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendGh3220Command(any(), any(), any()) } returns
+            Result.success(ByteArray(0))
+
+        viewModel.setWorkMode(WorkMode.MCU_ONLINE)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            connectionManager.sendGh3220Command(
+                eq("AA:BB"), eq(0x17), match { it.contentEquals(byteArrayOf(0x5A)) }
+            )
+        }
+        // 配置下载前不应直接下发 0x10
+        coVerify(exactly = 0) {
+            connectionManager.sendGh3220Command(eq("AA:BB"), eq(0x10), any())
+        }
+    }
+
+    @Test
+    fun `setWorkMode mcu online resets gh3036 chip via chip ctrl`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3036")
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendCommand(any(), eq(KEY_GH3X_CHIP_CTRL), any()) } returns
+            Result.success(ByteArray(0))
+
+        viewModel.setWorkMode(WorkMode.MCU_ONLINE)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            connectionManager.sendCommand(eq("AA:BB"), eq(KEY_GH3X_CHIP_CTRL), match {
+                it.contentEquals(byteArrayOf(0x5A))
+            })
+        }
+    }
+
+    @Test
+    fun `setWorkMode without master device shows toast and sends nothing`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220")
+
+        viewModel.setWorkMode(WorkMode.PASS_THROUGH)
+        advanceUntilIdle()
+
+        assertNotNull(viewModel.uiState.value.commandErrorToast)
         coVerify(exactly = 0) { connectionManager.sendGh3220Command(any(), any(), any()) }
         coVerify(exactly = 0) { connectionManager.sendCommand(any(), any(), any()) }
     }

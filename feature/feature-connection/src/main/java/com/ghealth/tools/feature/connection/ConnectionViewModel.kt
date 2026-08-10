@@ -8,10 +8,17 @@ import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.ConnectionError
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.ble.connection.FirmwareVersionHolder
+import com.ghealth.tools.ble.gh3220.Gh3220Cmd
+import com.ghealth.tools.ble.gh3220.Gh3220Function
+import com.ghealth.tools.ble.gh3220.commands.BasicCommands
+import com.ghealth.tools.ble.gh3220.commands.ConfigCommands
 import com.ghealth.tools.ble.gh3220.commands.RegisterCommands
 import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_CHIP_CTRL
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH_SET_WORK_MODE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
+import com.ghealth.tools.ble.protocol.rpccore.Package
 import com.ghealth.tools.ble.scanner.BleScanException
 import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.model.BleDevice
@@ -42,6 +49,13 @@ import javax.inject.Inject
 import javax.inject.Named
 
 private const val GH3220_DOWNLOAD_TIMEOUT_MS = 60_000L
+
+/** GH3220/GH3036 0x10 工作模式码（协议文档 §3.12 / gh3036 WORK_MODE_OPTIONS）。 */
+private const val GH_WORK_MODE_MCU_ONLINE = 2
+private const val GH_WORK_MODE_PASS_THROUGH = 5
+
+/** 0x17/KEY_GH3X_CHIP_CTRL 硬复位类型（协议文档 §3.19 / gh3036 CHIP_CTRL_OPTIONS）。 */
+private const val CHIP_HARD_RESET = 0x5A
 
 data class ConfigFileInfo(
     val fileName: String,
@@ -309,6 +323,98 @@ class ConnectionViewModel @Inject constructor(
         if (mode == WorkMode.PASS_THROUGH) {
             _uiState.update { it.copy(showFunctionDialog = true) }
         }
+        when (mode) {
+            WorkMode.MCU_ONLINE -> enterMcuOnline()
+            WorkMode.PASS_THROUGH -> switchWorkMode(mode)
+            // AUTO_PASS：协议无等价工作模式（EVK/APP/透传等均不等价），仅更新本地 UI 状态
+            WorkMode.AUTO_PASS -> Unit
+        }
+    }
+
+    /** 进入 MCU online：先复位芯片（0x17 0x5A 硬复位）；配置下载由“应用配置”入口执行，
+     *  下载完成后 [reassertWorkModeAfterConfig] 主动下发 0x10 mode=2 完成切换。 */
+    private fun enterMcuOnline() {
+        val masterAddress = currentMasterAddress()
+        if (masterAddress == null) {
+            showCommandErrorToast("未连接主设备，无法进入 MCU Online")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            sendChipReset(masterAddress).fold(
+                onSuccess = { Timber.i("MCU online: chip reset ok ($masterAddress)") },
+                onFailure = { showCommandErrorToast("MCU online 芯片复位失败：${userFriendlyCommandError(it, "芯片复位")}") },
+            )
+        }
+    }
+
+    /** 主动下发工作模式切换：GH3220 走 0x10（mode + function 位掩码），其余芯片走 GHSetWorkModeCmd。 */
+    private fun switchWorkMode(mode: WorkMode) {
+        val code = when (mode) {
+            WorkMode.MCU_ONLINE -> GH_WORK_MODE_MCU_ONLINE
+            WorkMode.PASS_THROUGH -> GH_WORK_MODE_PASS_THROUGH
+            WorkMode.AUTO_PASS -> return
+        }
+        val masterAddress = currentMasterAddress()
+        if (masterAddress == null) {
+            showCommandErrorToast("未连接主设备，无法切换工作模式")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            sendWorkModeCommand(masterAddress, code).fold(
+                onSuccess = { Timber.i("Work mode switched: mode=$mode code=$code ($masterAddress)") },
+                onFailure = { showCommandErrorToast("工作模式切换失败：${userFriendlyCommandError(it, "工作模式切换")}") },
+            )
+        }
+    }
+
+    private fun currentMasterAddress(): String? = _uiState.value.connectedDevices.entries
+        .find { it.value.role == DeviceRole.MASTER && it.value.state == ConnectionState.CONNECTED }
+        ?.key
+
+    private fun isGh3220Chip(): Boolean = _uiState.value.selectedChip == DeviceType.GH3220.chipName
+
+    /** 芯片复位：GH3220 走 0x17，其余芯片走 GH3X_ChipCtrl（同为 0x5A 硬复位）。 */
+    private suspend fun sendChipReset(masterAddress: String): Result<Unit> {
+        val raw = if (isGh3220Chip()) {
+            connectionManager.sendGh3220Command(
+                masterAddress, Gh3220Cmd.CHIP_CTRL, BasicCommands.chipCtrl(CHIP_HARD_RESET)
+            )
+        } else {
+            connectionManager.sendCommand(masterAddress, KEY_GH3X_CHIP_CTRL, Package.packU8(CHIP_HARD_RESET.toByte()))
+        }
+        return raw.mapCatching { validateStatus(it).getOrThrow() }
+    }
+
+    /** 工作模式切换：GH3220 走 0x10（function=全功能位掩码），其余芯片走 GHSetWorkModeCmd。 */
+    private suspend fun sendWorkModeCommand(masterAddress: String, code: Int): Result<Unit> {
+        val raw = if (isGh3220Chip()) {
+            connectionManager.sendGh3220Command(
+                masterAddress,
+                Gh3220Cmd.WORK_MODE,
+                ConfigCommands.workMode(code, Gh3220Function.allMask),
+            )
+        } else {
+            connectionManager.sendCommand(masterAddress, KEY_GH_SET_WORK_MODE_CMD, Package.packU8(code.toByte()))
+        }
+        return raw.mapCatching { validateStatus(it).getOrThrow() }
+    }
+
+    /** 命令响应校验：空响应视为已发送（GH3036 部分命令无响应）；非空取首字节，0=成功。 */
+    private fun validateStatus(raw: ByteArray): Result<Unit> {
+        if (raw.isEmpty()) return Result.success(Unit)
+        val status = raw[0].toInt() and 0xFF
+        return if (status == 0) Result.success(Unit)
+        else Result.failure(Exception("设备返回错误状态 $status"))
+    }
+
+    /** 配置下载完成后，若当前工作模式为 MCU Online，主动下发 0x10 mode=2（用户要求：
+     *  先复位芯片 → 配置下载 → 主动发送工作模式切换）。 */
+    private suspend fun reassertWorkModeAfterConfig(masterAddress: String) {
+        if (_uiState.value.currentWorkMode != WorkMode.MCU_ONLINE) return
+        sendWorkModeCommand(masterAddress, GH_WORK_MODE_MCU_ONLINE).fold(
+            onSuccess = { Timber.i("Work mode re-asserted to MCU online after config download") },
+            onFailure = { showCommandErrorToast("配置下载完成，但工作模式切换失败：${userFriendlyCommandError(it, "工作模式切换")}") },
+        )
     }
 
     fun setSelectedFunctions(functions: Set<FunctionMode>) {
@@ -775,6 +881,8 @@ class ConnectionViewModel @Inject constructor(
                             )
                         }
                     }
+                    // MCU online：配置下载完成后主动发送 0x10 mode=2（先复位→配置下载→切工作模式）
+                    reassertWorkModeAfterConfig(masterAddress)
                     return@launch
                 }
 
@@ -847,6 +955,8 @@ class ConnectionViewModel @Inject constructor(
                         )
                     }
                 }
+                // MCU online：配置下载完成后主动切换工作模式
+                reassertWorkModeAfterConfig(masterAddress)
             } catch (e: Exception) {
                 Timber.e(e, "Register config download failed")
                 withContext(Dispatchers.Main) {
