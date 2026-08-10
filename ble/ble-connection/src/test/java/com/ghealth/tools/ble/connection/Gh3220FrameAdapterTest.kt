@@ -7,6 +7,7 @@ import com.ghealth.tools.ble.protocol.gh3036.GhFuncId
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 /**
  * [Gh3220FrameAdapter] 帧桥映射测试：0x0B 分包/多通道帧槽位展开 + 单功能包直映射回归。
@@ -44,6 +45,8 @@ class Gh3220FrameAdapterTest {
 
     @Test
     fun `0x0B package maps each channel frame to gh func frame with slot expansion`() {
+        // 注：真实 0x0B 多功能是每包恰 1 个通道位、多包爆发（RawDataDecoder.decode0B 校验 multiFunction
+        // 时 activeChannels.size == 1）；此处为包级便利构造，一次覆盖 0/2 双通道槽位展开，不代表单包可携带多通道。
         val pkg = Gh3220RawDataPackage(
             dataType = 0x0B,
             funcId = 6,
@@ -136,6 +139,15 @@ class Gh3220FrameAdapterTest {
         assertContentEquals(expectedAgc, gh.agcInfo)
         // amb 仅 16 槽：channel=30 全部越界 → 全 0
         assertContentEquals(IntArray(16), gh.phyValue)
+    }
+
+    @Test
+    fun `negative channel slot expansion is rejected`() {
+        assertFailsWith<IllegalArgumentException> {
+            Gh3220FrameAdapter.toGhFuncFrame(
+                frame(frameId = 9, rawdata = intArrayOf(1), channel = -1),
+            )
+        }
     }
 
     @Test

@@ -73,6 +73,8 @@ class Gh3220ItlvcBridgeTest {
     @Test
     fun `toGhFuncFrames maps package frames with func id translation`() {
         val frames = Gh3220FrameAdapter.toGhFuncFrames(
+            // 注：真实 0x0B 多功能是每包恰 1 个通道位、多包爆发（RawDataDecoder.decode0B 校验 multiFunction
+            // 时 activeChannels.size == 1）；此处为包级便利构造，一次覆盖 0/2 双通道槽位展开，不代表单包可携带多通道。
             Gh3220RawDataPackage(
                 dataType = 0x0B,
                 funcId = 6,

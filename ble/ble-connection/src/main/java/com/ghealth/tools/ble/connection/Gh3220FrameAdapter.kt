@@ -62,8 +62,9 @@ object Gh3220FrameAdapter {
     fun toGhFuncFrames(pkg: Gh3220RawDataPackage): List<GhFuncFrame> =
         pkg.frames.map { toGhFuncFrame(it) }
 
-    /** 把本数组从 [channel] 槽位起顺次放入长度 [slotCount] 的槽位数组，越界截断，其余槽位为 0。 */
+    /** 把本数组从 [channel] 槽位起顺次放入长度 [slotCount] 的槽位数组，越界截断，其余槽位为 0；channel 必须非负。 */
     private fun IntArray.expandToChannelSlots(channel: Int, slotCount: Int): IntArray {
+        require(channel >= 0) { "channel must be non-negative: $channel" }
         val slots = IntArray(slotCount)
         for (i in indices) {
             val target = channel + i
