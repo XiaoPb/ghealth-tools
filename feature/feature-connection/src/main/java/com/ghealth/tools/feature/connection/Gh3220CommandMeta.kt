@@ -42,7 +42,9 @@ internal fun isSupportedParamValue(type: ParamType, value: Any): Boolean = when 
     ParamType.TIMESTAMP, ParamType.FUNC_MODE_BITS ->
         value is Number || value is UByte || value is UShort || value is UInt || value is ULong
     ParamType.U8_ARRAY -> value is ByteArray
-    ParamType.U16_ARRAY -> value is IntArray
+    // 同时接受 ShortArray（命令面板 U16_ARRAY 文本输入与 GH3036 CommandPayloadBuilder 均消费 ShortArray）
+    // 与 IntArray，供前瞻性 U16_ARRAY 命令使用。
+    ParamType.U16_ARRAY -> value is IntArray || value is ShortArray
 }
 
 /** 校验参数列表与参数定义：数量/必填/类型，返回错误描述或 null。PayloadBuilder 与 executor 包装层共用。 */
@@ -107,6 +109,11 @@ internal fun ByteArray.parseRegArrayBlocks(): Result<List<IntArray>> {
  * [executor] 入口由 companion 的 `command` 工厂统一按 [CommandMeta.params] 校验
  * （数量/必填/类型，数值类兼容有符号 Number 与 Kotlin 无符号整型），非法参数返回
  * [Result.failure] 而非抛异常，与 [Gh3220CommandPayloadBuilder] 的 failure 语义一致。
+ *
+ * 执行决策：命令面板（CommandPanelScreen）经 `Gh3220CommandSource.buildPayload` 编码 payload 后走
+ * `sendRaw` 原始字节通路（响应以 hex 展示，与 GH3036 面板体验一致）；[executor] 保留为程序化调用入口
+ * （Task 4 测试覆盖），面板不直接使用。两条路径共用同一批 ble-gh3220 编码器（BasicCommands /
+ * ConfigCommands / RegisterCommands），字节一致性由对拍测试锁定。
  *
  * [all] 清单顺序与计划一致：核心命令在前，其余命令按命令 ID 升序。
  */

@@ -229,6 +229,8 @@ private fun CommandCard(
     commandSource: CommandSource = Gh3036CommandSource
 ) {
     val paramValues = remember { mutableStateMapOf<String, Any>() }
+    // payload 编码异常（如必填参数缺失）在 onClick 内捕获展示，避免 Compose 外抛崩溃。
+    var buildError by remember { mutableStateOf<String?>(null) }
     val isRegWrite = command.key == "GH3X_RegsWriteCmd"
     val isRegRead = command.key == "GH3X_RegsReadCmd"
     var multiReg by remember { mutableStateOf(false) }
@@ -368,14 +370,19 @@ private fun CommandCard(
                     // Execute button
                     Button(
                         onClick = {
-                            val params = if (isRegWrite && multiReg) {
-                                CommandPayloadBuilder.buildMultiRegWriteParams(regPairs)
-                            } else if (isRegRead && multiReg) {
-                                CommandPayloadBuilder.buildMultiRegReadParams(readStartAddr, readCount)
-                            } else {
-                                commandSource.buildPayload(command, paramValues)
+                            buildError = null
+                            try {
+                                val params = if (isRegWrite && multiReg) {
+                                    CommandPayloadBuilder.buildMultiRegWriteParams(regPairs)
+                                } else if (isRegRead && multiReg) {
+                                    CommandPayloadBuilder.buildMultiRegReadParams(readStartAddr, readCount)
+                                } else {
+                                    commandSource.buildPayload(command, paramValues)
+                                }
+                                onExecute(params)
+                            } catch (e: Exception) {
+                                buildError = e.message ?: "参数编码失败"
                             }
-                            onExecute(params)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !executionState.isExecuting,
@@ -392,6 +399,16 @@ private fun CommandCard(
                         } else {
                             Text("执行命令")
                         }
+                    }
+
+                    // Payload 编码错误提示（红色，按钮下方）
+                    buildError?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
 
                     // Response
@@ -426,7 +443,7 @@ private fun ParamInput(
         // Multi-select func mode bits
         param.type == ParamType.FUNC_MODE_BITS -> {
             val selectedBits = remember { mutableStateMapOf<String, Boolean>() }
-            val funcBits = remember(chipName) { commandSource.getFuncModeBits(chipName).orEmpty() }
+            val funcBits = remember(chipName, commandSource) { commandSource.getFuncModeBits(chipName).orEmpty() }
             Column {
                 Text(
                     text = param.label,

@@ -1,9 +1,13 @@
 package com.ghealth.tools.feature.connection
 
+import com.ghealth.tools.ble.gh3220.Gh3220Payload
 import com.ghealth.tools.ble.gh3220.Gh3220ProtocolClient
 import com.ghealth.tools.ble.gh3220.commands.BasicCommands
+import com.ghealth.tools.ble.gh3220.commands.ConfigCommands
+import com.ghealth.tools.ble.gh3220.commands.RegisterCommands
 import com.ghealth.tools.ble.protocol.gh3036.CommandGroup
 import com.ghealth.tools.ble.protocol.gh3036.CommandMeta
+import com.ghealth.tools.ble.protocol.gh3036.CommandParamDef
 import com.ghealth.tools.ble.protocol.gh3036.ParamType
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -11,6 +15,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -395,5 +401,54 @@ class Gh3220CommandMetaTest {
         Gh3220CommandMeta.all.forEach { meta ->
             assertEquals(expected[meta.key], meta.type, "命令 ${meta.key} 的 type 应与协议文档命令 ID 一致")
         }
+    }
+
+    @Test
+    fun `payload builder bytes match low-level command encoders`() {
+        // 对拍测试：面板路径（buildPayload → sendRaw）与类型化 executor 路径共用同一批
+        // ble-gh3220 编码器，字节一致性由此测试锁定（代表性命令全覆盖）。
+        fun build(key: String, params: List<Any?>): ByteArray =
+            Gh3220CommandPayloadBuilder.build(Gh3220CommandMeta.getCommandByKey(key)!!, params).getOrThrow()
+
+        assertArrayEquals(
+            BasicCommands.getVersion(0x0B),
+            build("GH3220_GET_VERSION", listOf(0x0B)),
+        )
+        assertArrayEquals(
+            BasicCommands.startHbd(on = true, mode = 2, function = 0x01020304L),
+            build("GH3220_START_HBD", listOf(1, 2, 0x01020304L)),
+        )
+        assertArrayEquals(
+            RegisterCommands.regRead(0x1234, 2),
+            build("GH3220_READ_REG", listOf(0x1234, 2)),
+        )
+        assertArrayEquals(
+            ConfigCommands.workMode(5, 0x01020304L),
+            build("GH3220_WORK_MODE", listOf(5, 0x01020304L)),
+        )
+        assertArrayEquals(
+            ConfigCommands.slotEn(1, 0, 0x01020304L, on = true),
+            build("GH3220_SLOT_EN", listOf(1, 0, 0x01020304L, 1)),
+        )
+        assertArrayEquals(
+            ConfigCommands.sampleRates(listOf(1 to 0x123)),
+            build("GH3220_SAMPLE_RATES", listOf(byteArrayOf(0x11, 0x23))),
+        )
+        assertArrayEquals(
+            RegisterCommands.regArrayWrite(listOf(intArrayOf(0x00, 0x01, 0x12, 0x34))),
+            build("GH3220_REG_ARRAY_WRITE", listOf(byteArrayOf(0x00, 0x01, 0x12, 0x34))),
+        )
+        assertArrayEquals(
+            Gh3220Payload.u8(0x23) + byteArrayOf(0x01, 0x02),
+            build("GH3220_RAW_SEND", listOf(0x23, byteArrayOf(0x01, 0x02))),
+        )
+    }
+
+    @Test
+    fun `u16 array validation accepts short array like gh3036 panel`() {
+        val def = CommandParamDef(name = "regs", label = "寄存器", type = ParamType.U16_ARRAY)
+        assertNull(validateGh3220Params(listOf(def), listOf(shortArrayOf(0x01, 0x02))))
+        assertNull(validateGh3220Params(listOf(def), listOf(intArrayOf(0x01, 0x02))))
+        assertNotNull(validateGh3220Params(listOf(def), listOf("x")))
     }
 }

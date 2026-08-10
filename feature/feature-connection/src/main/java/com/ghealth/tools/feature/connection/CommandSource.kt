@@ -45,7 +45,13 @@ object Gh3036CommandSource : CommandSource {
         CommandPayloadBuilder.buildCommandParams(command, paramValues)
 }
 
-/** GH3220 命令源：委托 [Gh3220CommandMeta]，payload 经 [Gh3220CommandPayloadBuilder] 编码。 */
+/**
+ * GH3220 命令源：委托 [Gh3220CommandMeta]，payload 经 [Gh3220CommandPayloadBuilder] 编码。
+ *
+ * 执行决策：命令面板经 [buildPayload] → `sendRaw` 通路发送（响应原始字节以 hex 展示，
+ * 与 GH3036 面板体验一致）；[Gh3220CommandMeta.executor] 保留为程序化调用入口（Task 4 测试覆盖）。
+ * 两条路径共用同一批 ble-gh3220 编码器，字节一致性由对拍测试锁定。
+ */
 object Gh3220CommandSource : CommandSource {
     override fun getCommandsByGroup(group: CommandGroup): List<CommandMeta> =
         Gh3220CommandMeta.getCommandsByGroup(group).map { it.meta }
