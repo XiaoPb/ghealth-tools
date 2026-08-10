@@ -3,8 +3,14 @@ package com.ghealth.tools.ble.itlvc.core
 import com.ghealth.tools.ble.itlvc.codec.ItlvcFrame
 import com.ghealth.tools.ble.itlvc.codec.ItlvcFrameCodec
 import com.ghealth.tools.ble.itlvc.state.SessionState
+import com.ghealth.tools.ble.itlvc.transport.ByteTransport
 import com.ghealth.tools.ble.itlvc.transport.InMemoryTransport
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -20,6 +26,30 @@ class ItlvcSessionTest {
 
     private fun responseFrame(type: Int, value: ByteArray): ByteArray =
         codec.encode(ItlvcFrame(bytes(type), value))
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `response arriving during send is matched to pending command`() = runTest(UnconfinedTestDispatcher()) {
+        // 真机复现：设备响应 notify 先于 onCharacteristicWrite 回调到达（写入完成前），
+        // send() 内部直接注入响应帧，接收协程在 awaiting 挂载前就能处理到它。
+        val transport = object : ByteTransport {
+            private val rx = MutableSharedFlow<ByteArray>(extraBufferCapacity = 16)
+            override val receive: Flow<ByteArray> = rx
+            override val mtu: Int = 240
+            override fun send(data: ByteArray): Result<Unit> {
+                rx.tryEmit(responseFrame(0x1A, bytes(0x00)))
+                return Result.success(Unit)
+            }
+        }
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+
+        val result = session.execute(connSpec, ByteArray(0))
+
+        assertTrue(result.isSuccess, "result: $result")
+        assertTrue(result.getOrThrow().contentEquals(bytes(0x00)))
+        session.detach()
+    }
 
     @Test
     fun `command roundtrip over in-memory transport`() = runTest {
@@ -203,5 +233,36 @@ class ItlvcSessionTest {
         assertTrue(cancelled)
         session.detach()
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `cancellation during send clears awaiting so same-type frame routes to report handler`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val rx = MutableSharedFlow<ByteArray>(extraBufferCapacity = 16)
+            val transport = object : ByteTransport {
+                override val receive: Flow<ByteArray> = rx
+                override val mtu: Int = 240
+                override fun send(data: ByteArray): Result<Unit> {
+                    throw CancellationException("send cancelled (test)")
+                }
+            }
+            val session = ItlvcSession(codec, ItlvcConfig())
+            session.attach(transport, this)
+            val reports = mutableListOf<Int>()
+            session.registerReportHandler(bytes(0x1A)) { frame -> reports.add(frame.value.size) }
+
+            val outcome = try {
+                session.execute(connSpec, ByteArray(0))
+                "no-throw"
+            } catch (e: CancellationException) {
+                "cancelled"
+            }
+
+            assertEquals("cancelled", outcome)
+            // 取消后 awaiting 必须已被清理：同类型帧应路由到 report handler，而不是被吞掉
+            rx.tryEmit(responseFrame(0x1A, bytes(0x00)))
+            assertEquals(listOf(1), reports)
+            session.detach()
+        }
 
 }

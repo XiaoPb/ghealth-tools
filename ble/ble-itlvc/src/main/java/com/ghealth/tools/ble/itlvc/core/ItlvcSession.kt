@@ -126,14 +126,22 @@ class ItlvcSession(
         var retriesLeft = spec.retryCount
         while (true) {
             cmd.stateMachine.onSent()
-            val sendResult = sendFrame(spec.type, payload)
+            // 发送前挂载 awaiting：设备只在收到请求后才回响应，响应若在写入完成前到达也能被匹配；
+            // 同类型上报帧在发送窗口内会被当作响应消费（类型匹配语义，已知限制）。
+            awaiting = cmd
+            val sendResult = try {
+                sendFrame(spec.type, payload)
+            } catch (e: CancellationException) {
+                if (awaiting === cmd) awaiting = null
+                throw e
+            }
             if (sendResult.isFailure) {
+                if (awaiting === cmd) awaiting = null
                 cmd.stateMachine.onFailure()
                 val error = sendResult.exceptionOrNull() ?: ItlvcError.TransportError("send failed")
                 _events.emit(ItlvcEvent.CommandCompleted(spec.type, Result.failure(error)))
                 return Result.failure(error)
             }
-            awaiting = cmd
             val response = try {
                 withTimeout(spec.timeoutMs) { cmd.completion.await() }
             } catch (e: TimeoutCancellationException) {
