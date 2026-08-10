@@ -131,6 +131,7 @@ data class Gh3220CommandMeta(
 
     companion object {
         // ── 选项常量（值参考 .claude/gh3220_protocol/gh3220 protocol.md，真机待验证）──
+        // 功能位定义以 ble-gh3220 `Gh3220Function`（C 端宏映射）为准。
 
         /** 0x19 获取版本类型（协议文档 §3.21；0x00 与 0x01 等价，此处取 0x01）。 */
         val VERSION_TYPE_OPTIONS: List<CommandParamDef.OptionItem> = listOf(
@@ -288,8 +289,9 @@ data class Gh3220CommandMeta(
                     ),
                     CommandParamDef(
                         name = "function",
-                        label = "功能位",
-                        type = ParamType.U32,
+                        label = "功能选择",
+                        type = ParamType.FUNC_MODE_BITS,
+                        description = "按 C 端 GH3X2X_FUNCTION_* 宏映射（ADT=bit0 … LEAD_DET=bit19），多选；0=无功能",
                         defaultValue = 0L,
                     ),
                 ),
@@ -330,8 +332,9 @@ data class Gh3220CommandMeta(
                     ),
                     CommandParamDef(
                         name = "function",
-                        label = "功能位",
-                        type = ParamType.U32,
+                        label = "功能选择",
+                        type = ParamType.FUNC_MODE_BITS,
+                        description = "按 C 端 GH3X2X_FUNCTION_* 宏映射（ADT=bit0 … LEAD_DET=bit19），多选；0=无功能",
                         defaultValue = 0L,
                     ),
                 ),
@@ -511,7 +514,13 @@ data class Gh3220CommandMeta(
                 params = listOf(
                     CommandParamDef(name = "slotEn", label = "Slot", type = ParamType.U8),
                     CommandParamDef(name = "addCmd", label = "附加命令", type = ParamType.U8, defaultValue = 0),
-                    CommandParamDef(name = "function", label = "功能位", type = ParamType.U32, defaultValue = 0L),
+                    CommandParamDef(
+                        name = "function",
+                        label = "功能选择",
+                        type = ParamType.FUNC_MODE_BITS,
+                        description = "按 C 端 GH3X2X_FUNCTION_* 宏映射（ADT=bit0 … LEAD_DET=bit19），多选；0=无功能",
+                        defaultValue = 0L,
+                    ),
                     CommandParamDef(name = "on", label = "开关", type = ParamType.U8, options = ON_OFF_OPTIONS),
                 ),
                 responseFormat = STATUS_RESPONSE_FORMAT,

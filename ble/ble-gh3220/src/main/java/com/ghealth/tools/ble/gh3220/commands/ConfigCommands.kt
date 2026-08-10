@@ -5,7 +5,7 @@ import com.ghealth.tools.ble.gh3220.Gh3220Payload
 /** 配置类命令（0x10/0x11/0x12/0x13/0x15/0x1B/0x1C/0x1D/0x1E）payload 编解码。 */
 object ConfigCommands {
 
-    /** 0x10 工作模式：[mode][function u32le]。 */
+    /** 0x10 工作模式：[mode][function u32le]；function 为 GH3220 功能位掩码（u32le），位定义见 Gh3220Function（C 端 GH3X2X_FUNCTION_* 宏）。 */
     fun workMode(mode: Int, function: Long): ByteArray =
         Gh3220Payload.u8(mode) + Gh3220Payload.u32le(function)
 
@@ -49,7 +49,7 @@ object ConfigCommands {
         return Gh3220Payload.u8(entries.size) + body
     }
 
-    /** 0x1C 切换 SlotEn：[slotEn][附加命令][function u32le][onOff]。 */
+    /** 0x1C 切换 SlotEn：[slotEn][附加命令][function u32le][onOff]；function 为 GH3220 功能位掩码（u32le），位定义见 Gh3220Function（C 端 GH3X2X_FUNCTION_* 宏）。 */
     fun slotEn(slotEn: Int, addCmd: Int, function: Long, on: Boolean): ByteArray =
         Gh3220Payload.u8(slotEn) + Gh3220Payload.u8(addCmd) +
             Gh3220Payload.u32le(function) + Gh3220Payload.u8(if (on) 0 else 1)

@@ -32,7 +32,7 @@ object BasicCommands {
     /** 0x1A 查询连接状态：无 payload；响应 1 字节（0=已连接 / 1=未连接）。 */
     fun getConnStatus(): ByteArray = ByteArray(0)
 
-    /** 0x0C 启动 HBD：[onOff][mode][function u32le]。 */
+    /** 0x0C 启动 HBD：[onOff][mode][function u32le]；function 为 GH3220 功能位掩码（u32le），位定义见 Gh3220Function（C 端 GH3X2X_FUNCTION_* 宏）。 */
     fun startHbd(on: Boolean, mode: Int, function: Long): ByteArray =
         Gh3220Payload.u8(if (on) 0 else 1) + Gh3220Payload.u8(mode) + Gh3220Payload.u32le(function)
 
