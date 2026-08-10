@@ -596,8 +596,11 @@ class ConnectionViewModel @Inject constructor(
                 val projectId = userPreferences.selectedProjectId.first() ?: 0
                 val projectName = userPreferences.selectedProjectName.first() ?: ""
                 val userInfo = userPreferences.userInfo.first()
+                val sessionChip = masterDevice.deviceType?.chipName ?: _uiState.value.selectedChip
+                Timber.i("Test started: chip=$sessionChip (deviceType=${masterDevice.deviceType}, selected=${_uiState.value.selectedChip})")
                 recordingManager.startSession(
                     config = config,
+                    chip = sessionChip,
                     masterDeviceName = masterDevice.name ?: "Unknown",
                     masterDeviceAddress = masterDevice.address,
                     slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },
@@ -625,7 +628,7 @@ class ConnectionViewModel @Inject constructor(
                 )
             )
         }
-        Timber.i("Test started: tester=${config.testerName}, scenario=${config.scenario}, round=${config.testRound}")
+        Timber.i("Test started: tester=${config.testerName}, scenario=${config.scenario}, round=${config.testRound}, chip=${masterDevice?.deviceType?.chipName ?: _uiState.value.selectedChip}")
     }
 
     fun dismissTestConfigDialog() {

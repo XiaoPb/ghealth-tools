@@ -14,8 +14,12 @@ import com.ghealth.tools.ble.protocol.rpccore.ParseResult
 import com.ghealth.tools.ble.protocol.rpccore.ProtocolError
 import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.datastore.BlePreferences
+import com.ghealth.tools.core.datastore.UserInfo
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.DeviceType
+import com.ghealth.tools.core.model.TestConfig
+import com.ghealth.tools.core.model.TestScenario
 import com.ghealth.tools.core.model.WorkMode
 import com.ghealth.tools.core.network.ConfigPathProvider
 import com.ghealth.tools.core.storage.RecordingManager
@@ -51,6 +55,8 @@ class ConnectionViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
 
+    private lateinit var recordingManagerMock: RecordingManager
+
     @BeforeEach
     fun setUp() {
         Dispatchers.setMain(dispatcher)
@@ -79,6 +85,7 @@ class ConnectionViewModelTest {
         every { firmwareVersionHolder.state } returns MutableStateFlow(FirmwareVersionState())
 
         val recordingManager = mockk<RecordingManager>(relaxed = true)
+        recordingManagerMock = recordingManager
 
         val blePreferences = mockk<BlePreferences>(relaxed = true)
         every { blePreferences.autoReconnect } returns flowOf(false)
@@ -87,6 +94,9 @@ class ConnectionViewModelTest {
         every { blePreferences.selectedChip } returns flowOf(chip)
 
         val userPreferences = mockk<UserPreferences>(relaxed = true)
+        every { userPreferences.selectedProjectId } returns flowOf(0)
+        every { userPreferences.selectedProjectName } returns flowOf("")
+        every { userPreferences.userInfo } returns flowOf(UserInfo(username = "tester"))
         val registerConfigParser = mockk<RegisterConfigParser>(relaxed = true)
         val configPathProvider = mockk<ConfigPathProvider>(relaxed = true)
 
@@ -114,6 +124,41 @@ class ConnectionViewModelTest {
             )
         )
         advanceUntilIdle()
+    }
+
+    @Test
+    fun `confirmTestConfig passes master device chip to recording session`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220")
+        devicesFlow.value = mapOf(
+            "AA:BB" to ConnectedDevice(
+                address = "AA:BB",
+                name = "TestDevice",
+                role = DeviceRole.MASTER,
+                state = ConnectionState.CONNECTED,
+                deviceType = DeviceType.GH3220
+            )
+        )
+        advanceUntilIdle()
+
+        viewModel.confirmTestConfig(
+            TestConfig(testerName = "tester", scenario = TestScenario.RESTING, testRound = 1)
+        )
+        advanceUntilIdle()
+
+        coVerify {
+            recordingManagerMock.startSession(
+                config = TestConfig(testerName = "tester", scenario = TestScenario.RESTING, testRound = 1),
+                chip = "gh3220",
+                masterDeviceName = "TestDevice",
+                masterDeviceAddress = "AA:BB",
+                slaveDevices = emptyMap(),
+                compareDeviceNames = emptyList(),
+                compareDeviceAddresses = emptyList(),
+                projectName = "",
+                projectId = 0,
+                username = "tester"
+            )
+        }
     }
 
     @Test

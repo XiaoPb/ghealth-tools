@@ -149,6 +149,9 @@ class DemoViewModel @Inject constructor(
             blePreferences.effectiveChip.map { chipName ->
                 DeviceType.entries.find { it.chipName == chipName } ?: DeviceType.GH3036
             }.collect { deviceType ->
+                if (_uiState.value.chipType != deviceType) {
+                    Log.d("DemoViewModel", "Chip synced from effectiveChip: ${_uiState.value.chipType.chipName} -> ${deviceType.chipName}")
+                }
                 _uiState.update { it.copy(chipType = deviceType) }
             }
         }
@@ -437,6 +440,10 @@ class DemoViewModel @Inject constructor(
                 null -> StorageDeviceRole.MASTER
             }
             val chipType = _uiState.value.chipType
+            val sessionChip = recordingManager.activeSessionChip
+            if (sessionChip != null && sessionChip != chipType.chipName) {
+                Log.w("DemoViewModel", "CSV chip mismatch: frame mapped as ${chipType.chipName} but session rule is $sessionChip (columns may be dropped/misaligned)")
+            }
             recordingManager.writeFrame(deviceAddress, funcMode.name, frame.toColumnMap(funcMode, chipType), role)
         }
     }
@@ -468,6 +475,7 @@ class DemoViewModel @Inject constructor(
         if (_uiState.value.chipType != detectedType) {
             val selected = _uiState.value.selectedFunction
             val cols = if (selected != null) buffers.availableColumns(selected, detectedType) else emptyList()
+            Log.d("DemoViewModel", "Chip re-detected from master device: ${_uiState.value.chipType.chipName} -> ${detectedType.chipName} (deviceType=${masterDevice?.deviceType})")
             _uiState.update { it.copy(chipType = detectedType, availableColumns = cols) }
         }
     }
@@ -507,9 +515,9 @@ class DemoViewModel @Inject constructor(
                 fillRangeCached(map, cache, "ALGO_RESULT", 0, 15, algoData)
                 fillRangeCached(map, cache, "AGC_INFO_CH", 0, 31, agcInfo)
                 fillRangeCached(map, cache, "AMB_CH", 0, 15, phyValue)
-                putCached(map, cache, "GYRO_X", null)
-                putCached(map, cache, "GYRO_Y", null)
-                putCached(map, cache, "GYRO_Z", null)
+                putCached(map, cache, "GYRO_X", gyro.getOrNull(0))
+                putCached(map, cache, "GYRO_Y", gyro.getOrNull(1))
+                putCached(map, cache, "GYRO_Z", gyro.getOrNull(2))
                 // CH16-31 is a literal column name (not expanded)
                 putCached(map, cache, "CH16-31", null)
                 fillRangeCached(map, cache, "CAP_CH", 0, 3, null)
@@ -586,9 +594,11 @@ class DemoViewModel @Inject constructor(
             it.role == DeviceRole.SLAVE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED
         }
         if (masterDevice != null) {
+            val sessionChip = masterDevice.deviceType?.chipName ?: _uiState.value.chipType.chipName
+            Log.i("DemoViewModel", "Recording session started from demo page: chip=$sessionChip (masterDevice.deviceType=${masterDevice.deviceType}, uiState.chipType=${_uiState.value.chipType.chipName})")
             recordingManager.startSession(
                 config = config,
-                chip = _uiState.value.chipType.chipName,
+                chip = sessionChip,
                 masterDeviceName = masterDevice.name ?: "Unknown",
                 masterDeviceAddress = masterDevice.address,
                 slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },

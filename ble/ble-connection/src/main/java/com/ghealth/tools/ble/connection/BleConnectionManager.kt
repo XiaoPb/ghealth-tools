@@ -986,6 +986,7 @@ class BleConnectionManager @Inject constructor(
     private suspend fun createExecutor(address: String): Pair<GHealthExecutor?, DeviceType> {
         val chipName = blePreferences.effectiveChip.first()
         val deviceType = DeviceType.entries.find { it.chipName == chipName } ?: DeviceType.GH3036
+        Timber.i("createExecutor: effectiveChip=$chipName -> deviceType=${deviceType.name}")
         if (deviceType == DeviceType.GH3220) {
             // 新 ITLVC 通路：不创建旧 RPC Gh3220Executor；bridge 在 validateServices 接线处创建。
             return null to deviceType

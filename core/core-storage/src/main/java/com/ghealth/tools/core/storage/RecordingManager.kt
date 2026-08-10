@@ -43,6 +43,9 @@ class RecordingManager @Inject constructor(
 
     private var sessionDate: Date = Date()
     private var currentConfig: SessionConfig? = null
+
+    /** 当前会话使用的 chip（规则来源）。为 null 表示无活动会话。 */
+    val activeSessionChip: String? get() = currentConfig?.chip
     private var currentProjectName: String = ""
     private var currentProjectId: Int = 0
     private var currentUsername: String = ""
@@ -114,6 +117,7 @@ class RecordingManager @Inject constructor(
         _isSessionActive.value = true
 
         val numCompare = compareDeviceAddresses.size
+        Timber.i("Recording session started: chip=$chip, scenario=${config.scenario.name}, tester=${config.testerName}, master=$masterDeviceName, compare=$numCompare")
 
         for (mode in FunctionMode.entries) {
             val channel = Channel<WriteTask>(CHANNEL_CAPACITY)
@@ -342,6 +346,7 @@ class RecordingManager @Inject constructor(
         } else {
             CsvRuleParser.forChip(cfg.chip)
         }
+        Timber.d("Server writer rule: chip=${cfg.chip}, compare=${cfg.compareNames.size}, columns=${rule.columns.size}")
 
         val path = StoragePath(
             mode = mode,
