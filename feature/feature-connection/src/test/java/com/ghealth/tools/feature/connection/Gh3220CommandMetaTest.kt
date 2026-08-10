@@ -172,8 +172,8 @@ class Gh3220CommandMetaTest {
             Gh3220CommandMeta.getCommandByKey("GH3220_START_HBD")!!,
             listOf(1, 2, 0x01020304L),
         ).getOrThrow()
-        // on=启动(1) 编码为 0x00，mode=2，function u32le
-        assertArrayEquals(byteArrayOf(0x00, 0x02, 0x04, 0x03, 0x02, 0x01), payload)
+        // on=启动(1) 编码为 0x00，mode=2，slotEn 占位 0x00，function u32le（C 端 7B 布局）
+        assertArrayEquals(byteArrayOf(0x00, 0x02, 0x00, 0x04, 0x03, 0x02, 0x01), payload)
     }
 
     @Test

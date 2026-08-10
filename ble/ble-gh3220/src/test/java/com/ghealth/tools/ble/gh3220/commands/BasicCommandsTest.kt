@@ -46,9 +46,10 @@ class BasicCommandsTest {
     }
 
     @Test
-    fun `start hbd payload little-endian function`() {
+    fun `start hbd payload is 7 bytes with slot_en placeholder and little-endian function`() {
+        // C 端布局 [onOff][mode][slotEn=0][function u32le]：6B 会读到残留字节导致设备返回 1=失败
         assertContentEquals(
-            byteArrayOf(0x00, 0x00, 0x01, 0x00, 0x00, 0x00),
+            byteArrayOf(0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00),
             BasicCommands.startHbd(on = true, mode = 0, function = 0x01),
         )
     }

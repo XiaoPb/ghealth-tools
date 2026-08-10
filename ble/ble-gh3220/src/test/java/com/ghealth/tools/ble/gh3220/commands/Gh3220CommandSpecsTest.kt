@@ -44,7 +44,7 @@ class Gh3220CommandSpecsTest {
         )
         session.attach(transport, this)
 
-        val blocked = session.execute(Gh3220CommandSpecs.START_CTRL, byteArrayOf(0x00, 0x00, 0x01, 0x00, 0x00, 0x00))
+        val blocked = session.execute(Gh3220CommandSpecs.START_CTRL, byteArrayOf(0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00))
         assertTrue(blocked.isFailure)
         assertIs<ItlvcError.CommandError.Unsupported>(blocked.exceptionOrNull())
         assertEquals(0, transport.sent.size)

@@ -32,9 +32,12 @@ object BasicCommands {
     /** 0x1A 查询连接状态：无 payload；响应 1 字节（0=已连接 / 1=未连接）。 */
     fun getConnStatus(): ByteArray = ByteArray(0)
 
-    /** 0x0C 启动 HBD：[onOff][mode][function u32le]；function 为 GH3220 功能位掩码（u32le），位定义见 Gh3220Function（C 端 GH3X2X_FUNCTION_* 宏）。 */
+    /** 0x0C 启动 HBD（设备端 7B 布局）：[onOff][mode][slotEn][function u32le]。
+     *  C 端 gh_uprotocol.h：SLOT_EN_INDEX=2（占位，处理器未使用）、FUNCTION_INDEX=3..6。
+     *  注意：协议文档 §3.8 写作 6B（无 slot_en）；若按 6B 下发，设备端会读上一包残留字节作
+     *  function 高位 → 必然返回 1=失败（2026-08-10 真机复现）。function 位定义见 Gh3220Function。 */
     fun startHbd(on: Boolean, mode: Int, function: Long): ByteArray =
-        Gh3220Payload.u8(if (on) 0 else 1) + Gh3220Payload.u8(mode) + Gh3220Payload.u32le(function)
+        Gh3220Payload.u8(if (on) 0 else 1) + Gh3220Payload.u8(mode) + Gh3220Payload.u8(0) + Gh3220Payload.u32le(function)
 
     /** 0x17 Cardiff 复位：[resetType]。 */
     fun chipCtrl(resetType: Int): ByteArray = Gh3220Payload.u8(resetType)
