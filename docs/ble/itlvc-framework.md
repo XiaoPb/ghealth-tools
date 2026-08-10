@@ -57,3 +57,17 @@ flowchart TB
 - 接收：RX Notify 回调 → `Flow<ByteArray>` → 会话接收协程逐块喂入接收状态机；不轮询读。
 - 发送：`ByteTransport.send(bytes)` 串行写入 TX 特征；`mtu` 供分片参考。
 - 测试：`InMemoryTransport` 注入分片/粘包/断连场景。
+
+## NotifyTransport 接入指南（BLE 接入期）
+
+- `NotifyTransport(notifyFlow, writer, mtu)` 实现 `ByteTransport`：接收 = BLE 连接层把 RX 特征
+  Notify 回调发射为 `Flow<ByteArray>`；发送 = 委托 `writer` 写 TX 特征。
+- 装配示例（连接层接线属 Phase 6，此处为框架侧契约）：
+
+```kotlin
+val transport = NotifyTransport(bleNotifyFlow, bleWriter, mtu = 240)
+session.attach(transport, scope)
+client.attach()
+```
+
+- 会话接收协程逐块喂入 `ReceiveStateMachine`，天然支持一帧跨多次 Notify（分片）与一次 Notify 多帧（粘包）。
