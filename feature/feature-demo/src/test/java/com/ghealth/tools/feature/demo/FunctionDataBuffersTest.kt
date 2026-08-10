@@ -12,6 +12,7 @@ class FunctionDataBuffersTest {
     private fun frame(
         algoData: IntArray = IntArray(0),
         rawdata: IntArray = IntArray(0),
+        agcInfo: IntArray = IntArray(0),
         phyValue: IntArray = IntArray(0),
         gsData: IntArray = IntArray(0),
         frameCnt: Int = 0
@@ -21,6 +22,7 @@ class FunctionDataBuffersTest {
         this.phyValue = phyValue
         this.gsData = gsData
         this.algoData = algoData
+        this.agcInfo = agcInfo
     }
 
     @Test
@@ -169,5 +171,53 @@ class FunctionDataBuffersTest {
         buffers.addFrame(FunctionMode.HR, frame(rawdata = IntArray(2), frameCnt = 1))
         buffers.clear()
         assertEquals(emptyList<String>(), buffers.availableColumns(FunctionMode.HR, DeviceType.GH3036))
+    }
+
+    @Test
+    fun `gh3220 mapped frame fills CH and AGC columns`() {
+        val buffers = FunctionDataBuffers(capacity = 8)
+        // 环形缓冲语义：每次 addFrame 每通道只追加 1 个点；两帧后 CH/ALGO_RESULT/ACC 历史长度均为 2。
+        // agcInfo/phyValue 仅随帧携带（CSV 列），不产生 AGC_INFO_CH/AMB_CH 波形列（Task 7 范围外）。
+        buffers.addFrame(
+            FunctionMode.ADT,
+            frame(
+                rawdata = intArrayOf(0x01020304, 0x05060708),
+                agcInfo = intArrayOf(0x010203),
+                phyValue = intArrayOf(0x0A, 0x0B),
+                algoData = intArrayOf(0xDEADBEEF.toInt()),
+                gsData = intArrayOf(1, 2, 3),
+                frameCnt = 1,
+            )
+        )
+        buffers.addFrame(
+            FunctionMode.ADT,
+            frame(
+                rawdata = intArrayOf(0x11121314, 0x15161718),
+                agcInfo = intArrayOf(0x040506),
+                phyValue = intArrayOf(0x0C, 0x0D),
+                algoData = intArrayOf(0xCAFEBABE.toInt()),
+                gsData = intArrayOf(4, 5, 6),
+                frameCnt = 2,
+            )
+        )
+
+        assertEquals(2, buffers.getColumn(FunctionMode.ADT, "CH0").size)
+        assertEquals(2, buffers.getColumn(FunctionMode.ADT, "CH1").size)
+        assertEquals(2, buffers.getColumn(FunctionMode.ADT, "ALGO_RESULT0").size)
+        assertEquals(2, buffers.getColumn(FunctionMode.ADT, "ACCX").size)
+        // 帧桥展开后的 CH 列按帧追加，值与 rawdata 槽位一致（Int→Float 同源转换，避免舍入误差）
+        assertEquals(
+            listOf(0x01020304.toFloat(), 0x11121314.toFloat()),
+            buffers.getColumn(FunctionMode.ADT, "CH0"),
+        )
+        assertEquals(
+            listOf(0x05060708.toFloat(), 0x15161718.toFloat()),
+            buffers.getColumn(FunctionMode.ADT, "CH1"),
+        )
+        assertEquals(
+            listOf(0xDEADBEEF.toInt().toFloat(), 0xCAFEBABE.toInt().toFloat()),
+            buffers.getColumn(FunctionMode.ADT, "ALGO_RESULT0"),
+        )
+        assertEquals(listOf(1f, 4f), buffers.getColumn(FunctionMode.ADT, "ACCX"))
     }
 }
