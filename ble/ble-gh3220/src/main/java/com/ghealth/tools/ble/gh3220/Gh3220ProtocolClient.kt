@@ -12,6 +12,7 @@ import com.ghealth.tools.ble.gh3220.event.Gh3220SlaveLog
 import com.ghealth.tools.ble.gh3220.event.ReportDecoder
 import com.ghealth.tools.ble.gh3220.flow.DriverConfigFlow
 import com.ghealth.tools.ble.gh3220.flow.FwUpgradeFlow
+import com.ghealth.tools.ble.gh3220.flow.RegArrayConfigFlow
 import com.ghealth.tools.ble.gh3220.rawdata.Gh3220FifoReport
 import com.ghealth.tools.ble.gh3220.rawdata.Gh3220RawDataFrame
 import com.ghealth.tools.ble.gh3220.rawdata.Gh3220RawDataPackage
@@ -228,4 +229,7 @@ class Gh3220ProtocolClient(
 
     /** 0x1F 驱动配置下发流程。 */
     fun driverConfig(): DriverConfigFlow = DriverConfigFlow(session)
+
+    /** 0xA1 寄存器数组配置下发流程。 */
+    fun regArrayConfig(): RegArrayConfigFlow = RegArrayConfigFlow(session)
 }
