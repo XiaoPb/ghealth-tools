@@ -192,6 +192,11 @@ class BleConnectionManager @Inject constructor(
     private val userDisconnectingAddresses = Collections.synchronizedSet(mutableSetOf<String>())
     private val suppressDisconnectErrorAddresses = Collections.synchronizedSet(mutableSetOf<String>())
     private val connectJobs = ConcurrentHashMap<String, Job>()
+    /**
+     * GH3220 rawdataFrames collect Job 句柄（按地址）：断连收尾（[onDeviceDisconnected]）时随
+     * bridge detach 一并取消，避免重连后旧 collect 协程滞留（僵尸协程累积）。
+     */
+    private val gh3220CollectJobs = ConcurrentHashMap<String, Job>()
     private val connectingPeripherals = ConcurrentHashMap<String, Peripheral>()
     private val connectSingleFlight = ConnectSingleFlight()
     private val notifySubscriptions = NotifySubscriptionGuard()
@@ -750,7 +755,9 @@ class BleConnectionManager @Inject constructor(
                                 // rawdataFrames 是 replay=0 的 SharedFlow：必须先订阅再 attach，避免丢帧。
                                 // 只订阅 rawdataFrames 一个流（0x0B 包逐帧也转发到此流），不订阅
                                 // rawdataPackages，否则 0x0B 帧会重复上报到 ghFrameFlow（多通道展开留 Task 6）。
-                                scope.launch {
+                                // collect Job 句柄按地址保存供断连时取消；先取消同地址残留旧 Job 再登记新 Job。
+                                gh3220CollectJobs.remove(address)?.cancel()
+                                gh3220CollectJobs[address] = scope.launch {
                                     bridge.client.rawdataFrames.collect { frame ->
                                         onGh3220Frames(address, listOf(Gh3220FrameAdapter.toGhFuncFrame(frame)))
                                     }
@@ -1103,6 +1110,12 @@ class BleConnectionManager @Inject constructor(
         if (slot != null) {
             peripherals.remove(address, slot)
         }
+        // GH3220 桥生命周期收尾：取消 rawdataFrames collect Job 并 detach 会话
+        // （取消接收协程、sessionState → DISCONNECTED）。此处是三条断连路径的统一收尾点
+        // （用户断连 onConfirmedDisconnected、远端断连 state 收集器、断连失败兜底 onDisconnectFailed）；
+        // stale 早退已在上方拦截，不会误收尾新连接槽位。
+        gh3220CollectJobs.remove(address)?.cancel()
+        slot?.itlvcBridge?.detach()
         writeTypeByAddress.remove(address)
         clearWriteServiceUuid(address)
         _batteryStatus.update { it - address }
