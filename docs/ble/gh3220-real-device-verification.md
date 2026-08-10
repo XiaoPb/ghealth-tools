@@ -91,3 +91,60 @@
 
 - **阻塞项**：需要 GH3x2x EVK 设备、BLE 抓包工具（或厂商抓包通道）及与协议文档一致的 demo 固件；当前环境无硬件，本任务仅产出验收清单，真机验证与抓包裁决待硬件就绪后执行。
 - **完成定义**：5 项差异全部裁决完成，KDoc 标注更新为实测结论，失败项已修正并补充 golden 向量，`docs/ble/gh3220-command-matrix.md` 与协议差异说明同步更新。
+
+## APP 侧验收（命令页 + 演示页 + 0x16 / 0x0F / 0x1F）
+
+> 前置：`./gradlew installDebug` 安装调试 APK 并连接 GH3x2x EVK；命令页命令集以 `feature-connection/Gh3220CommandMeta.kt` 为准，演示页列来源以 `feature-demo/DemoViewModel.toColumnMap`（GH3220/GH3300 分支）为准。本清单与上方抓包/差异裁决互补：执行命令页/演示页验收时可顺带采集 5 项差异裁决所需抓包样本。
+
+### 1. 命令页逐命令验收
+
+命令集（`Gh3220CommandMeta.kt` 共 20 条）：0x19 获取版本 / 0x1A 连接状态 / 0x0C 启动 HBD / 0x03 读寄存器 / 0x10 下位机工作模式 / 0x23 原始透传 / 0x05 通讯包测试 / 0x11 G-sensor / 0x12 FIFO 阈值 / 0x13 事件掩码 / 0x15 通道映射 / 0x17 芯片复位 / 0x18 电流校准 / 0x1B 采样率 / 0x1C Slot 使能 / 0x1D ECG 控制 / 0x1E 工作模式 / 0x20 应用模块 / 0x2E 切换芯片 / 0xA1 批量写寄存器。
+
+| 命令（key / type） | 操作 | 预期结果 |
+| --- | --- | --- |
+| GH3220_GET_VERSION / 0x19 | 依次选择版本类型（EVK/虚拟寄存器/Bootloader/BLE/协议/支持功能/驱动库/芯片/各功能）执行 | 面板显示解析后的版本号或支持功能位；参数类型非法时给出明确错误 |
+| GH3220_CONN_STATUS / 0x1A | 直接执行 | 显示 0=已连接（或 1=未连接）；响应为空时提示解析失败 |
+| GH3220_READ_REG / 0x03 | 输入寄存器地址与数量 | 显示每寄存器 2 字节大端值；越界时错误提示 |
+| GH3220_START_HBD / 0x0C | 启动（1）/ 停止（0） | 启动后演示页开始收到 rawdata 并滚动；停止后不再滚动 |
+| GH3220_WORK_MODE / 0x10 | 选择工作模式执行 | 返回状态字节并显示，与 0x1E 配置联动一致 |
+| GH3220_PACKAGE_TEST / 0x05 | 输入测试字节 | 设备原样回显，面板显示回显字节（输入输出可对拍） |
+| GH3220_REG_ARRAY_WRITE / 0xA1 | 输入地址/值块列表 | client 校验响应状态（0=成功/1=设备错误）；成功后读回寄存器对拍 |
+| GH3220_RAW_SEND / 0x23（透传） | 输入任意命令 ID 与字节 | 仅白名单 0x19/0x1A/0x1E/0x21/0x2A 放行并回显原始响应；其余 ID 被拒绝且不写传输 |
+| 其余 0x11/0x12/0x13/0x15/0x17/0x18/0x1B/0x1C/0x1D/0x1E/0x20/0x2E | 按参数表单填写执行 | 均返回解析后的状态/数据；超时或设备错误有明确提示，不崩溃 |
+
+> 验收方式：逐命令执行并截图；重点对拍 0x19 各版本类型、0x03/0xA1 寄存器读写一致性、0x23 白名单拒绝路径；执行过程中抓包核对 APP 发送字节符合 `AA 11 [T][L][V][CRC]` 帧格式。
+
+### 2. 演示页波形与 CSV 列验收
+
+- 波形列（`FunctionDataBuffers.availableColumns` GH3220 分支）：`ACCX/ACCY/ACCZ`、`FRAME_ID`、`CH{0-31}`（来自 rawdata；0x0B 多功能帧按通道槽位展开）、`ALGO_RESULT{0-15}`（来自 algoData）。
+- CSV 列（`DemoViewModel.toColumnMap` GH3220/GH3300 分支）：`CH{0-31}`←rawdata、`AGC_INFO_CH{0-31}`←agcInfo、`AMB_CH{0-15}`←phyValue、`ALGO_RESULT{0-15}`←algoData，另有 `FLAG{0-7}`、`REF_RESULT{0-15}`、`GYRO_X/Y/Z`、字面列 `CH16-31`、`CAP_CH{0-3}`、`TEMP_CH{0-3}` 占位。
+
+| 步骤 | 操作 | 预期结果 |
+| --- | --- | --- |
+| 1 | 0x15 通道映射 + 0x1B 采样率 + 0x0C 启动采集（含多通道配置） | 波形区 CH 列持续滚动，帧速率与采样率匹配；CH 列数量与 activeChannels 一致 |
+| 2 | 切换波形列 | 波形 1/2 可选列包含 CH{0-31} 与 ALGO_RESULT{0-15}；0x0B 多功能帧下各 CH 列值落在对应通道槽位 |
+| 3 | 录制 CSV | 列头命名与顺序对照 `.claude/csv_rules/gh3220.yaml`：TimeStamp / FRAME_ID / ACCX / ACCY / ACCZ / CH{0-15} / FLAG{0-7} / REF_RESULT{0-15} / ALGO_RESULT{0-7} / AGC_INFO_CH{0-15} / AMB_CH{0-15} / GYRO_X / GYRO_Y / GYRO_Z / CH16-31 / ALGO_RESULT{8-15} / AGC_INFO_CH{16-31} / CAP_CH{0-3} / TEMP_CH{0-3} |
+| 4 | 核对列值来源 | AGC_INFO_CH 与 agcInfo、AMB_CH 与 phyValue、ALGO_RESULT 与 algoData、CH 与 rawdata 槽位值一致（可与抓包/设备 LOG 交叉对照） |
+| 5 | 差异记录 | 若 APP 输出列集合/命名与 yaml 不一致（如 CH 列展开为 CH0..CH31 而 yaml 为 CH{0-15}+字面 CH16-31），记录实测差异并在本清单结果区反馈（本 Task 不改代码） |
+
+### 3. 0x16 事件自动 ACK 验收
+
+| 步骤 | 操作 | 预期结果 |
+| --- | --- | --- |
+| 1 | 0x13 事件掩码使能目标事件后触发 Cardiff 事件（如佩戴/心电事件） | 抓包看到设备上报 `AA 11 16 03 [eventHi][eventLo][reportId] CRC` |
+| 2 | 确认自动 ACK | APP 自动回写 `AA 11 16 01 [reportId] CRC`（`EventAckHandler` 经 `session.send` 单向上报，不占命令队列）；抓包确认设备收到 ACK |
+| 3 | 事件内容 | 事件经 `bridge.client.cardiffEvents` 流可见（解析与 ACK 通路已由 `Gh3220EndToEndTest` 覆盖）；当前 APP 界面未订阅展示，验收以抓包确认 ACK 为准 |
+
+### 4. 0x0F / 0x1F 流程验收
+
+> 现状：命令页未暴露 0x0F/0x1F 条目（`Gh3220CommandMeta.kt` 无对应命令）；流程实现在 `Gh3220ProtocolClient.fwUpgrade()/driverConfig()`（`ble-gh3220`）。透传白名单（0x19/0x1A/0x1E/0x21/0x2A）不含 0x0F/0x1F，无法经 0x23 透传执行，需命令页扩展或独立测试入口后真机验收。
+
+| 项目 | 验收内容 | 成功条件 |
+| --- | --- | --- |
+| 0x0F 固件升级 | 真实固件 bin 完整升级一次 + 跨块边界与末块用例 | 分包回显 Total Len / Current Index / Payload Len 正确；升级完成重启后 0x19 版本变化；与差异裁决第 5 项共用抓包 |
+| 0x1F 驱动配置 | 下发驱动配置并启动采集联调 | 设备按配置运行（采样/通道行为符合配置），0x0C 启动后波形与配置一致 |
+
+### 5. 与 Phase 5 差异裁决联动
+
+- 真机执行本节时同时按上文「差异裁决清单（5 项）」裁决：命令页/演示页抓包可顺带采集 0x0B 包头（差异 1）、0x0B chMask（差异 2）、0x09/0x0A 偶数包首帧（差异 3）、0x2A len（差异 4）、0x0F 分包 / 0x0D 字节序（差异 5）样本。
+- 裁决结果回填上文「裁决结果记录」表，处置按「裁决通过/失败处置」章节执行；本清单各步骤的实际结果（通过/失败 + 备注）同步记录，作为 APP 侧验收完成证据。
