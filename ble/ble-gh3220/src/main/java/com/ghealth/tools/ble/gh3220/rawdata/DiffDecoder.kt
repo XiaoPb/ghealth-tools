@@ -29,7 +29,7 @@ class NibbleReader(private val data: ByteArray) {
  * 偶类型 = 正差分，奇类型 = 负差分；按 32bit 回绕累加到该通道上一帧值。
  * 状态跨帧/跨包保持（0x09 偶数包基准帧 + 0x0A 奇数包差分）。
  */
-class DiffDecoder(private val channelCount: Int) {
+class DiffDecoder(val channelCount: Int) {
 
     init {
         require(channelCount > 0) { "channelCount must be positive: $channelCount" }

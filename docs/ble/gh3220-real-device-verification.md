@@ -1,6 +1,6 @@
 # GH3220 真机验证与抓包裁决验收清单
 
-> 状态：待硬件就绪后执行（当前仅产出清单；真机验证与抓包裁决需 GH3x2x EVK 设备与抓包工具）
+> 状态：部分裁决完成（2026-08-10 标准 APP 抓包已裁决差异 #1/#2，见下文）；其余项待硬件就绪后执行
 > 范围：GH3220 ITLVC 三阶段计划 Phase 5 验收项
 > 依据：`.claude/gh3220_protocol/gh3220 protocol.md`（§3.5 / §3.7 / §3.9 / §3.11 / §3.35 / §4.3.5）、设备端源码 `.claude/gh3220_protocol/c_to_mcu/demo_kernel_code/`、已交付实现 `ble/ble-gh3220/`
 
@@ -15,16 +15,16 @@
 
 | # | 差异点 | 实现侧假设 | 文档/源码依据 | 真机裁决方法 | 涉及代码 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 0x0B 包头 | 7B：`[dataType][chMask 4B BE][flag][len]` | 文档 §3.7.2 7B；`gh_uprotocol.c` 8B（FunctionID 独立字节） | 抓 0x0B 首包，比对第 2 字节是否为 FunctionID | `RawDataDecoder.decode0B` |
-| 2 | 0x0B chMask | 大端位掩码 | C 端大端掩码；文档 §3.7.4 seq/chnlCnt | 比对多通道上报的通道掩码 | `RawDataDecoder.decode0B`（`be32`/`activeChannelIndices`）、`Gh3220RawDataTypes.Gh3220RawDataPackage.channelMask` |
+| 1 | 0x0B 包头 | **已裁决（8B）**：`[FunctionID][dataType][chMask 4B BE][flag][len]` | 2026-08-10 标准 APP 抓包 `AA-11-0B-E3 01 07 00 00 00 0F 03 DB ...`，第 2 字节 `07` 为 dataType 位域（非掩码起始）；`gh_uprotocol.c` 8B | 已完成；实现 `RawDataDecoder.decode0B` 8B 头 + golden 向量 `RawDataDecoder0BTest` | `RawDataDecoder.decode0B` |
+| 2 | 0x0B chMask | **已裁决（大端位掩码）**：`00 00 00 0F` = 通道 0–3 | 2026-08-10 抓包 chMask 4B 大端位掩码；C 端 `unCompeletMask` | 已完成；实现 `be32`/`activeChannelIndices` + golden 向量 | `RawDataDecoder.decode0B`、`Gh3220RawDataTypes.Gh3220RawDataPackage.channelMask` |
 | 3 | 0x09/0x0A 偶数包首帧 | 从 0 差分（类型 14） | 文档 §3.5/§3.7.7 首帧=绝对值（编码未定义）；`gh_zip.c` 写 4B/通道原始绝对值 | 抓偶数包首帧，比对差值字段 | `RawDataDecoder.decode09/decode0A`、`DiffDecoder`；测试 `RawDataDecoderZipTest` |
 | 4 | 0x2A len | 4B 小端 | 文档 4B 小端；C 端 `[len 1B][idChangeFlag 1B]` | 抓 0x2A 上报，比对长度字段宽度 | `RawDataDecoder.decode2A`；测试 `RawDataDecoder2ATest` |
 | 5 | 0x0F 分包 / 0x0D 字节序 | blockSize 分块 + 块内 ≤56B；Total Len=块字节数；0x0D 小端 | 计划假设；文档 §3.11 未标注 | 真机升级 + 电流电池上报比对 | `FwUpgradeFlow`；`ReportDecoder.decodeCurrentBattery`（`Gh3220ReportModels.kt`）；测试 `FwUpgradeFlowTest`、`EventAckHandlerTest` |
 
 **裁决要点说明（补充，不改变上表含义）：**
 
-- 第 1 项：C 端 8B 包头为 `[FunctionID][dataType][mask 4B][flag][len]`（`gh_uprotocol.c` `Gh2x2xPackPakcageHeader()`，`UPROTOCOL_FUNCTION_ID_INDEX=0` 独立 1B），文档/实现 7B 包头为 `[dataType][chMask 4B BE][flag][len]`（FunctionID 并入 dataType 高 nibble）。实际判别以 FrameData 起始偏移（8 或 7）及第 2 字节（payload[1]）语义为准：若为独立 FunctionID/dataType 位型字段而非通道掩码/计数起始字节 → C 端 8B 格式。
-- 第 2 项：C 端按 `unCompeletMask |= 1 << unCnt` 组 32bit 大端位掩码（`00 00 00 03` 表示通道 0/1）；文档 §3.7.4 为 `[seq 1B][chnlCnt 1B][预留 2B]`（如 `00 02 00 00`）。多通道连续抓包可同时观察 seq 是否递增。
+- 第 1 项：**已裁决（2026-08-10 标准 APP 抓包）**。C 端 8B 包头 `[FunctionID][dataType][mask 4B][flag][len]`（`gh_uprotocol.c` `Gh2x2xPackPakcageHeader()`，`UPROTOCOL_FUNCTION_ID_INDEX=0` 独立 1B）。抓包帧 `AA-11-0B-E3 | 01 07 00 00 00 0F 03 DB | 219B | 56`：FunctionID=0x01（HR）、dataType=0x07（gs+algo+agc）、flag=0x03（zip+oddeven，首帧绝对值）、len=0xDB=219，8+219=227 帧长完全吻合；文档 7B 头解释被推翻。实现已按 8B 头解析并在 `RawDataDecoder0BTest` 固化完整 227B golden 向量。
+- 第 2 项：**已裁决**。抓包 chMask=`00 00 00 0F` = 通道 0–3（4 通道），与 C 端 `unCompeletMask |= 1 << unCnt` 大端位掩码一致；文档 §3.7.4 `[seq 1B][chnlCnt 1B][预留 2B]` 被推翻。
 - 第 3 项：`gh_zip.c` 偶数包首帧（`uchEvenFirstFrameFlag` 分支）直接写 4B/通道大端原始绝对值、无 rawLen/tagFlag 前缀；文档 §3.5/§3.7.7 描述为压缩算法编码的绝对值，当前实现以从 0 差分（类型 14 = 32bit 正差分）解码。类型 14/15 是按文档压缩表 0–13 规律外推的 32bit 差分码（不在文档表中），需在真机上确认。
 - 第 4 项：`gh_drv_control.c` 打包 `[fifoId 1B][len 1B][idChangeFlag 1B][00 00][data...]`（数据偏移 5）；文档 §3.35 为 `[fifoId 1B][len 4B][data]`，当前实现按 4B 小端解析，C 格式下会因 len overflow 拒绝，抓包可直接分辨。
 - 第 5 项：`FwUpgradeFlow` 按 blockSize 分块、块内 ≤56B 分包，`Total Len`=当前块字节数、`Current Index`=块内字节偏移，多字节字段小端；`ReportDecoder.decodeCurrentBattery` 对 0x0D 按 u16le 解析（CardiffCurrent/TxCurrent/BleSendPackageCnt）。C demo 无 0x0F 传输实现可对照，文档 §3.11/§3.9 未标注字节序。注意文档 §3.9 字段列名 `Cardiff电流_H|_L`、`BleSendPackageCnt_H|_L` 按惯例暗示高字节在前：真机比对时需判别字节到达顺序是 H-first（按文档列名命名）还是 L-first（按当前实现 u16le）。

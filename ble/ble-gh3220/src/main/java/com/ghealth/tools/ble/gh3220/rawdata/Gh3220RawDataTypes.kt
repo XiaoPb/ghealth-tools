@@ -39,11 +39,14 @@ data class Gh3220Result(val tag: Int, val value: Int)
 /**
  * 0x0B 新结构 rawdata 包。
  *
- * - [channelMask]：大端通道位掩码（设备端 gh_uprotocol.c 实现），bit n = 通道 n 有数据
- *   （真机抓包未验证：C 端为位掩码、文档 §3.7.4 为 seq/chnlCnt）。
+ * - 包头 8B（真机抓包已裁决，对应 gh_uprotocol.c `Gh2x2xPackPakcageHeader`）：
+ *   `[FunctionID][dataType][chMask 4B BE][pkgFlag][dataLen]`；[dataType] 为位域
+ *   （bit0=GS / bit1=algo / bit2=AGC / bit3=amb / bit4=gyro / bit5=cap / bit6=temp），
+ *   [funcId] 为独立的 FunctionID 字节（HR=1）。
+ * - [channelMask]：大端通道位掩码（C 端实现），bit n = 通道 n 有数据。
  * - [activeChannels]：位掩码置位通道索引（升序）。
- * - [splicePackCount]：Rawdata Flag bits3-4 分包计数。
- * - [splicePackOver]：Rawdata Flag bit5 分包结束标志。
+ * - [splicePackCount]：pkgFlag bits3-4 分包计数。
+ * - [splicePackOver]：pkgFlag bit5 分包结束标志。
  */
 data class Gh3220RawDataPackage(
     val dataType: Int,

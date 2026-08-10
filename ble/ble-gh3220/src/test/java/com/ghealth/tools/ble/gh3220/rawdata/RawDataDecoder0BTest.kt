@@ -37,7 +37,7 @@ class RawDataDecoder0BTest {
             0x00,
         )
         val dataLen = frame0.size + frame1.size
-        val payload = bytes(0x0E, 0x00, 0x00, 0x00, 0x03, 0x00, dataLen) + frame0 + frame1
+        val payload = bytes(0x00, 0x0E, 0x00, 0x00, 0x00, 0x03, 0x00, dataLen) + frame0 + frame1
 
         val pkg = decoder.decode0B(payload).getOrThrow()
         assertEquals(0x0E, pkg.dataType)
@@ -66,7 +66,7 @@ class RawDataDecoder0BTest {
     @Test
     fun `decode0B multifunction attributes channel from mask`() {
         // 通道 0 的包：chMask=0x00000001，flag=0x04（bit2 多功能），帧 = [frameId][fifoId][rawdata 4B]
-        val p1 = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x04, 0x06) + bytes(0x00, 0x01, 0x01, 0x02, 0x03, 0x04)
+        val p1 = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x04, 0x06) + bytes(0x00, 0x01, 0x01, 0x02, 0x03, 0x04)
         val r1 = decoder.decode0B(p1).getOrThrow()
         assertTrue(r1.multiFunction)
         assertEquals(1, r1.frames.size)
@@ -74,7 +74,7 @@ class RawDataDecoder0BTest {
         assertContentEquals(intArrayOf(0x01020304), r1.frames[0].rawdata)
 
         // 通道 1 的包：chMask=0x00000002
-        val p2 = bytes(0x00, 0x00, 0x00, 0x00, 0x02, 0x04, 0x06) + bytes(0x01, 0x02, 0x05, 0x06, 0x07, 0x08)
+        val p2 = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x04, 0x06) + bytes(0x01, 0x02, 0x05, 0x06, 0x07, 0x08)
         val r2 = decoder.decode0B(p2).getOrThrow()
         assertEquals(1, r2.frames.size)
         assertEquals(1, r2.frames[0].channel)
@@ -86,7 +86,7 @@ class RawDataDecoder0BTest {
         val one = RawDataDecoder(SamplingConfig(channelCount = 1, agcEnabled = true, algoEnabled = true))
         // 帧 = [frameId=0][rawLen=6][tagFlag=0][E2 26 5B 1F 50][agcLen=0][result 0x00]
         val frame = bytes(0x00, 0x06, 0x00, 0xE2, 0x26, 0x5B, 0x1F, 0x50, 0x00, 0x00)
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x01, frame.size) + frame
+        val payload = bytes(0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, frame.size) + frame
 
         val pkg = one.decode0B(payload).getOrThrow()
         assertTrue(pkg.compressed)
@@ -110,8 +110,8 @@ class RawDataDecoder0BTest {
     @Test
     fun `decode0B rejects truncated header and data overflow`() {
         assertTrue(decoder.decode0B(bytes(0x0E, 0x00, 0x00)).isFailure)
-        assertTrue(decoder.decode0B(bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0A, 0x00)).isFailure)
-        assertTrue(decoder.decode0B(bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x10) + bytes(0x00)).isFailure)
+        assertTrue(decoder.decode0B(bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0A)).isFailure)
+        assertTrue(decoder.decode0B(bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x10, 0x00) + bytes(0x00)).isFailure)
     }
 
     @Test
@@ -119,7 +119,7 @@ class RawDataDecoder0BTest {
         val one = RawDataDecoder(SamplingConfig(channelCount = 1))
         // rawLen=1 < tagFlag(1)+tag(1B)=2，触发长度守卫
         val frame = bytes(0x00, 0x01, 0x01, 0x01)
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x01, frame.size) + frame
+        val payload = bytes(0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, frame.size) + frame
         assertTrue(one.decode0B(payload).isFailure)
         assertTrue(one.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
     }
@@ -127,7 +127,7 @@ class RawDataDecoder0BTest {
     @Test
     fun `decode0B rejects empty channel mask`() {
         // chMask=0x00000000 → ParseError（避免 DiffDecoder 尺寸不匹配异常逃逸 Result）
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
         assertTrue(decoder.decode0B(payload).isFailure)
         assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
     }
@@ -135,7 +135,7 @@ class RawDataDecoder0BTest {
     @Test
     fun `decode0B rejects multifunction with multiple channel bits`() {
         // chMask=0x00000003 + flag=0x04：多功能每包只允许 1 个通道位
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x00)
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x00)
         assertTrue(decoder.decode0B(payload).isFailure)
         assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
     }
@@ -143,38 +143,43 @@ class RawDataDecoder0BTest {
     @Test
     fun `decode0B rejects compressed multifunction`() {
         // flag=0x05（压缩 + 多功能）：当前显式拒绝
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x05, 0x00)
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x05, 0x00)
         assertTrue(decoder.decode0B(payload).isFailure)
         assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
     }
 
     @Test
-    fun `decode0B rejects channel count mismatch with config`() {
-        // chMask=0x00000001（1 通道）但 config.channelCount=2 → ParseError
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00)
-        assertTrue(decoder.decode0B(payload).isFailure)
-        assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
+    fun `decode0B adapts channel count to chMask when config differs`() {
+        // 0x0B 包自描述通道数（chMask 置位数）：chMask=0x00000001（1 通道）但 config.channelCount=2 时
+        // 按包内掩码重建差分解码器，不再按配置拒绝（真实设备 HR 4 通道 > 默认配置 1 通道）。
+        val two = RawDataDecoder(SamplingConfig(channelCount = 2, agcEnabled = true, algoEnabled = true))
+        // 绝对首帧（flag=0x03：压缩 + oddeven）：[frameId=0][rawdata 4B][agc 4B][result 0x00]
+        val frame = bytes(0x00, 0x11, 0x22, 0x33, 0x44, 0x05, 0x06, 0x07, 0x08, 0x00)
+        val payload = bytes(0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x03, frame.size) + frame
+        val pkg = two.decode0B(payload).getOrThrow()
+        assertEquals(1, pkg.frames.size)
+        assertContentEquals(intArrayOf(0x223344), pkg.frames[0].rawdata)
+        assertContentEquals(intArrayOf(0x05060708), pkg.frames[0].agc)
     }
 
     @Test
     fun `decode0B rejects trailing bytes after data len`() {
         // dataLen=0 但 payload 末尾多 1 字节
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xFF)
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xFF)
         assertTrue(decoder.decode0B(payload).isFailure)
         assertTrue(decoder.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
     }
 
     @Test
-    fun `decode0B parses compressed odd packet with splice flags`() {
-        // chMask=0x1，flag=0x2B（压缩 bit0 + 奇数包 bit1 + 分包计数 1 bits3-4 + 分包结束 bit5）
-        // 注：审查稿 flag=0x3B 的 bits3-4=3，与 splicePackCount=1 断言矛盾，此处用 0x2B 使语义一致
+    fun `decode0B parses compressed packet with splice flags`() {
+        // chMask=0x1，flag=0x29（压缩 bit0 + 分包计数 1 bits3-4 + 分包结束 bit5，无 oddeven bit1 → 非首帧绝对值）
         val one = RawDataDecoder(SamplingConfig(channelCount = 1, agcEnabled = true, algoEnabled = true))
         // 帧 = [frameId=0][rawLen=6][tagFlag=0][E2 26 5B 1F 50][agcLen=0][result 0x00]
         val frame = bytes(0x00, 0x06, 0x00, 0xE2, 0x26, 0x5B, 0x1F, 0x50, 0x00, 0x00)
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x2B, frame.size) + frame
+        val payload = bytes(0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x29, frame.size) + frame
         val pkg = one.decode0B(payload).getOrThrow()
         assertTrue(pkg.compressed)
-        assertTrue(pkg.oddPacket)
+        assertEquals(false, pkg.oddPacket)
         assertEquals(1, pkg.splicePackCount)
         assertTrue(pkg.splicePackOver)
         assertContentEquals(intArrayOf(0x2265B1F5), pkg.frames[0].rawdata)
@@ -184,13 +189,13 @@ class RawDataDecoder0BTest {
     fun `decode0B uncompressed frame syncs baseline for later compressed frame`() {
         val one = RawDataDecoder(SamplingConfig(channelCount = 1, agcEnabled = true, algoEnabled = true))
         // 未压缩绝对帧：dataType=0x00，frame = [frameId=0][0x2265B1F5]
-        val absPayload = bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x05) + bytes(0x00, 0x22, 0x65, 0xB1, 0xF5)
+        val absPayload = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x05) + bytes(0x00, 0x22, 0x65, 0xB1, 0xF5)
         val abs = one.decode0B(absPayload).getOrThrow()
         assertContentEquals(intArrayOf(0x2265B1F5), abs.frames[0].rawdata)
 
         // 压缩差分帧 e6f51a6550（golden：0x2265B1F5 → 0x91B7584A）
         val diffFrame = bytes(0x01, 0x06, 0x00) + hexBytes("e6f51a6550") + bytes(0x00, 0x00)
-        val pkg = one.decode0B(bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x01, diffFrame.size) + diffFrame).getOrThrow()
+        val pkg = one.decode0B(bytes(0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, diffFrame.size) + diffFrame).getOrThrow()
         assertContentEquals(intArrayOf(0x91B7584A.toInt()), pkg.frames[0].rawdata)
     }
 
@@ -199,8 +204,66 @@ class RawDataDecoder0BTest {
         // chMask=0x00000004（bit2）+ config.channelCount=2：通道索引越界 → ParseError（避免 setBaselineChannel 越界逃逸 Result）
         // 帧完整 6 字节（frameId+fifoId+rawdata），删除防护时会真正抵达 setBaselineChannel(2, …) 抛 AIOOBE
         val dec2 = RawDataDecoder(SamplingConfig(channelCount = 2, agcEnabled = true, algoEnabled = true))
-        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x06, 0x00, 0x01, 0x01, 0x02, 0x03, 0x04)
+        val payload = bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x06, 0x00, 0x01, 0x01, 0x02, 0x03, 0x04)
         assertTrue(dec2.decode0B(payload).isFailure)
         assertTrue(dec2.decode0B(payload).exceptionOrNull() is ItlvcError.ParseError)
+    }
+
+    @Test
+    fun `decode0B real HR frame from standard app log`() {
+        // 标准 APP 抓包 2026-08-10：AA-11-0B-E3 | 01 07 00 00 00 0F 03 DB | 219B 数据 | 56
+        // 头 = C 端 8B 格式 [FunctionID][dataType][chMask 4B BE][pkgFlag][dataLen]：
+        //   FunctionID=0x01（HR）、dataType=0x07（gs+algo+agc）、chMask=0x0000000F（4 通道）、
+        //   pkgFlag=0x03（zip + oddeven → 首帧绝对值）、dataLen=0xDB=219。
+        // 逐字节校验见 gh_zip.c Gh2x2xUploadDataToMaster：首帧 rawdata/agc 各 4B/通道绝对值，
+        // 后续帧 [rawLen][tagFlag][tag*][nibble 差分] + [agcLen][差分] + [result byteNum][内容]。
+        val payload = hexBytes(
+            "01070000000F03DB" +
+                "0000000000000000C2B26E00DE75F700C60B3800D9B9C3051900000519000005190000051900000F" +
+                "000000000002020000000300000000010000000000000D00" +
+                "811D2B819FB281408F81CFD10500000000000A00000000000200000000020000000000000C00" +
+                "6C70B812C296FC46814E85050000000000050000000000030000000000000B00" +
+                "67FAD6C5C06BEF46FAA4050000000000050000000000040000000000000B00" +
+                "638C9642DB67ED567789050000000000050000000000050000000000000C00" +
+                "748FC910EF8724DC7B5050050000000000050000000000"
+        )
+        val dec = RawDataDecoder(SamplingConfig(channelCount = 4))
+        val pkg = dec.decode0B(payload).getOrThrow()
+
+        assertEquals(0x01, pkg.funcId)
+        assertEquals(0x07, pkg.dataType)
+        assertEquals(0x0000000F, pkg.channelMask)
+        assertContentEquals(intArrayOf(0, 1, 2, 3), pkg.activeChannels)
+        assertTrue(pkg.compressed)
+        assertTrue(pkg.oddPacket)
+        assertEquals(false, pkg.multiFunction)
+        assertEquals(0, pkg.splicePackCount)
+        assertEquals(false, pkg.splicePackOver)
+        assertEquals(6, pkg.frames.size)
+        pkg.frames.forEach { frame ->
+            assertEquals(0x01, frame.funcId)
+        }
+
+        // 首帧（oddeven 置位）：rawdata 4B/通道绝对值（24bit 掩码），agc 4B/通道绝对值
+        val f0 = pkg.frames[0]
+        assertEquals(0x00, f0.frameId)
+        assertContentEquals(intArrayOf(0xC2B26E, 0xDE75F7, 0xC60B38, 0xD9B9C3), f0.rawdata)
+        assertContentEquals(intArrayOf(0x05190000, 0x05190000, 0x05190000, 0x05190000), f0.agc)
+        assertContentEquals(intArrayOf(0, 0, 0), f0.acc)
+        assertEquals(3, f0.results.size)
+        assertEquals(0, f0.results[0].tag); assertEquals(0, f0.results[0].value)
+        assertEquals(2, f0.results[1].tag); assertEquals(2, f0.results[1].value)
+        assertEquals(3, f0.results[2].tag); assertEquals(0, f0.results[2].value)
+
+        // 差分帧：ch0 = 0xC2B26E + 0x11D2B = 0xC3CF99；帧 2+ 结果段仅剩 flag0
+        assertContentEquals(intArrayOf(0xC3CF99, 0xE015A9, 0xC74BC7, 0xDB8994), pkg.frames[1].rawdata)
+        assertEquals(2, pkg.frames[1].results.size)
+        assertEquals(0, pkg.frames[1].results[0].tag); assertEquals(0, pkg.frames[1].results[0].value)
+        assertEquals(2, pkg.frames[1].results[1].tag); assertEquals(0, pkg.frames[1].results[1].value)
+        assertContentEquals(intArrayOf(0xC496A4, 0xE141D2, 0xC8480D, 0xDCD819), pkg.frames[2].rawdata)
+        assertContentEquals(intArrayOf(0xC51651, 0xE20792, 0xC90701, 0xDDD2BD), pkg.frames[3].rawdata)
+        assertContentEquals(intArrayOf(0xC54F1A, 0xE24A6D, 0xC985D6, 0xDE4A46), pkg.frames[4].rawdata)
+        assertContentEquals(intArrayOf(0xC5061E, 0xE13B75, 0xC960FA, 0xDD9541), pkg.frames[5].rawdata)
+        assertEquals(5, pkg.frames[5].frameId)
     }
 }

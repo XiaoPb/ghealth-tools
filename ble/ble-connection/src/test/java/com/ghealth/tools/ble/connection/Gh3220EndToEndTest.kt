@@ -129,18 +129,18 @@ class Gh3220EndToEndTest {
         val frameSubscription = launch { bridge.client.rawdataFrames.collect { frames.add(it) } }
         testScheduler.runCurrent()
 
-        // 非多功能 0x0B：payload = [dataType 0x00][chMask 4B BE 0x00000001][pkgFlag 0x28][dataLen 0x05]
+        // 非多功能 0x0B：payload = [funcId 0x00][dataType 0x00][chMask 4B BE 0x00000001][pkgFlag 0x28][dataLen 0x05]
         //               [frameId 0x00][rawdata 4B 0x01020304]。
         // pkgFlag=0x28 → bits3-4 splicePackCount=1、bit5 splicePackOver=true。
         // ITLVC 帧分两段 emit，顺带覆盖 Notify 跨分片组帧。
-        val itlvcFrame = frame(0x0B, bytes(0x00, 0x00, 0x00, 0x00, 0x01, 0x28, 0x05, 0x00, 0x01, 0x02, 0x03, 0x04))
+        val itlvcFrame = frame(0x0B, bytes(0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x28, 0x05, 0x00, 0x01, 0x02, 0x03, 0x04))
         notify.emit(itlvcFrame.copyOfRange(0, 7))
         notify.emit(itlvcFrame.copyOfRange(7, itlvcFrame.size))
         testScheduler.runCurrent()
 
         assertEquals(1, packages.size)
         val pkg = packages[0]
-        assertEquals(0, pkg.dataType, "payload 首字节 dataType=0x00（acc/agc/amb/algo 位全关）")
+        assertEquals(0, pkg.dataType, "payload 次字节 dataType=0x00（acc/agc/amb/algo 位全关，首字节 funcId=0）")
         assertFalse(pkg.multiFunction)
         assertEquals(1, pkg.splicePackCount)
         assertTrue(pkg.splicePackOver)
