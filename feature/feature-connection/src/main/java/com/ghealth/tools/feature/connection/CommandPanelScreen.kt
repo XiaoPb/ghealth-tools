@@ -371,18 +371,19 @@ private fun CommandCard(
                     Button(
                         onClick = {
                             buildError = null
-                            try {
-                                val params = if (isRegWrite && multiReg) {
+                            val params: ByteArray = try {
+                                if (isRegWrite && multiReg) {
                                     CommandPayloadBuilder.buildMultiRegWriteParams(regPairs)
                                 } else if (isRegRead && multiReg) {
                                     CommandPayloadBuilder.buildMultiRegReadParams(readStartAddr, readCount)
                                 } else {
                                     commandSource.buildPayload(command, paramValues)
                                 }
-                                onExecute(params)
                             } catch (e: Exception) {
                                 buildError = e.message ?: "参数编码失败"
+                                return@Button
                             }
+                            onExecute(params)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !executionState.isExecuting,
