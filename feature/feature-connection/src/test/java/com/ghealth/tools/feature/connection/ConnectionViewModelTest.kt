@@ -58,7 +58,7 @@ class ConnectionViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): Triple<ConnectionViewModel, BleConnectionManager, MutableStateFlow<Map<String, ConnectedDevice>>> {
+    private fun createViewModel(chip: String = "gh3036"): Triple<ConnectionViewModel, BleConnectionManager, MutableStateFlow<Map<String, ConnectedDevice>>> {
         val scanner = mockk<BleScanner>(relaxed = true)
         every { scanner.isBluetoothEnabled } returns true
         every { scanner.hasScanPermission } returns true
@@ -81,7 +81,7 @@ class ConnectionViewModelTest {
         every { blePreferences.autoReconnect } returns flowOf(false)
         every { blePreferences.lastDeviceAddress } returns flowOf(null)
         every { blePreferences.lastDeviceName } returns flowOf(null)
-        every { blePreferences.selectedChip } returns flowOf("gh3036")
+        every { blePreferences.selectedChip } returns flowOf(chip)
 
         val userPreferences = mockk<UserPreferences>(relaxed = true)
         val registerConfigParser = mockk<RegisterConfigParser>(relaxed = true)
@@ -228,5 +228,76 @@ class ConnectionViewModelTest {
         viewModel.dismissCommandErrorToast()
 
         assertNull(viewModel.uiState.value.commandErrorToast)
+    }
+
+    @Test
+    fun `gh3220 command executes via itlvc bridge`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220")
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendGh3220Command(any(), any(), any()) } returns
+            Result.success(byteArrayOf(0x00))
+
+        viewModel.executeCommand("GH3220_CONN_STATUS", ByteArray(0))
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            connectionManager.sendGh3220Command(any(), eq(0x1A), match { it.isEmpty() })
+        }
+        val executionState = viewModel.uiState.value.commandExecutionStates["GH3220_CONN_STATUS"]
+        assertNotNull(executionState)
+        assertEquals(false, executionState?.isExecuting)
+        assertTrue(executionState?.result?.contentEquals(byteArrayOf(0x00)) == true)
+        assertNull(viewModel.uiState.value.commandErrorToast)
+    }
+
+    @Test
+    fun `gh3220 command failure backfills error state`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220")
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendGh3220Command(any(), any(), any()) } returns
+            Result.failure(ProtocolError.Timeout)
+
+        viewModel.executeCommand("GH3220_CONN_STATUS", ByteArray(0))
+        advanceUntilIdle()
+
+        val executionState = viewModel.uiState.value.commandExecutionStates["GH3220_CONN_STATUS"]
+        assertNotNull(executionState)
+        assertEquals(false, executionState?.isExecuting)
+        assertTrue(executionState?.error?.contains("超时") == true)
+        assertNotNull(viewModel.uiState.value.commandErrorToast)
+    }
+
+    @Test
+    fun `gh3036 chip still uses rpc sendCommand path`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3036")
+        connectMaster(devicesFlow)
+
+        coEvery { connectionManager.sendCommand(any(), eq(KEY_F_GET_MODE), any()) } returns
+            Result.success(byteArrayOf(0x01))
+
+        viewModel.executeCommand(KEY_F_GET_MODE, byteArrayOf(0x01))
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { connectionManager.sendCommand(any(), eq(KEY_F_GET_MODE), any()) }
+        coVerify(exactly = 0) { connectionManager.sendGh3220Command(any(), any(), any()) }
+    }
+
+    @Test
+    fun `unknown gh3220 key fails gracefully`() = runTest(dispatcher) {
+        val (viewModel, connectionManager, devicesFlow) = createViewModel(chip = "gh3220")
+        connectMaster(devicesFlow)
+
+        viewModel.executeCommand("GH3220_NOT_A_COMMAND", ByteArray(0))
+        advanceUntilIdle()
+
+        val executionState = viewModel.uiState.value.commandExecutionStates["GH3220_NOT_A_COMMAND"]
+        assertNotNull(executionState)
+        assertEquals(false, executionState?.isExecuting)
+        assertTrue(executionState?.error?.contains("Unknown GH3220 command") == true)
+
+        coVerify(exactly = 0) { connectionManager.sendGh3220Command(any(), any(), any()) }
+        coVerify(exactly = 0) { connectionManager.sendCommand(any(), any(), any()) }
     }
 }

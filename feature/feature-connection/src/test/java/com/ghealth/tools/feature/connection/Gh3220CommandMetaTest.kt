@@ -177,7 +177,7 @@ class Gh3220CommandMetaTest {
     @Test
     fun `payload builder rejects unknown key`() {
         val unknown = Gh3220CommandMeta(
-            CommandMeta(
+            meta = CommandMeta(
                 key = "GH3220_UNKNOWN",
                 displayName = "未知",
                 description = "测试用",
@@ -185,6 +185,7 @@ class Gh3220CommandMetaTest {
                 params = emptyList(),
                 hasResponse = true,
             ),
+            type = 0,
         ) { _, _ -> Result.success(ByteArray(0)) }
         assertTrue(Gh3220CommandPayloadBuilder.build(unknown, emptyList()).isFailure)
     }
@@ -364,6 +365,35 @@ class Gh3220CommandMetaTest {
                 else -> byteArrayOf(0x01)
             }
             else -> def.defaultValue
+        }
+    }
+
+    @Test
+    fun `command type matches protocol doc command id`() {
+        val expected = mapOf(
+            "GH3220_GET_VERSION" to 0x19,
+            "GH3220_CONN_STATUS" to 0x1A,
+            "GH3220_START_HBD" to 0x0C,
+            "GH3220_READ_REG" to 0x03,
+            "GH3220_WORK_MODE" to 0x10,
+            "GH3220_RAW_SEND" to 0x23,
+            "GH3220_PACKAGE_TEST" to 0x05,
+            "GH3220_GSENSOR_SET" to 0x11,
+            "GH3220_FIFO_THRESHOLD" to 0x12,
+            "GH3220_EVENT_SET" to 0x13,
+            "GH3220_FUNC_MAP" to 0x15,
+            "GH3220_CHIP_RESET" to 0x17,
+            "GH3220_CALIBRATE_CURRENT" to 0x18,
+            "GH3220_SAMPLE_RATES" to 0x1B,
+            "GH3220_SLOT_EN" to 0x1C,
+            "GH3220_ECG_CTRL" to 0x1D,
+            "GH3220_WORK_MODE_SET" to 0x1E,
+            "GH3220_APP_MODULE" to 0x20,
+            "GH3220_SWITCH_CHIP" to 0x2E,
+            "GH3220_REG_ARRAY_WRITE" to 0xA1,
+        )
+        Gh3220CommandMeta.all.forEach { meta ->
+            assertEquals(expected[meta.key], meta.type, "命令 ${meta.key} 的 type 应与协议文档命令 ID 一致")
         }
     }
 }

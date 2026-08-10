@@ -66,7 +66,7 @@ import com.ghealth.tools.ble.protocol.gh3036.CommandGroup
 import com.ghealth.tools.ble.protocol.gh3036.CommandMeta
 import com.ghealth.tools.ble.protocol.gh3036.CommandParamDef
 import com.ghealth.tools.ble.protocol.gh3036.CommandPayloadBuilder
-import com.ghealth.tools.ble.protocol.gh3036.Gh3036CommandMeta
+import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
 import com.ghealth.tools.ble.protocol.gh3036.ParamType
 import com.ghealth.tools.core.ui.theme.ButtonShape
 import java.text.SimpleDateFormat
@@ -114,6 +114,7 @@ fun CommandPanelScreen(
     onNavigateBack: () -> Unit,
     onExecute: (String, ByteArray) -> Unit,
     showBackButton: Boolean = true,
+    commandSource: CommandSource = Gh3036CommandSource,
     chipName: String = "gh3036",
     registerConfigDownloadState: RegisterConfigDownloadState = RegisterConfigDownloadState(),
     onLoadRegisterConfigs: (String) -> Unit = {},
@@ -155,7 +156,7 @@ fun CommandPanelScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             CommandGroup.entries.forEach { group ->
-                val commands = Gh3036CommandMeta.getCommandsByGroup(group)
+                val commands = commandSource.getCommandsByGroup(group)
                 if (commands.isNotEmpty()) {
                     SectionHeader(group)
                     commands.forEach { command ->
@@ -168,10 +169,11 @@ fun CommandPanelScreen(
                                 expandedKey = if (expandedKey == command.key) null else command.key
                             },
                             onExecute = { params -> onExecute(command.key, params) },
-                            chipName = chipName
+                            chipName = chipName,
+                            commandSource = commandSource
                         )
                     }
-                    if (group == CommandGroup.FACTORY) {
+                    if (group == CommandGroup.FACTORY && commandSource.getCommandByKey(KEY_DOWNLOAD_CONFIG) != null) {
                         val downloadExpanded = expandedKey == "REGISTER_CONFIG_DOWNLOAD"
                         RegisterConfigDownloadCard(
                             chipName = chipName,
@@ -223,7 +225,8 @@ private fun CommandCard(
     executionState: CommandExecutionState,
     onToggle: () -> Unit,
     onExecute: (ByteArray) -> Unit,
-    chipName: String = "gh3036"
+    chipName: String = "gh3036",
+    commandSource: CommandSource = Gh3036CommandSource
 ) {
     val paramValues = remember { mutableStateMapOf<String, Any>() }
     val isRegWrite = command.key == "GH3X_RegsWriteCmd"
@@ -332,6 +335,7 @@ private fun CommandCard(
                                     ParamInput(
                                         param = param,
                                         chipName = chipName,
+                                        commandSource = commandSource,
                                         onValueChange = { value ->
                                             paramValues[param.name] = value
                                         },
@@ -348,6 +352,7 @@ private fun CommandCard(
                                         ParamInput(
                                             param = param,
                                             chipName = chipName,
+                                            commandSource = commandSource,
                                             onValueChange = { value ->
                                                 paramValues[param.name] = value
                                             },
@@ -368,7 +373,7 @@ private fun CommandCard(
                             } else if (isRegRead && multiReg) {
                                 CommandPayloadBuilder.buildMultiRegReadParams(readStartAddr, readCount)
                             } else {
-                                CommandPayloadBuilder.buildCommandParams(command, paramValues)
+                                commandSource.buildPayload(command, paramValues)
                             }
                             onExecute(params)
                         },
@@ -410,6 +415,7 @@ private fun ParamInput(
     param: CommandParamDef,
     onValueChange: (Any) -> Unit,
     chipName: String = "gh3036",
+    commandSource: CommandSource = Gh3036CommandSource,
     modifier: Modifier = Modifier
 ) {
     var textValue by remember { mutableStateOf("") }
@@ -420,7 +426,7 @@ private fun ParamInput(
         // Multi-select func mode bits
         param.type == ParamType.FUNC_MODE_BITS -> {
             val selectedBits = remember { mutableStateMapOf<String, Boolean>() }
-            val funcBits = remember(chipName) { Gh3036CommandMeta.getFuncModeBits(chipName) }
+            val funcBits = remember(chipName) { commandSource.getFuncModeBits(chipName).orEmpty() }
             Column {
                 Text(
                     text = param.label,

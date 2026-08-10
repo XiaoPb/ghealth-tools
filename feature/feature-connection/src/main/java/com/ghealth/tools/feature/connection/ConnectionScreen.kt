@@ -83,6 +83,7 @@ import com.ghealth.tools.ble.connection.ConnectedDevice
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.core.model.BleDevice
 import com.ghealth.tools.core.model.ConnectionState
+import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.ui.adaptive.shouldUseLandscapeLayout
 import com.ghealth.tools.core.ui.component.EmptyStateView
 import com.ghealth.tools.core.ui.component.StatusBadge
@@ -171,6 +172,7 @@ private fun ConnectionScreenLandscape(
                         onNavigateBack = { showCommandPanel = false },
                         onExecute = { key, params -> viewModel.executeCommand(key, params) },
                         showBackButton = false,
+                        commandSource = if (state.selectedChip == DeviceType.GH3220.chipName) Gh3220CommandSource else Gh3036CommandSource,
                         chipName = state.selectedChip,
                         registerConfigDownloadState = state.registerConfigDownloadState,
                         onLoadRegisterConfigs = viewModel::loadRegisterConfigFiles,
@@ -353,6 +355,7 @@ private fun ConnectionScreenCompact(
                 commandExecutionStates = state.commandExecutionStates,
                 onNavigateBack = { navController.popBackStack() },
                 onExecute = { key, params -> viewModel.executeCommand(key, params) },
+                commandSource = if (state.selectedChip == DeviceType.GH3220.chipName) Gh3220CommandSource else Gh3036CommandSource,
                 chipName = state.selectedChip,
                 registerConfigDownloadState = state.registerConfigDownloadState,
                 onLoadRegisterConfigs = viewModel::loadRegisterConfigFiles,

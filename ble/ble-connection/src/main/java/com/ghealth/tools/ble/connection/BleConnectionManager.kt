@@ -894,8 +894,9 @@ class BleConnectionManager @Inject constructor(
     }
 
     /**
-     * GH3220 新通路临时直连命令入口：经设备桥的 `client.sendRaw` 发送原始类型命令并返回响应 V 字节，
-     * 不做结构解析。临时方案，Task 4 收敛到 Gh3220CommandMeta 驱动后移除。
+     * GH3220 新通路正式命令入口：命令面板经 CommandSource 编码 payload 后，上层按线命令 ID
+     * （Gh3220CommandMeta.type）调用本方法，经设备桥的 `client.sendRaw` 发送原始类型命令并返回
+     * 响应原始字节（不做结构解析）。
      */
     suspend fun sendGh3220Command(address: String, type: Int, payload: ByteArray = ByteArray(0)): Result<ByteArray> {
         val bridge = peripherals[address]?.itlvcBridge

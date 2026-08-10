@@ -16,6 +16,7 @@ import com.ghealth.tools.ble.scanner.BleScanner
 import com.ghealth.tools.core.model.BleDevice
 import com.ghealth.tools.core.model.ConnectionState
 import com.ghealth.tools.core.model.DataLogEntry
+import com.ghealth.tools.core.model.DeviceType
 import com.ghealth.tools.core.model.FunctionMode
 import com.ghealth.tools.core.model.TestConfig
 import com.ghealth.tools.core.model.WorkMode
@@ -396,7 +397,7 @@ class ConnectionViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val result = connectionManager.sendCommand(masterAddress, key, param)
+                val result = dispatchCommand(masterAddress, key, param)
                 result.fold(
                     onSuccess = { response ->
                         _uiState.update {
@@ -418,6 +419,23 @@ class ConnectionViewModel @Inject constructor(
             } catch (e: Exception) {
                 handleCommandFailure(key, e)
             }
+        }
+    }
+
+    /**
+     * 按当前芯片选择分派命令执行：GH3220 走新 ITLVC 通路（经 [BleConnectionManager.sendGh3220Command]
+     * 发送线命令 ID + payload），其余芯片走既有 RPC 通路（[BleConnectionManager.sendCommand]）。
+     * meta 路由放在 VM 层而非 BleConnectionManager：Gh3220CommandMeta 位于 feature-connection，
+     * ble-connection 不能反向依赖。
+     */
+    private suspend fun dispatchCommand(masterAddress: String, key: String, param: ByteArray): Result<ByteArray> {
+        val chip = _uiState.value.selectedChip
+        return if (chip == DeviceType.GH3220.chipName) {
+            val meta = Gh3220CommandMeta.getCommandByKey(key)
+                ?: return Result.failure(IllegalArgumentException("Unknown GH3220 command: $key"))
+            connectionManager.sendGh3220Command(masterAddress, meta.type, param)
+        } else {
+            connectionManager.sendCommand(masterAddress, key, param)
         }
     }
 

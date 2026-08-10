@@ -112,6 +112,8 @@ internal fun ByteArray.parseRegArrayBlocks(): Result<List<IntArray>> {
  */
 data class Gh3220CommandMeta(
     val meta: CommandMeta,
+    /** 线命令 ID（协议文档 §2 命令 ID 列表，如 GET_VERSION=0x19、CONN_STATUS=0x1A、READ_REG=0x03）。 */
+    val type: Int,
     /** 执行器：入参已按 [meta.params] 校验（含无符号整型转换），非法返回 failure；block 内可直接使用 `!!` 转换。 */
     val executor: suspend (Gh3220ProtocolClient, List<Any?>) -> Result<ByteArray>,
 ) {
@@ -198,6 +200,7 @@ data class Gh3220CommandMeta(
          */
         private fun command(
             key: String,
+            type: Int,
             displayName: String,
             description: String,
             params: List<CommandParamDef>,
@@ -215,7 +218,7 @@ data class Gh3220CommandMeta(
                 responseFormat = responseFormat,
                 group = group,
             )
-            return Gh3220CommandMeta(meta) { client, values ->
+            return Gh3220CommandMeta(meta = meta, type = type) { client, values ->
                 val error = validateGh3220Params(meta.params, values)
                 if (error != null) {
                     Result.failure(IllegalArgumentException("$error（key=${meta.key}）"))
@@ -229,6 +232,7 @@ data class Gh3220CommandMeta(
             // ── 核心命令（计划顺序）────────────────────
             command(
                 key = "GH3220_GET_VERSION",
+                type = 0x19,
                 displayName = "获取版本",
                 description = "0x19 获取指定类型的版本信息（协议文档 §3.21）",
                 params = listOf(
@@ -248,6 +252,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_CONN_STATUS",
+                type = 0x1A,
                 displayName = "连接状态",
                 description = "0x1A 查询连接状态（0=已连接 / 1=未连接）",
                 params = emptyList(),
@@ -258,6 +263,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_START_HBD",
+                type = 0x0C,
                 displayName = "启动 HBD",
                 description = "0x0C 启动/停止 HBD 采集",
                 params = listOf(
@@ -291,6 +297,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_READ_REG",
+                type = 0x03,
                 displayName = "读寄存器",
                 description = "0x03 读取指定地址寄存器（响应每寄存器 2 字节大端）",
                 params = listOf(
@@ -304,6 +311,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_WORK_MODE",
+                type = 0x10,
                 displayName = "工作模式",
                 description = "0x10 设置下位机工作模式",
                 params = listOf(
@@ -328,6 +336,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_RAW_SEND",
+                type = 0x23,
                 displayName = "原始透传",
                 description = "任意命令 ID 原始字节收发（仅透传白名单 0x19/0x1A/0x1E/0x21/0x2A 放行）",
                 params = listOf(
@@ -354,6 +363,7 @@ data class Gh3220CommandMeta(
             // ── 其余命令（按命令 ID 升序）──────────────
             command(
                 key = "GH3220_PACKAGE_TEST",
+                type = 0x05,
                 displayName = "通讯包测试",
                 description = "0x05 通讯包测试，数据原样回显",
                 params = listOf(
@@ -366,6 +376,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_GSENSOR_SET",
+                type = 0x11,
                 displayName = "G-sensor 设置",
                 description = "0x11 设置 G-sensor 厂商/分辨率/采样率",
                 params = listOf(
@@ -384,6 +395,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_FIFO_THRESHOLD",
+                type = 0x12,
                 displayName = "FIFO 阈值",
                 description = "0x12 设置 Cardiff FIFO 阈值",
                 params = listOf(
@@ -396,6 +408,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_EVENT_SET",
+                type = 0x13,
                 displayName = "事件设置",
                 description = "0x13 设置 Cardiff 事件掩码",
                 params = listOf(
@@ -408,6 +421,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_FUNC_MAP",
+                type = 0x15,
                 displayName = "功能通道映射",
                 description = "0x15 下发功能通道映射（固定 64 字节）",
                 params = listOf(
@@ -425,6 +439,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_CHIP_RESET",
+                type = 0x17,
                 displayName = "芯片复位",
                 description = "0x17 Cardiff 芯片复位",
                 params = listOf(
@@ -442,6 +457,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_CALIBRATE_CURRENT",
+                type = 0x18,
                 displayName = "电流校准",
                 description = "0x18 电流校准",
                 params = listOf(
@@ -459,6 +475,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_SAMPLE_RATES",
+                type = 0x1B,
                 displayName = "采样率设置",
                 description = "0x1B 设置各 Function 采样率",
                 params = listOf(
@@ -481,6 +498,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_SLOT_EN",
+                type = 0x1C,
                 displayName = "Slot 使能",
                 description = "0x1C 切换 Slot 使能",
                 params = listOf(
@@ -501,6 +519,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_ECG_CTRL",
+                type = 0x1D,
                 displayName = "ECG 控制",
                 description = "0x1D ECG 控制",
                 params = listOf(
@@ -513,6 +532,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_WORK_MODE_SET",
+                type = 0x1E,
                 displayName = "工作模式设置",
                 description = "0x1E 设置工作模式（透传白名单命令）",
                 params = listOf(
@@ -525,6 +545,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_APP_MODULE",
+                type = 0x20,
                 displayName = "应用模块命令",
                 description = "0x20 应用模块命令",
                 params = listOf(
@@ -537,6 +558,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_SWITCH_CHIP",
+                type = 0x2E,
                 displayName = "切换芯片",
                 description = "0x2E 切换 Cardiff 芯片",
                 params = listOf(
@@ -554,6 +576,7 @@ data class Gh3220CommandMeta(
             },
             command(
                 key = "GH3220_REG_ARRAY_WRITE",
+                type = 0xA1,
                 displayName = "寄存器数组写入",
                 description = "0xA1 批量写寄存器数组（响应状态已由 client 校验）",
                 params = listOf(
