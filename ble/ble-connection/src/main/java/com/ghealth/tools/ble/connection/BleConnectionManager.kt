@@ -197,6 +197,15 @@ class BleConnectionManager @Inject constructor(
      * bridge detach 一并取消，避免重连后旧 collect 协程滞留（僵尸协程累积）。
      */
     private val gh3220CollectJobs = ConcurrentHashMap<String, Job>()
+    /**
+     * GH3220 0x0D 电池上报 collect Job 句柄（按地址）：断连收尾时随 rawdataFrames Job 一并取消。
+     */
+    private val gh3220BatteryJobs = ConcurrentHashMap<String, Job>()
+    /**
+     * 电池来源优先级：存在 GATT BAT 服务的地址以 BAT 服务为准，
+     * GH3220 协议 0x0D 上报仅作为无 BAT 服务时的电量回退。
+     */
+    private val batterySourceSelector = BatterySourceSelector()
     private val connectingPeripherals = ConcurrentHashMap<String, Peripheral>()
     private val connectSingleFlight = ConnectSingleFlight()
     private val notifySubscriptions = NotifySubscriptionGuard()
@@ -542,6 +551,8 @@ class BleConnectionManager @Inject constructor(
         }
         val match = BatteryServiceMatcher.match(refs)
         val levelServiceUuid = match.batteryLevelServiceUuid ?: return
+        // 存在 BAT 服务：标记该地址以 BAT 服务为准，协议 0x0D 上报不再覆盖（幂等）。
+        batterySourceSelector.markBatteryService(address)
 
         val levelChar = characteristicOf(
             service = levelServiceUuid,
@@ -726,6 +737,11 @@ class BleConnectionManager @Inject constructor(
                         val deviceType = peripherals[address]?.deviceType ?: DeviceType.GH3036
                         try {
                             if (deviceType == DeviceType.GH3220) {
+                                // 电池来源：先探测 GATT BAT 服务，存在时以 BAT 服务为准；
+                                // 0x0D 协议上报仅作为无 BAT 服务时的电量回退。
+                                if (BatteryServiceMatcher.match(refs).batteryLevelServiceUuid != null) {
+                                    batterySourceSelector.markBatteryService(address)
+                                }
                                 // GH3220 新 ITLVC 通路：bridge 独占接收通路（NotifyTransport 收集
                                 // peripheral.observe(notifyChar) → session.onReceive），因此不走下方既有
                                 // onDataReceived RPC 订阅分支；否则同一字节被喂两次，ReceiveStateMachine
@@ -760,6 +776,15 @@ class BleConnectionManager @Inject constructor(
                                 gh3220CollectJobs[address] = scope.launch {
                                     bridge.client.rawdataFrames.collect { frame ->
                                         onGh3220Frames(address, listOf(Gh3220FrameAdapter.toGhFuncFrame(frame)))
+                                    }
+                                }
+                                // 0x0D 电池上报：仅在无 GATT BAT 服务时驱动电量显示（BAT 服务优先）。
+                                gh3220BatteryJobs.remove(address)?.cancel()
+                                gh3220BatteryJobs[address] = scope.launch {
+                                    bridge.client.currentBattery.collect { battery ->
+                                        if (batterySourceSelector.shouldUseProtocolBattery(address)) {
+                                            updateBatteryStatus(address) { Gh3220BatteryMapper.toBatteryStatus(battery) }
+                                        }
                                     }
                                 }
                                 bridge.attach(scope)
@@ -1150,6 +1175,8 @@ class BleConnectionManager @Inject constructor(
         // （用户断连 onConfirmedDisconnected、远端断连 state 收集器、断连失败兜底 onDisconnectFailed）；
         // stale 早退已在上方拦截，不会误收尾新连接槽位。
         gh3220CollectJobs.remove(address)?.cancel()
+        gh3220BatteryJobs.remove(address)?.cancel()
+        batterySourceSelector.remove(address)
         slot?.itlvcBridge?.detach()
         writeTypeByAddress.remove(address)
         clearWriteServiceUuid(address)
@@ -1218,6 +1245,8 @@ class BleConnectionManager @Inject constructor(
         peripherals.remove(oldAddress)
         writeTypeByAddress.remove(oldAddress)
         clearWriteServiceUuid(oldAddress)
+        gh3220BatteryJobs.remove(oldAddress)?.cancel()
+        batterySourceSelector.remove(oldAddress)
         _batteryStatus.update { it - oldAddress }
         val oldDevice = _devices.value[oldAddress]
         val role = oldDevice?.role ?: DeviceRole.MASTER

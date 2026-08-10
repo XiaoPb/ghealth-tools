@@ -1,5 +1,6 @@
 package com.ghealth.tools.ble.gh3220
 
+import com.ghealth.tools.ble.gh3220.event.Gh3220CurrentBattery
 import com.ghealth.tools.ble.gh3220.rawdata.Gh3220RawDataFrame
 import com.ghealth.tools.ble.itlvc.codec.ItlvcFrame
 import com.ghealth.tools.ble.itlvc.codec.ItlvcFrameCodec
@@ -266,6 +267,32 @@ class Gh3220ProtocolClientTest {
 
         assertTrue(result.isFailure)
         assertIs<com.ghealth.tools.ble.itlvc.core.ItlvcError.CommandError.DeviceError>(result.exceptionOrNull())
+        session.detach()
+    }
+
+    @Test
+    fun `current battery report is decoded and routed`() = runTest {
+        val transport = InMemoryTransport()
+        val session = ItlvcSession(codec, ItlvcConfig())
+        session.attach(transport, this)
+        val client = Gh3220ProtocolClient(session)
+        client.attach()
+
+        val batteries = mutableListOf<Gh3220CurrentBattery>()
+        val collect = launch {
+            client.currentBattery.collect { batteries.add(it) }
+        }
+        testScheduler.runCurrent()
+        // 0x0D：[cardiff u16le][battery 1B][tx u16le][count u16le]
+        transport.emit(responseFrame(0x0D, bytes(0x34, 0x12, 0x3C, 0x01, 0x00, 0x0A, 0x00)))
+        delay(10)
+        collect.cancel()
+
+        assertEquals(1, batteries.size)
+        assertEquals(0x1234, batteries[0].cardiffCurrent)
+        assertEquals(0x3C, batteries[0].batteryPercent)
+        assertEquals(1, batteries[0].txCurrent)
+        assertEquals(10, batteries[0].bleSendPackageCount)
         session.detach()
     }
 }
