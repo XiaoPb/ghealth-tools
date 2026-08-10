@@ -37,7 +37,7 @@ class Gh3220FunctionTest {
     }
 
     @Test
-    fun `bit 与 C GH3X2X_FUNC_OFFSET_* 一致`() {
+    fun `bit 与 C 宏 GH3X2X_FUNC_OFFSET 一致`() {
         expectedBits.forEach { (name, bit) ->
             assertEquals(bit, Gh3220Function.valueOf(name).bit, "GH3X2X_FUNC_OFFSET_$name")
         }
