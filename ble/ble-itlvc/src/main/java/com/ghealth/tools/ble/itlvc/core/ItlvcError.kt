@@ -14,8 +14,14 @@ sealed class ItlvcError : Exception() {
 
     sealed class CommandError : ItlvcError() {
         /** 响应超时（attempts 为总发送次数，即重试次数 + 1）。 */
-        data class Timeout(val attempts: Int) : CommandError()
-        data class DeviceError(val code: Int) : CommandError()
+        data class Timeout(val attempts: Int) : CommandError() {
+            override val message: String get() = "响应超时(attempts=$attempts)"
+        }
+
+        data class DeviceError(val code: Int) : CommandError() {
+            override val message: String get() = "设备返回错误(code=$code)"
+        }
+
         object Unsupported : CommandError()
         object Busy : CommandError()
         object InvalidParam : CommandError()

@@ -36,4 +36,16 @@ class ItlvcErrorTest {
         val e = ItlvcError.TransportError("send failed")
         assertEquals("send failed", e.message)
     }
+
+    @Test
+    fun `timeout error has readable message`() {
+        val e = ItlvcError.CommandError.Timeout(attempts = 1)
+        assertEquals("响应超时(attempts=1)", e.message)
+    }
+
+    @Test
+    fun `device error has readable message`() {
+        val e = ItlvcError.CommandError.DeviceError(code = 1)
+        assertEquals("设备返回错误(code=1)", e.message)
+    }
 }
