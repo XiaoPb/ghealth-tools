@@ -64,7 +64,7 @@
 
 **关键点：**
 - CSV 文件**懒创建**：Channel 和 Consumer 在 `startSession()` 时创建，但 Server CSV 的 `CsvWriter` 在该 mode+device 的**首个 WriteTask 到达时**才创建。避免为未激活模式生成空文件。
-- Records CSV 在 `startSession()` 时立即创建和打开（每 mode 一份，跨设备共享）。
+- Records CSV 懒创建：在该 mode 的**首个 WriteTask 到达时**才创建（每 mode 一份，跨设备共享，表头按 mode 与设备名由 RecordsFormat 声明）。
 - 不需要等待首帧——全部 modes 的 Channel 已就绪，首帧到达即入队。
 
 ### 手动停止
@@ -265,7 +265,7 @@ private suspend fun consumeModeChannel(
 行3+: 数据行（每 GhFuncFrame 一行）
 ```
 
-**Records CSV**（每 mode 一份，跨 device 共享，`startSession()` 时立即创建）：
+**Records CSV**（每 mode 一份，跨 device 共享，首帧到达时懒创建）：
 ```
 路径: records/{mode}/extra_records_{mode}_{timestamp}.csv
 列: 按 mode 由 RecordsFormat 声明（列数固定），列序 主算法 → 从算法 → 金标/对比设备；金标/对比/从设备列名带实际设备名。例如（金标 HUAWEI Band HR-AD1、对比 Watch2、从设备 Watch3）HR: TimeStamp,HR,Confidence,SNR,Watch3_HR,Watch3_Confidence,Watch3_SNR,Slave2_HR,Slave2_Confidence,Slave2_SNR,Slave3_HR,Slave3_Confidence,Slave3_SNR,HUAWEI Band HR-AD1_HR,Watch2_HR,Device2_HR,Device3_HR
