@@ -252,4 +252,49 @@ class RecordsFormatTest {
         assertEquals(-1, slaveSlotFor(addresses, "DD:4"))
         assertEquals(-1, slaveSlotFor(addresses, "unknown"))
     }
+
+    @Test
+    fun `重名设备列名去重后值写入唯一列`() {
+        val columns = RecordsFormat.columnsFor(
+            FunctionMode.HR,
+            goldDeviceName = "Watch",
+            compareDeviceNames = listOf("Watch"),
+            slaveDeviceNames = listOf("Watch")
+        ).map { it.name }
+        assertEquals(columns.size, columns.toSet().size)
+        assertTrue("Watch_HR" in columns)
+        assertTrue("Watch_HR_2" in columns)
+        assertTrue("Watch_HR_3" in columns)
+    }
+
+    @Test
+    fun `负向槽位或负向算法下标写 0 不崩溃`() {
+        val columns = listOf(
+            RecordsColumn("BadSlot", RecordsColumnKind.SLAVE_ALGO, algoIndex = 0, slaveIndex = -1),
+            RecordsColumn("BadAlgo", RecordsColumnKind.MASTER_ALGO, algoIndex = -1)
+        )
+        val values = buildRecordsValues(
+            columns,
+            IntArray(16),
+            Array(1) { IntArray(16) },
+            emptyMap(),
+            emptyMap(),
+            1L
+        )
+        assertEquals(0, values["BadSlot"])
+        assertEquals(0, values["BadAlgo"])
+    }
+
+    @Test
+    fun `全空白设备名回退默认前缀`() {
+        val columns = RecordsFormat.columnsFor(
+            FunctionMode.HR,
+            goldDeviceName = "   ",
+            compareDeviceNames = listOf("  "),
+            slaveDeviceNames = listOf("  ")
+        ).map { it.name }
+        assertTrue("Gold_HR" in columns)
+        assertTrue("Device1_HR" in columns)
+        assertTrue("Slave1_HR" in columns)
+    }
 }

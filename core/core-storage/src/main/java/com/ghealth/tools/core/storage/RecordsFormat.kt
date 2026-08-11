@@ -102,7 +102,7 @@ object RecordsFormat {
         if (mode in TABLE_MODES) {
             columns.addAll(goldColumns(mode, goldDeviceName, compareDeviceNames))
         }
-        return columns
+        return dedupeNames(columns)
     }
 
     /** 主设备算法字段；未定义的模式退化为通用 Algo0（ALGO_RESULT0）。 */
@@ -157,6 +157,20 @@ internal fun slaveSlotFor(slaveAddresses: List<String>, address: String): Int {
 internal fun sanitizeColumnToken(name: String): String =
     name.replace(Regex("""[,\"\r\n]"""), "_").trim()
 
+/** 列名去重：重名追加 _2/_3 后缀，保证每个值都有唯一列可写。 */
+internal fun dedupeNames(columns: List<RecordsColumn>): List<RecordsColumn> {
+    val seen = mutableSetOf<String>()
+    return columns.map { col ->
+        var name = col.name
+        var suffix = 2
+        while (!seen.add(name)) {
+            name = "${col.name}_$suffix"
+            suffix++
+        }
+        col.copy(name = name)
+    }
+}
+
 /** 从帧 columnMap 拷贝 ALGO_RESULT0..15 到缓冲区，缺失写 0。 */
 internal fun copyAlgoValues(columnMap: Map<String, Any?>, dest: IntArray) {
     for (i in dest.indices) {
@@ -166,7 +180,7 @@ internal fun copyAlgoValues(columnMap: Map<String, Any?>, dest: IntArray) {
 
 /** 取数组下标值，越界或缺省写 0。 */
 private fun algoAt(array: IntArray, index: Int?): Int =
-    if (index != null && index < array.size) array[index] else 0
+    if (index != null && index >= 0 && index < array.size) array[index] else 0
 
 /** 由 records 缓冲区构建一行值；金标/对比设备无值写 0，从设备未连接写 0，绝不写空。 */
 internal fun buildRecordsValues(
@@ -185,7 +199,7 @@ internal fun buildRecordsValues(
             RecordsColumnKind.SLAVE_ALGO -> {
                 val slot = col.slaveIndex ?: 0
                 val index = col.algoIndex ?: 0
-                if (slot < slaveAlgos.size) algoAt(slaveAlgos[slot], index) else 0
+                if (slot in slaveAlgos.indices) algoAt(slaveAlgos[slot], index) else 0
             }
             RecordsColumnKind.GOLD_HR -> compareHrs[0] ?: 0
             RecordsColumnKind.GOLD_RRI -> 0
