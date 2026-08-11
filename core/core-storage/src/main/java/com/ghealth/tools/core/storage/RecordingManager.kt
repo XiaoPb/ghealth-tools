@@ -52,11 +52,15 @@ internal fun shouldRotateServerFile(
     return count > 1
 }
 
+/** 血氧参考列起始下标（REF_RESULT5，见 .claude/csv_rules 下 yaml 规则的 spo_ref_column）。 */
+internal const val REF_RESULT_SPO2_OFFSET = 5
+
 /**
  * 把比较设备（金标）实时值注入 server CSV 行。
  * - 心率: REF_RESULT0..4（对应比较设备 index）
- * - 血氧: REF_RESULT5..9（手动输入/实时推送，index 从 5 开始）
+ * - 血氧: REF_RESULT5..9（手动输入/实时推送，index 从 REF_RESULT_SPO2_OFFSET 开始）
  * 列名保持 REF_RESULT 原样，金标设备名记录在首行 JSON（ref_result_devices）。
+ * 注意：须在 records buffer 锁内调用（当前由 writeTaskToCsv 在 lock.withLock 内调用）。
  */
 internal fun injectCompareValues(
     serverValues: MutableMap<String, Any?>,
@@ -67,7 +71,7 @@ internal fun injectCompareValues(
         serverValues["REF_RESULT$index"] = hr
     }
     for ((index, spo2) in compareSpo2s) {
-        serverValues["REF_RESULT${5 + index}"] = spo2
+        serverValues["REF_RESULT${REF_RESULT_SPO2_OFFSET + index}"] = spo2
     }
 }
 
@@ -227,6 +231,7 @@ class RecordingManager @Inject constructor(
     }
 
     fun updateCompareSpo2(index: Int, spo2: Float?) {
+        if (index !in 0 until MAX_COMPARE_DEVICES) return
         for ((_, state) in modeStates) {
             scope.launch {
                 state.lock.withLock {
@@ -245,7 +250,7 @@ class RecordingManager @Inject constructor(
             scope.launch {
                 state.lock.withLock {
                     state.recordsBuffer.compareSpo2s.clear()
-                    state.recordsBuffer.compareSpo2s.putAll(values)
+                    state.recordsBuffer.compareSpo2s.putAll(values.filterKeys { it in 0 until MAX_COMPARE_DEVICES })
                 }
             }
         }

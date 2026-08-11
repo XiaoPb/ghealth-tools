@@ -70,6 +70,9 @@ data class StoragePath(
     private fun jsonStringOrNull(value: String?): String =
         if (value == null) "null" else "\"$value\""
 
+    private fun jsonEscape(value: String): String =
+        value.replace("\\", "\\\\").replace("\"", "\\\"")
+
     fun infoJson(): String {
         return buildString {
             append("{\"MAC\":\"$deviceAddress\",")
@@ -90,7 +93,7 @@ data class StoragePath(
             append("\"tester\":\"$tester\",")
             append("\"device_role\":\"${deviceRole.name}\",")
             val refResultMapping = compareDeviceNames.mapIndexedNotNull { index, name ->
-                if (name.isNotBlank()) "\"REF_RESULT$index\":\"$name\"" else null
+                if (name.isNotBlank()) "\"REF_RESULT$index\":\"${jsonEscape(name)}\"" else null
             }
             if (refResultMapping.isNotEmpty()) {
                 append("\"ref_result_devices\":{${refResultMapping.joinToString(",")}},")

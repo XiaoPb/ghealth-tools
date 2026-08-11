@@ -77,4 +77,22 @@ class StoragePathTest {
     fun `无对比设备时 infoJson 不包含 ref_result_devices`() {
         assertFalse(path().infoJson().contains("ref_result_devices"))
     }
+
+    @Test
+    fun `空白设备名被过滤且索引保留`() {
+        val json = path(compareDeviceNames = listOf("A", "", "C")).infoJson()
+        assertTrue(json.contains("\"ref_result_devices\":{\"REF_RESULT0\":\"A\",\"REF_RESULT2\":\"C\"}"))
+        assertFalse(json.contains("REF_RESULT1"))
+    }
+
+    @Test
+    fun `全空白设备名时 infoJson 不包含 ref_result_devices`() {
+        assertFalse(path(compareDeviceNames = listOf("", " ")).infoJson().contains("ref_result_devices"))
+    }
+
+    @Test
+    fun `设备名含引号反斜杠时做 JSON 转义`() {
+        val json = path(compareDeviceNames = listOf("Foo \"Bar\\Baz\"")).infoJson()
+        assertTrue(json.contains("\"ref_result_devices\":{\"REF_RESULT0\":\"Foo \\\"Bar\\\\Baz\\\"\"}"))
+    }
 }
