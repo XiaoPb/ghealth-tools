@@ -9,7 +9,6 @@
 | 组件 | 文件 | 职责 |
 |------|------|------|
 | `RecordingManager` | `RecordingManager.kt` | 录制会话管理，Channel 异步写入协调 |
-| `DataRecorder` | `DataRecorder.kt` | 旧版录制接口（已废弃，由 RecordingManager 替代） |
 | `CsvWriter` | `CsvWriter.kt` | CSV 文件写入器（BufferedWriter 封装） |
 | `CsvRuleParser` | `CsvRuleParser.kt` | CSV 列规则解析（`.claude/csv_rules/`） |
 | `CsvUploadManager` | `CsvUploadManager.kt` | CSV 上传到服务器 |
