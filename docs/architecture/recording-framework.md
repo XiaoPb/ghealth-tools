@@ -268,7 +268,7 @@ private suspend fun consumeModeChannel(
 **Records CSV**（每 mode 一份，跨 device 共享，`startSession()` 时立即创建）：
 ```
 路径: records/{mode}/extra_records_{mode}_{timestamp}.csv
-列: TimeStamp, MasterAlgo, SlaveAlgo, Compare0_HR, ..., Compare4_HR
+列: 按 mode 由 RecordsFormat 声明（列数固定），列序 主算法 → 从算法 → 金标/对比设备；金标/对比/从设备列名带实际设备名。例如（金标 HUAWEI Band HR-AD1、对比 Watch2、从设备 Watch3）HR: TimeStamp,HR,Confidence,SNR,Watch3_HR,Watch3_Confidence,Watch3_SNR,Slave2_HR,Slave2_Confidence,Slave2_SNR,Slave3_HR,Slave3_Confidence,Slave3_SNR,HUAWEI Band HR-AD1_HR,Watch2_HR,Device2_HR,Device3_HR
 每秒写入一行（按硬件时间戳/1000 的秒边界）
 ```
 
@@ -335,9 +335,13 @@ if (currentSecond != recordsBuffer.lastWrittenSecond) {
 ```
 
 Records 行聚合当前秒内的最新值：
-- `MasterAlgo`: 主设备最近一帧的 ALGO_RESULT0
-- `SlaveAlgo`: 从设备最近一帧的 ALGO_RESULT0
-- `Compare0_HR..4_HR`: 比较设备的心率值（来自 `updateCompareHr()` 实时更新）
+- 列序：TimeStamp → 主设备算法字段 → 从设备算法字段（Slave1..3，与主设备同字段集）→ 金标/对比设备列
+- 表格功能（HR/ECG/SPO2/HRV）：含金标/对比设备列；其他功能仅算法结果，无金标列
+- `{金标设备名}_HR`: 标准设备HR值（主金标，compare 设备 index 0）心率，无金标回退 `Gold_HR`，无值写 0
+- `{金标设备名}_RRI1..4`: 标准设备RRI，当前无可来源，恒写 0
+- `{对比设备名}_*`: 其他对比设备值（参考文档 Device1..3 原义）。HR ← compareHrs[1..3]、SPO2 ← compareSpo2s[1..3]、HRV 无来源恒 0；ECG 无 Device 列
+- `{从设备名}_*`: 从设备按连接顺序写入与主设备同序号的 ALGO_RESULT 字段，未连接槽位写 0（当前连接层限 1 个从设备）
+- 表头与行值共用同一份列规格（创建 writer 时由会话设备名生成并固定），列名带设备名也不会导致值写空
 
 ### CsvWriter 内部
 
