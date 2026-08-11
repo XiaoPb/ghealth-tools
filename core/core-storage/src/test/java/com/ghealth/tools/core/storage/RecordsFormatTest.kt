@@ -297,4 +297,39 @@ class RecordsFormatTest {
         assertTrue("Device1_HR" in columns)
         assertTrue("Slave1_HR" in columns)
     }
+
+    @Test
+    fun `records 规则按 mode 与设备名声明列数`() {
+        assertEquals(
+            listOf(
+                "TimeStamp", "HR", "Confidence", "SNR",
+                "Slave1_HR", "Slave1_Confidence", "Slave1_SNR",
+                "Slave2_HR", "Slave2_Confidence", "Slave2_SNR",
+                "Slave3_HR", "Slave3_Confidence", "Slave3_SNR",
+                "Gold_HR", "Device1_HR", "Device2_HR", "Device3_HR"
+            ),
+            CsvRuleParser.forRecordsCsv(FunctionMode.HR).columns
+        )
+        assertEquals(
+            listOf(
+                "TimeStamp", "Algo", "Slave1_Algo", "Slave2_Algo", "Slave3_Algo"
+            ),
+            CsvRuleParser.forRecordsCsv(FunctionMode.TEST2).columns
+        )
+        assertEquals(
+            listOf(
+                "TimeStamp", "HR", "Confidence", "SNR",
+                "Watch3_HR", "Watch3_Confidence", "Watch3_SNR",
+                "Slave2_HR", "Slave2_Confidence", "Slave2_SNR",
+                "Slave3_HR", "Slave3_Confidence", "Slave3_SNR",
+                "HUAWEI Band HR-AD1_HR", "Watch2_HR", "Device2_HR", "Device3_HR"
+            ),
+            CsvRuleParser.forRecordsCsv(
+                FunctionMode.HR,
+                goldDeviceName = "HUAWEI Band HR-AD1",
+                compareDeviceNames = listOf("Watch2"),
+                slaveDeviceNames = listOf("Watch3")
+            ).columns
+        )
+    }
 }

@@ -429,7 +429,10 @@ class RecordingManager @Inject constructor(
 
     private suspend fun createRecordsWriter(mode: String, numCompareDevices: Int): CsvWriter? {
         val dateStr = DATE_FORMAT.format(sessionDate)
-        val recordsRule = CsvRuleParser.forRecordsCsv(numCompareDevices)
+        val recordsRule = CsvRuleParser.forRecordsCsv(
+            mode = FunctionMode.valueOf(mode),
+            compareDeviceNames = (1..numCompareDevices).map { "Device$it" }
+        )
         val recordsPath = "records/$mode/extra_records_${mode}_$dateStr.csv"
         val recordsFile = File(baseDir, recordsPath)
         recordsFile.parentFile?.mkdirs()
