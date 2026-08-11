@@ -53,6 +53,7 @@ class DeviceRecorder(
             hrvVersion = config.hrvVersion,
             projectName = config.projectName,
             projectId = config.projectId,
+            compareDeviceNames = config.compareDeviceNames,
             date = java.util.Date()
         )
         val newFile = File(baseDir, path.serverPath())
@@ -110,11 +111,7 @@ class DataRecorder @Inject constructor(
             return
         }
 
-        val rule = if (config.compareDeviceNames.isNotEmpty()) {
-            CsvRuleParser.forChipWithCompareDevices(config.chip, config.compareDeviceNames)
-        } else {
-            CsvRuleParser.forChip(config.chip)
-        }
+        val rule = CsvRuleParser.forChip(config.chip)
 
         val path = StoragePath(
             mode = config.mode,
@@ -132,7 +129,8 @@ class DataRecorder @Inject constructor(
             nadtVersion = config.nadtVersion,
             hrvVersion = config.hrvVersion,
             projectName = config.projectName,
-            projectId = config.projectId
+            projectId = config.projectId,
+            compareDeviceNames = config.compareDeviceNames
         )
 
         val serverFile = File(baseDir, path.serverPath())
