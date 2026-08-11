@@ -69,6 +69,8 @@ class CsvWriter(
 行3+: 228530,1,0.1234,0.5678,...,72,...                        ← 数据行（每帧一行）
 ```
 
+> 存在金标（比较）设备时，行1 JSON 会包含 `ref_result_devices` 字段，记录 `REF_RESULT` 列与金标设备名的映射（如 `"ref_result_devices":{"REF_RESULT0":"HUAWEI Band HR-AD1"}`）。列头保持 `REF_RESULT0..15` 不变，金标心率写入 `REF_RESULT0..4`、血氧写入 `REF_RESULT5..9`，无值时写 0。
+
 ### 4.3 线程模型
 
 - 所有 I/O 操作使用 `withContext(Dispatchers.IO)` 切换线程
