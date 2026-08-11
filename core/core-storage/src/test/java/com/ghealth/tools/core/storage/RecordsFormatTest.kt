@@ -92,6 +92,29 @@ class RecordsFormatTest {
     }
 
     @Test
+    fun `NADT 位打包字段按 parseAlgorithmResult 语义取值`() {
+        val master = IntArray(16).also { it[0] = 0b110; it[1] = 85 }
+        val slaves = Array(RecordsFormat.MAX_SLAVE_DEVICES) { IntArray(16) }.also { it[0][0] = 0b110; it[0][1] = 85 }
+        val values = buildRecordsValues(
+            RecordsFormat.columnsFor(FunctionMode.NADT_GREEN),
+            master,
+            slaves,
+            emptyMap(),
+            emptyMap(),
+            1L
+        )
+        assertEquals(2, values["WearStatus"])
+        assertEquals(1, values["SuspectOff"])
+        assertEquals(85, values["LiveBodyConf"])
+        assertEquals(2, values["Slave1_WearStatus"])
+        assertEquals(1, values["Slave1_SuspectOff"])
+        assertEquals(85, values["Slave1_LiveBodyConf"])
+        assertEquals(0, values["Slave2_WearStatus"])
+        assertEquals(0, values["Slave2_SuspectOff"])
+        assertEquals(0, values["Slave2_LiveBodyConf"])
+    }
+
+    @Test
     fun `BT 非表格功能仅算法结果无金标列`() {
         assertEquals(
             listOf(

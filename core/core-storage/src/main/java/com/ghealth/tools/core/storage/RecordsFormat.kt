@@ -35,7 +35,9 @@ data class RecordsColumn(
     val kind: RecordsColumnKind,
     val algoIndex: Int? = null,
     val slaveIndex: Int? = null,
-    val compareIndex: Int? = null
+    val compareIndex: Int? = null,
+    val shift: Int = 0,
+    val mask: Int = -1
 )
 
 /**
@@ -51,20 +53,38 @@ object RecordsFormat {
     /** 从设备槽位数（列名 Slave1..3）。 */
     const val MAX_SLAVE_DEVICES = 3
 
-    /** 主设备算法字段：列名 → ALGO_RESULT 下标（与 parseAlgorithmResult 的下标一致）。 */
-    private val MASTER_ALGO_FIELDS: Map<FunctionMode, List<Pair<String, Int>>> = mapOf(
-        FunctionMode.HR to listOf("HR" to 0, "Confidence" to 1, "SNR" to 2),
-        FunctionMode.ECG to listOf("ECG_Voltage" to 0, "HeartRate" to 1, "SNR" to 2),
+    /** 算法字段定义：列名 → ALGO_RESULT 下标，与 parseAlgorithmResult 解码语义一致（支持位提取）。 */
+    private data class AlgoField(
+        val name: String,
+        val index: Int,
+        val shift: Int = 0,
+        val mask: Int = -1
+    )
+
+    /** 主设备算法字段（与 parseAlgorithmResult 的解码语义一致，NADT 为位打包）。 */
+    private val MASTER_ALGO_FIELDS: Map<FunctionMode, List<AlgoField>> = mapOf(
+        FunctionMode.HR to listOf(AlgoField("HR", 0), AlgoField("Confidence", 1), AlgoField("SNR", 2)),
+        FunctionMode.ECG to listOf(AlgoField("ECG_Voltage", 0), AlgoField("HeartRate", 1), AlgoField("SNR", 2)),
         FunctionMode.SPO2 to listOf(
-            "SPO2" to 0, "RValue" to 1, "Confidence" to 2, "ValidLevel" to 3, "HeartRate" to 4
+            AlgoField("SPO2", 0), AlgoField("RValue", 1), AlgoField("Confidence", 2),
+            AlgoField("ValidLevel", 3), AlgoField("HeartRate", 4)
         ),
         FunctionMode.HRV to listOf(
-            "RRI1" to 0, "RRI2" to 1, "RRI3" to 2, "RRI4" to 3, "Confidence" to 4, "RRI_Count" to 5
+            AlgoField("RRI1", 0), AlgoField("RRI2", 1), AlgoField("RRI3", 2), AlgoField("RRI4", 3),
+            AlgoField("Confidence", 4), AlgoField("RRI_Count", 5)
         ),
-        FunctionMode.ADT to listOf("WearEvent" to 0, "DetStatus" to 1, "Ctr" to 2),
-        FunctionMode.NADT_GREEN to listOf("WearStatus" to 0, "SuspectOff" to 1, "LiveBodyConf" to 2),
-        FunctionMode.NADT_IR to listOf("WearStatus" to 0, "SuspectOff" to 1, "LiveBodyConf" to 2),
-        FunctionMode.BT to listOf("NTC0" to 0, "NTC1" to 1)
+        FunctionMode.ADT to listOf(AlgoField("WearEvent", 0), AlgoField("DetStatus", 1), AlgoField("Ctr", 2)),
+        FunctionMode.NADT_GREEN to listOf(
+            AlgoField("WearStatus", 0, mask = 0x3),
+            AlgoField("SuspectOff", 0, shift = 2, mask = 0x1),
+            AlgoField("LiveBodyConf", 1)
+        ),
+        FunctionMode.NADT_IR to listOf(
+            AlgoField("WearStatus", 0, mask = 0x3),
+            AlgoField("SuspectOff", 0, shift = 2, mask = 0x1),
+            AlgoField("LiveBodyConf", 1)
+        ),
+        FunctionMode.BT to listOf(AlgoField("NTC0", 0), AlgoField("NTC1", 1))
     )
 
     /** 表格功能（参考文档定义的表格式保存，含金标/对比设备列）。 */
@@ -84,17 +104,25 @@ object RecordsFormat {
     ): List<RecordsColumn> {
         val columns = mutableListOf(RecordsColumn("TimeStamp", RecordsColumnKind.TIMESTAMP))
         val fields = masterFields(mode)
-        for ((name, index) in fields) {
-            columns.add(RecordsColumn(name, RecordsColumnKind.MASTER_ALGO, algoIndex = index))
+        for (field in fields) {
+            columns.add(
+                RecordsColumn(
+                    field.name, RecordsColumnKind.MASTER_ALGO,
+                    algoIndex = field.index, shift = field.shift, mask = field.mask
+                )
+            )
         }
         // 从设备算法字段：Slave1..3 槽位，列名带从设备名
         for (slot in 0 until MAX_SLAVE_DEVICES) {
             val prefix = sanitizeColumnToken(
                 slaveDeviceNames.getOrNull(slot)?.takeIf { it.isNotBlank() } ?: "Slave${slot + 1}"
             )
-            for ((name, index) in fields) {
+            for (field in fields) {
                 columns.add(
-                    RecordsColumn("${prefix}_$name", RecordsColumnKind.SLAVE_ALGO, algoIndex = index, slaveIndex = slot)
+                    RecordsColumn(
+                        "${prefix}_${field.name}", RecordsColumnKind.SLAVE_ALGO,
+                        algoIndex = field.index, slaveIndex = slot, shift = field.shift, mask = field.mask
+                    )
                 )
             }
         }
@@ -106,8 +134,8 @@ object RecordsFormat {
     }
 
     /** 主设备算法字段；未定义的模式退化为通用 Algo0（ALGO_RESULT0）。 */
-    fun masterFields(mode: FunctionMode): List<Pair<String, Int>> =
-        MASTER_ALGO_FIELDS[mode] ?: listOf("Algo" to 0)
+    private fun masterFields(mode: FunctionMode): List<AlgoField> =
+        MASTER_ALGO_FIELDS[mode] ?: listOf(AlgoField("Algo", 0))
 
     /** 金标/对比设备列（仅表格功能；参考文档 Device1..3 为其他对比设备值）。 */
     private fun goldColumns(
@@ -195,11 +223,12 @@ internal fun buildRecordsValues(
     for (col in columns) {
         values[col.name] = when (col.kind) {
             RecordsColumnKind.TIMESTAMP -> timestampMs
-            RecordsColumnKind.MASTER_ALGO -> algoAt(masterAlgo, col.algoIndex)
+            RecordsColumnKind.MASTER_ALGO -> (algoAt(masterAlgo, col.algoIndex) shr col.shift) and col.mask
             RecordsColumnKind.SLAVE_ALGO -> {
                 val slot = col.slaveIndex ?: 0
                 val index = col.algoIndex ?: 0
-                if (slot in slaveAlgos.indices) algoAt(slaveAlgos[slot], index) else 0
+                val value = if (slot in slaveAlgos.indices) algoAt(slaveAlgos[slot], index) else 0
+                (value shr col.shift) and col.mask
             }
             RecordsColumnKind.GOLD_HR -> compareHrs[0] ?: 0
             RecordsColumnKind.GOLD_RRI -> 0
