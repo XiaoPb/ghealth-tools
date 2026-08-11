@@ -31,6 +31,7 @@ data class StoragePath(
     val projectName: String = "",
     val projectId: Int = 0,
     val username: String = "",
+    val compareDeviceNames: List<String> = emptyList(),
     val date: Date = Date()
 ) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US)
@@ -88,6 +89,12 @@ data class StoragePath(
             append("\"project_id\":$projectId,")
             append("\"tester\":\"$tester\",")
             append("\"device_role\":\"${deviceRole.name}\",")
+            val refResultMapping = compareDeviceNames.mapIndexedNotNull { index, name ->
+                if (name.isNotBlank()) "\"REF_RESULT$index\":\"$name\"" else null
+            }
+            if (refResultMapping.isNotEmpty()) {
+                append("\"ref_result_devices\":{${refResultMapping.joinToString(",")}},")
+            }
             append("\"mode\":\"$mode\"}")
         }
     }

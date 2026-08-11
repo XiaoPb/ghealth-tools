@@ -1,6 +1,7 @@
 package com.ghealth.tools.core.storage
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.Date
@@ -13,7 +14,8 @@ class StoragePathTest {
         hrVersion: String? = null,
         spo2Version: String? = null,
         nadtVersion: String? = null,
-        hrvVersion: String? = null
+        hrvVersion: String? = null,
+        compareDeviceNames: List<String> = emptyList()
     ) = StoragePath(
         mode = "HR",
         deviceRole = DeviceRole.MASTER,
@@ -29,6 +31,7 @@ class StoragePathTest {
         spo2Version = spo2Version,
         nadtVersion = nadtVersion,
         hrvVersion = hrvVersion,
+        compareDeviceNames = compareDeviceNames,
         date = Date(0)
     )
 
@@ -62,5 +65,16 @@ class StoragePathTest {
         assertTrue(json.contains("\"mode\":\"HR\""))
         assertTrue(json.contains("\"device_role\":\"MASTER\""))
         assertEquals("HR", path().mode)
+    }
+
+    @Test
+    fun `对比设备名称写入 infoJson 的 ref_result_devices 映射`() {
+        val json = path(compareDeviceNames = listOf("HUAWEI Band HR-AD1", "Watch2")).infoJson()
+        assertTrue(json.contains("\"ref_result_devices\":{\"REF_RESULT0\":\"HUAWEI Band HR-AD1\",\"REF_RESULT1\":\"Watch2\"}"))
+    }
+
+    @Test
+    fun `无对比设备时 infoJson 不包含 ref_result_devices`() {
+        assertFalse(path().infoJson().contains("ref_result_devices"))
     }
 }
