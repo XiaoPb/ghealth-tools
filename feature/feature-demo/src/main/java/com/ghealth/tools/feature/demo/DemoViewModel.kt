@@ -612,12 +612,8 @@ class DemoViewModel @Inject constructor(
                 masterDeviceName = masterDevice.name ?: "Unknown",
                 masterDeviceAddress = masterDevice.address,
                 slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },
-                compareDeviceNames = devices.values
-                    .filter { it.role == DeviceRole.COMPARE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED }
-                    .map { it.name ?: it.address },
-                compareDeviceAddresses = devices.values
-                    .filter { it.role == DeviceRole.COMPARE && it.state == com.ghealth.tools.core.model.ConnectionState.CONNECTED }
-                    .map { it.address },
+                compareDeviceNames = connectionManager.connectedCompareDevicesInIndexOrder().map { it.name ?: it.address },
+                compareDeviceAddresses = connectionManager.connectedCompareDevicesInIndexOrder().map { it.address },
                 sdkVersion = firmwareVersionHolder.state.value.sdkVersion,
                 hrVersion = firmwareVersionHolder.state.value.hrVersion,
                 spo2Version = firmwareVersionHolder.state.value.spo2Version,

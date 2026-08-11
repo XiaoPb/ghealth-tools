@@ -504,12 +504,18 @@ class BleConnectionManager @Inject constructor(
         Timber.d("Set primary compare device: $address")
     }
 
-    private fun getCompareDeviceIndex(address: String): Int {
-        val compareDevices = _devices.value.values
+    /**
+     * 返回已连接比较设备，按录制索引顺序排列（主金标在前）。
+     * 与 [getCompareDeviceIndex] 以及 startSession 的 compareDeviceNames/compareDeviceAddresses 保持同一顺序，
+     * 确保 ref_result_devices 映射与 REF_RESULT 列注入值一一对应。
+     */
+    fun connectedCompareDevicesInIndexOrder(): List<ConnectedDevice> =
+        _devices.value.values
             .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
             .sortedByDescending { it.isPrimaryCompare }
-        return compareDevices.indexOfFirst { it.address == address }
-    }
+
+    private fun getCompareDeviceIndex(address: String): Int =
+        connectedCompareDevicesInIndexOrder().indexOfFirst { it.address == address }
 
     private fun onHeartRateReceived(address: String, data: ByteArray) {
         if (data.size < 2) return

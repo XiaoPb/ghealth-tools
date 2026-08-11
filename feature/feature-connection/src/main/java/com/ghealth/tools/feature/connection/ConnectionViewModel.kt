@@ -613,12 +613,8 @@ class ConnectionViewModel @Inject constructor(
                     masterDeviceName = masterDevice.name ?: "Unknown",
                     masterDeviceAddress = masterDevice.address,
                     slaveDevices = slaveDevices.associate { it.address to (it.name ?: "Unknown") },
-                    compareDeviceNames = devices.values
-                        .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
-                        .map { it.name ?: it.address },
-                    compareDeviceAddresses = devices.values
-                        .filter { it.role == DeviceRole.COMPARE && it.state == ConnectionState.CONNECTED }
-                        .map { it.address },
+                    compareDeviceNames = connectionManager.connectedCompareDevicesInIndexOrder().map { it.name ?: it.address },
+                    compareDeviceAddresses = connectionManager.connectedCompareDevicesInIndexOrder().map { it.address },
                     projectName = projectName,
                     projectId = projectId,
                     username = userInfo.username,
