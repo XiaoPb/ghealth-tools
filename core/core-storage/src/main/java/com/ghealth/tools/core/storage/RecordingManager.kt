@@ -125,8 +125,9 @@ class RecordingManager @Inject constructor(
 
     private data class RecordsBufferState(
         var lastWrittenSecond: Long = 0L,
-        var masterAlgo: String = "",
-        var slaveAlgo: String = "",
+        var recordsColumns: List<RecordsColumn>? = null,
+        val masterAlgo: IntArray = IntArray(16),
+        val slaveAlgos: Array<IntArray> = Array(RecordsFormat.MAX_SLAVE_DEVICES) { IntArray(16) },
         val compareHrs: MutableMap<Int, Int> = mutableMapOf(),
         val compareSpo2s: MutableMap<Int, Float> = mutableMapOf()
     )
@@ -187,7 +188,7 @@ class RecordingManager @Inject constructor(
             val lock = Mutex()
 
             val consumerJob = scope.launch {
-                consumeModeChannel(mode.name, channel, serverWriters, recordsBuffer, lock, numCompare)
+                consumeModeChannel(mode.name, channel, serverWriters, recordsBuffer, lock)
             }
 
             val modeState = ModeState(
@@ -305,14 +306,13 @@ class RecordingManager @Inject constructor(
         channel: Channel<WriteTask>,
         serverWriters: ConcurrentHashMap<String, CsvWriter>,
         recordsBuffer: RecordsBufferState,
-        lock: Mutex,
-        numCompareDevices: Int
+        lock: Mutex
     ) {
         var recordsWriter: CsvWriter? = null
         val frameZeroCounts = mutableMapOf<String, Int>()
         for (task in channel) {
             try {
-                recordsWriter = writeTaskToCsv(mode, task, serverWriters, recordsWriter, recordsBuffer, lock, numCompareDevices, frameZeroCounts)
+                recordsWriter = writeTaskToCsv(mode, task, serverWriters, recordsWriter, recordsBuffer, lock, frameZeroCounts)
             } catch (e: Exception) {
                 Timber.e(e, "Error writing task for mode=$mode device=${task.deviceAddress}")
             }
@@ -328,7 +328,6 @@ class RecordingManager @Inject constructor(
         recordsWriter: CsvWriter?,
         recordsBuffer: RecordsBufferState,
         lock: Mutex,
-        numCompareDevices: Int,
         frameZeroCounts: MutableMap<String, Int>
     ): CsvWriter? {
         var currentRecordsWriter = recordsWriter
@@ -356,21 +355,31 @@ class RecordingManager @Inject constructor(
         serverWriter.writeRow(serverValues)
 
         // 2. Lazy-create records CSV on first write for this mode
+        //    表头与行值共用同一份列规格（recordsColumns），列名带设备名也不会导致值写空
         if (currentRecordsWriter == null) {
-            currentRecordsWriter = createRecordsWriter(mode, numCompareDevices)
+            val created = createRecordsWriter(mode) ?: return currentRecordsWriter
+            currentRecordsWriter = created.first
+            recordsBuffer.recordsColumns = created.second
         }
 
-        // 3. Update records buffer
-        val algoValue = (task.columnMap["ALGO_RESULT0"] as? Number)?.toInt()?.toString() ?: ""
+        // 3. Update records buffer（主设备 ALGO_RESULT0..15；从设备按连接顺序写入槽位）
         when (task.role) {
-            DeviceRole.MASTER -> recordsBuffer.masterAlgo = algoValue
-            DeviceRole.SLAVE -> recordsBuffer.slaveAlgo = algoValue
+            DeviceRole.MASTER -> copyAlgoValues(task.columnMap, recordsBuffer.masterAlgo)
+            DeviceRole.SLAVE -> {
+                val cfg = currentConfig
+                val slot = if (cfg != null) {
+                    slaveSlotFor(cfg.slaveNames.keys.toList(), task.deviceAddress)
+                } else {
+                    -1
+                }
+                if (slot >= 0) copyAlgoValues(task.columnMap, recordsBuffer.slaveAlgos[slot])
+            }
             else -> {}
         }
 
         val currentSecond = task.timestamp / 1000
         if (currentSecond != recordsBuffer.lastWrittenSecond) {
-            flushRecordsRow(mode, task.timestamp, currentRecordsWriter, recordsBuffer, lock)
+            flushRecordsRow(task.timestamp, currentRecordsWriter, recordsBuffer, lock)
             recordsBuffer.lastWrittenSecond = currentSecond
         }
 
@@ -427,34 +436,42 @@ class RecordingManager @Inject constructor(
         return writer
     }
 
-    private suspend fun createRecordsWriter(mode: String, numCompareDevices: Int): CsvWriter? {
+    private suspend fun createRecordsWriter(mode: String): Pair<CsvWriter, List<RecordsColumn>>? {
+        val cfg = currentConfig ?: return null
         val dateStr = DATE_FORMAT.format(sessionDate)
-        val recordsRule = CsvRuleParser.forRecordsCsv(numCompareDevices)
+        val funcMode = FunctionMode.valueOf(mode)
+        val goldName = cfg.compareNames.firstOrNull()
+        val compareNames = cfg.compareNames.drop(1)
+        val slaveNames = cfg.slaveNames.values.toList()
+        // 同一份设备名生成表头与列规格，保证 buildRecordsValues 的键与表头一致
+        val recordsRule = CsvRuleParser.forRecordsCsv(funcMode, goldName, compareNames, slaveNames)
+        val columns = RecordsFormat.columnsFor(funcMode, goldName, compareNames, slaveNames)
         val recordsPath = "records/$mode/extra_records_${mode}_$dateStr.csv"
         val recordsFile = File(baseDir, recordsPath)
         recordsFile.parentFile?.mkdirs()
         val writer = CsvWriter(recordsFile, recordsRule, "")
         writer.open()
         Timber.d("Records writer created for mode=$mode")
-        return writer
+        return writer to columns
     }
 
     private suspend fun flushRecordsRow(
-        mode: String,
         timestampMs: Long,
         recordsWriter: CsvWriter?,
         recordsBuffer: RecordsBufferState,
         lock: Mutex
     ) {
         val writer = recordsWriter ?: return
-        val values = mutableMapOf<String, Any?>()
-        values["TimeStamp"] = timestampMs
-        values["MasterAlgo"] = recordsBuffer.masterAlgo.ifEmpty { "" }
-        values["SlaveAlgo"] = recordsBuffer.slaveAlgo.ifEmpty { "" }
-        lock.withLock {
-            for (i in 0 until MAX_COMPARE_DEVICES) {
-                values["Compare${i}_HR"] = recordsBuffer.compareHrs[i]?.toString() ?: ""
-            }
+        val columns = recordsBuffer.recordsColumns ?: return
+        val values = lock.withLock {
+            buildRecordsValues(
+                columns = columns,
+                masterAlgo = recordsBuffer.masterAlgo,
+                slaveAlgos = recordsBuffer.slaveAlgos,
+                compareHrs = recordsBuffer.compareHrs,
+                compareSpo2s = recordsBuffer.compareSpo2s,
+                timestampMs = timestampMs
+            )
         }
         writer.writeRow(values)
         writer.flush()

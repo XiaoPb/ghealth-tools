@@ -321,7 +321,8 @@ devices StateFlow 变化
 ### 10.3 Records CSV 格式
 
 ```
-行1: TimeStamp,MasterAlgo,SlaveAlgo,Compare0_HR,...,Compare4_HR
-行2+: 1720000.500,72,73,75,...,71
+行1: 按 mode 由 RecordsFormat 声明（列数固定），列序 主算法 → 从算法 → 金标/对比设备；金标/对比/从设备列名带实际设备名。例如（金标 HUAWEI Band HR-AD1、对比 Watch2、从设备 Watch3）HR: TimeStamp,HR,Confidence,SNR,Watch3_HR,Watch3_Confidence,Watch3_SNR,Slave2_HR,Slave2_Confidence,Slave2_SNR,Slave3_HR,Slave3_Confidence,Slave3_SNR,HUAWEI Band HR-AD1_HR,Watch2_HR,Device2_HR,Device3_HR
+行2+: 1720000500,72,90,25,71,88,20,0,0,0,0,0,0,70,69,0,0
 ```
 （每秒写入一行，聚合该秒内最新值）
+（表格功能 HR/ECG/SPO2/HRV 含金标列；其他功能仅算法结果；表头与行值共用同一份列规格，列名带设备名仍能正确写入）

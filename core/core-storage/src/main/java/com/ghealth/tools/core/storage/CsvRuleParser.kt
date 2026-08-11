@@ -1,5 +1,7 @@
 package com.ghealth.tools.core.storage
 
+import com.ghealth.tools.core.model.FunctionMode
+
 data class CsvRule(
     val chip: String,
     val columns: List<String>,
@@ -74,11 +76,14 @@ object CsvRuleParser {
         else -> throw IllegalArgumentException("Unknown chip: $chip")
     }
 
-    fun forRecordsCsv(maxCompareDevices: Int): CsvRule {
-        val columns = mutableListOf("TimeStamp", "MasterAlgo", "SlaveAlgo")
-        for (i in 0 until maxCompareDevices.coerceIn(0, 5)) {
-            columns.add("Compare${i}_HR")
-        }
+    fun forRecordsCsv(
+        mode: FunctionMode,
+        goldDeviceName: String? = null,
+        compareDeviceNames: List<String> = emptyList(),
+        slaveDeviceNames: List<String> = emptyList()
+    ): CsvRule {
+        val columns = RecordsFormat.columnsFor(mode, goldDeviceName, compareDeviceNames, slaveDeviceNames)
+            .map { it.name }
         return CsvRule(chip = "records", columns = columns)
     }
 }
