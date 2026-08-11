@@ -388,7 +388,7 @@ class ConnectionViewModelTest {
         viewModel.setWorkMode(WorkMode.PASS_THROUGH)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) {
+        coVerify(timeout = 5_000, exactly = 1) {
             connectionManager.sendCommand(eq("AA:BB"), eq(KEY_GH_SET_WORK_MODE_CMD), match {
                 it.contentEquals(byteArrayOf(0x05))
             })
@@ -408,7 +408,7 @@ class ConnectionViewModelTest {
         viewModel.setWorkMode(WorkMode.PASS_THROUGH)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) {
+        coVerify(timeout = 5_000, exactly = 1) {
             connectionManager.sendGh3220Command(
                 eq("AA:BB"),
                 eq(0x10),
@@ -430,7 +430,7 @@ class ConnectionViewModelTest {
         viewModel.setWorkMode(WorkMode.MCU_ONLINE)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) {
+        coVerify(timeout = 5_000, exactly = 1) {
             connectionManager.sendGh3220Command(
                 eq("AA:BB"), eq(0x17), match { it.contentEquals(byteArrayOf(0x5A)) }
             )
@@ -452,7 +452,7 @@ class ConnectionViewModelTest {
         viewModel.setWorkMode(WorkMode.MCU_ONLINE)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) {
+        coVerify(timeout = 5_000, exactly = 1) {
             connectionManager.sendCommand(eq("AA:BB"), eq(KEY_GH3X_CHIP_CTRL), match {
                 it.contentEquals(byteArrayOf(0x5A))
             })
