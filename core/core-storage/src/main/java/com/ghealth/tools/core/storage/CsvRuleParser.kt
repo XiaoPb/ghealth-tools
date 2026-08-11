@@ -81,30 +81,4 @@ object CsvRuleParser {
         }
         return CsvRule(chip = "records", columns = columns)
     }
-
-    fun forChipWithCompareDevices(chip: String, compareDeviceNames: List<String>): CsvRule {
-        val baseRule = forChip(chip)
-        if (compareDeviceNames.isEmpty()) return baseRule
-
-        val newColumns = baseRule.columns.mapIndexed { index, column ->
-            val refResultMatch = Regex("""REF_RESULT(\d+)""").find(column)
-            if (refResultMatch != null) {
-                val refIndex = refResultMatch.groupValues[1].toInt()
-                if (refIndex < compareDeviceNames.size && compareDeviceNames[refIndex].isNotEmpty()) {
-                    compareDeviceNames[refIndex]
-                } else {
-                    column
-                }
-            } else {
-                column
-            }
-        }
-
-        return CsvRule(
-            chip = baseRule.chip,
-            columns = newColumns,
-            delimiter = baseRule.delimiter,
-            encoding = baseRule.encoding
-        )
-    }
 }
