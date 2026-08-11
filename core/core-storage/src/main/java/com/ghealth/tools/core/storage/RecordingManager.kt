@@ -52,6 +52,25 @@ internal fun shouldRotateServerFile(
     return count > 1
 }
 
+/**
+ * 把比较设备（金标）实时值注入 server CSV 行。
+ * - 心率: REF_RESULT0..4（对应比较设备 index）
+ * - 血氧: REF_RESULT5..9（手动输入/实时推送，index 从 5 开始）
+ * 列名保持 REF_RESULT 原样，金标设备名记录在首行 JSON（ref_result_devices）。
+ */
+internal fun injectCompareValues(
+    serverValues: MutableMap<String, Any?>,
+    compareHrs: Map<Int, Int>,
+    compareSpo2s: Map<Int, Float>
+) {
+    for ((index, hr) in compareHrs) {
+        serverValues["REF_RESULT$index"] = hr
+    }
+    for ((index, spo2) in compareSpo2s) {
+        serverValues["REF_RESULT${5 + index}"] = spo2
+    }
+}
+
 @Singleton
 class RecordingManager @Inject constructor(
     @Named("storageBaseDir") private val baseDir: File,
@@ -324,12 +343,10 @@ class RecordingManager @Inject constructor(
             createServerWriter(mode, task) ?: return currentRecordsWriter
         }
 
-        // 1. Write server CSV row (inject SPO2 compare values into REF_RESULT5+)
+        // 1. Write server CSV row (inject compare HR/SPO2 values into REF_RESULT columns)
         val serverValues = task.columnMap.toMutableMap()
         lock.withLock {
-            for ((index, spo2) in recordsBuffer.compareSpo2s) {
-                serverValues["REF_RESULT${5 + index}"] = spo2
-            }
+            injectCompareValues(serverValues, recordsBuffer.compareHrs, recordsBuffer.compareSpo2s)
         }
         serverWriter.writeRow(serverValues)
 
@@ -373,11 +390,7 @@ class RecordingManager @Inject constructor(
             role = DeviceRole.COMPARE
         }
 
-        val rule = if (cfg.compareNames.isNotEmpty()) {
-            CsvRuleParser.forChipWithCompareDevices(cfg.chip, cfg.compareNames)
-        } else {
-            CsvRuleParser.forChip(cfg.chip)
-        }
+        val rule = CsvRuleParser.forChip(cfg.chip)
         Timber.d("Server writer rule: chip=${cfg.chip}, compare=${cfg.compareNames.size}, columns=${rule.columns.size}")
 
         val path = StoragePath(
@@ -398,6 +411,7 @@ class RecordingManager @Inject constructor(
             projectName = currentProjectName,
             projectId = currentProjectId,
             username = currentUsername,
+            compareDeviceNames = cfg.compareNames,
             date = now
         )
 
