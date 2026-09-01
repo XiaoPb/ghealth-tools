@@ -205,7 +205,7 @@ class ConnectionViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            blePreferences.selectedChip.collect { chip ->
+            blePreferences.activeChip.collect { chip ->
                 _uiState.update { it.copy(selectedChip = chip) }
             }
         }

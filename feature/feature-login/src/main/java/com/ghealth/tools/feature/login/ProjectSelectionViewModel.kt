@@ -3,6 +3,7 @@ package com.ghealth.tools.feature.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.core.datastore.BlePreferences
+import com.ghealth.tools.core.datastore.SessionMode
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.network.ConfigSyncManager
 import com.ghealth.tools.core.network.api.ProjectApi
@@ -51,7 +52,13 @@ class ProjectSelectionViewModel @Inject constructor(
             return
         }
         loadJob = viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    selectedProject = if (forceReload) null else it.selectedProject,
+                    errorMessage = null,
+                )
+            }
             try {
                 val response = projectApi.getProjects()
                 if (response.isSuccessful) {
@@ -83,6 +90,7 @@ class ProjectSelectionViewModel @Inject constructor(
             try {
                 userPreferences.setSelectedProject(project.id, project.name)
                 blePreferences.setSelectedProjectChip(project.chipModel)
+                blePreferences.setSessionMode(SessionMode.ONLINE)
                 configSyncManager.fullSync(project.id, project.name)
                 _uiState.update { it.copy(isConfirming = false) }
                 csvUploadManager.scanAndUploadPending(project.id)

@@ -41,6 +41,7 @@ data class SettingsUiState(
     val selectedProjectName: String? = null,
     val selectedProjectId: Int? = null,
     val isDeletingProject: Boolean = false,
+    val isVerifyingPassword: Boolean = false,
     val isSyncingConfig: Boolean = false,
     val operationMessage: String? = null,
     val isCheckingUpdate: Boolean = false,
@@ -62,6 +63,22 @@ class SettingsViewModel @Inject constructor(
     private val configPathProvider: ConfigPathProvider,
     private val updateCheckCoordinator: UpdateCheckCoordinator
 ) : ViewModel() {
+
+    suspend fun verifyPassword(password: String): Boolean {
+        if (_uiState.value.isVerifyingPassword || _uiState.value.isDeletingProject) return false
+        if (password.isBlank()) {
+            _uiState.update { it.copy(operationMessage = "请输入当前密码") }
+            return false
+        }
+        _uiState.update { it.copy(isVerifyingPassword = true, operationMessage = null) }
+        return try {
+            val verified = userPreferences.verifySessionPassword(password)
+            if (!verified) _uiState.update { it.copy(operationMessage = "密码错误") }
+            verified
+        } finally {
+            _uiState.update { it.copy(isVerifyingPassword = false) }
+        }
+    }
 
     private val _uiState = MutableStateFlow(SettingsUiState(appVersion = versionName))
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -100,7 +117,7 @@ class SettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            blePreferences.effectiveChip.collect { chip ->
+            blePreferences.activeChip.collect { chip ->
                 _uiState.update { it.copy(selectedChip = chip) }
             }
         }
@@ -178,10 +195,11 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(exportedLogPath = null) }
     }
 
-    fun deleteProject() {
+    fun deleteProject(onArchived: () -> Unit = {}) {
+        if (_uiState.value.isDeletingProject) return
         val projectId = _uiState.value.selectedProjectId
         if (projectId == null || projectId <= 0) {
-            _uiState.update { it.copy(operationMessage = "无法删除：未选择有效项目") }
+            _uiState.update { it.copy(operationMessage = "无法归档：未选择有效项目") }
             return
         }
         val projectName = _uiState.value.selectedProjectName ?: ""
@@ -190,20 +208,22 @@ class SettingsViewModel @Inject constructor(
             try {
                 val response = projectApi.deleteProject(projectId)
                 if (response.isSuccessful) {
-                    userPreferences.setSelectedProject(0, "")
+                    userPreferences.clearSelectedProject()
+                    blePreferences.clearSelectedProjectChip()
                     _uiState.update {
                         it.copy(
                             isDeletingProject = false,
                             selectedProjectId = null,
                             selectedProjectName = null,
-                            operationMessage = "项目「${projectName}」已删除"
+                            operationMessage = "项目「${projectName}」已归档，可在项目管理中恢复"
                         )
                     }
+                    onArchived()
                 } else {
                     val msg = when (response.code()) {
-                        403 -> "无权限删除此项目"
-                        404 -> "项目不存在或已被删除"
-                        else -> "删除失败(${response.code()})"
+                        403 -> "无权限归档此项目"
+                        404 -> "项目不存在或已归档"
+                        else -> "归档失败(${response.code()})"
                     }
                     _uiState.update {
                         it.copy(
@@ -213,11 +233,11 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Delete project failed")
+                Timber.e(e, "Archive project failed")
                 _uiState.update {
                     it.copy(
                         isDeletingProject = false,
-                        operationMessage = "删除失败: ${e.message ?: "网络错误"}"
+                        operationMessage = "归档失败: ${e.message ?: "网络错误"}"
                     )
                 }
             }

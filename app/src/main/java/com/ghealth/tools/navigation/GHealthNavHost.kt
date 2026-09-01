@@ -201,6 +201,11 @@ fun GHealthNavHost() {
                 },
                 onUploadProdConfig = { projectId, projectName ->
                     navController.navigate(Routes.configUpload(projectId, projectName))
+                },
+                onCurrentProjectArchived = {
+                    navController.navigate(Routes.PROJECT_SELECTION) {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             )
         }

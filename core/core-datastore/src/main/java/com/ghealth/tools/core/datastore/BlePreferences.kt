@@ -29,6 +29,7 @@ class BlePreferences @Inject constructor(
         val AUTO_RECONNECT = booleanPreferencesKey("auto_reconnect")
         val SELECTED_CHIP = stringPreferencesKey("selected_chip")
         val SELECTED_PROJECT_CHIP = stringPreferencesKey("selected_project_chip")
+        val SESSION_MODE = stringPreferencesKey("session_mode")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val VERSION_TYPE = stringPreferencesKey("version_type")
         val LOG_LEVEL = stringPreferencesKey("log_level")
@@ -66,9 +67,17 @@ class BlePreferences @Inject constructor(
         prefs[Keys.SELECTED_PROJECT_CHIP] ?: ""
     }
 
-    val effectiveChip: Flow<String> = selectedProjectChip.combine(selectedChip) { projectChip, offlineChip ->
-        if (projectChip.isNotEmpty()) projectChip else offlineChip
+    val sessionMode: Flow<SessionMode> = context.dataStore.data.map { prefs ->
+        prefs[Keys.SESSION_MODE]?.let { value ->
+            runCatching { SessionMode.valueOf(value) }.getOrDefault(SessionMode.NONE)
+        } ?: SessionMode.NONE
     }
+
+    val activeChip: Flow<String> = combine(sessionMode, selectedProjectChip, selectedChip) { mode, projectChip, offlineChip ->
+        activeChipFor(mode, projectChip, offlineChip)
+    }
+
+    val effectiveChip: Flow<String> = activeChip
 
     val themeMode: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[Keys.THEME_MODE] ?: "blue_500"
@@ -114,8 +123,19 @@ class BlePreferences @Inject constructor(
         context.dataStore.edit { it[Keys.SELECTED_PROJECT_CHIP] = chipModel }
     }
 
+    suspend fun setSessionMode(mode: SessionMode) {
+        context.dataStore.edit { it[Keys.SESSION_MODE] = mode.name }
+    }
+
     suspend fun clearSelectedProjectChip() {
         context.dataStore.edit { it.remove(Keys.SELECTED_PROJECT_CHIP) }
+    }
+
+    suspend fun clearSession() {
+        context.dataStore.edit {
+            it.remove(Keys.SELECTED_PROJECT_CHIP)
+            it[Keys.SESSION_MODE] = SessionMode.NONE.name
+        }
     }
 
     suspend fun setThemeMode(mode: String) {

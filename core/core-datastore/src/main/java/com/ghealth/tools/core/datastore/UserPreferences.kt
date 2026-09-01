@@ -2,6 +2,7 @@ package com.ghealth.tools.core.datastore
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -18,6 +19,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
+import android.util.Base64
+import java.security.MessageDigest
+import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -83,6 +91,8 @@ class UserPreferences @Inject constructor(
 
     private object SecureKeys {
         const val SAVED_ACCOUNTS = "secure_saved_accounts"
+        const val SESSION_PASSWORD_SALT = "session_password_salt"
+        const val SESSION_PASSWORD_HASH = "session_password_hash"
     }
 
     val userInfo: Flow<UserInfo> = context.userDataStore.data.map { prefs ->
@@ -141,6 +151,44 @@ class UserPreferences @Inject constructor(
         return getSavedAccounts().find { it.username == username }?.password
     }
 
+    suspend fun saveSessionPassword(password: String) = withContext(Dispatchers.Default) {
+        val salt = ByteArray(SESSION_PASSWORD_SALT_BYTES).also(SecureRandom()::nextBytes)
+        val hash = derivePasswordHash(password, salt)
+        encryptedPrefs.edit()
+            .putString(SecureKeys.SESSION_PASSWORD_SALT, Base64.encodeToString(salt, Base64.NO_WRAP))
+            .putString(SecureKeys.SESSION_PASSWORD_HASH, Base64.encodeToString(hash, Base64.NO_WRAP))
+            .apply()
+    }
+
+    suspend fun verifySessionPassword(password: String): Boolean = withContext(Dispatchers.Default) {
+        if (password.isBlank()) return@withContext false
+        val saltValue = encryptedPrefs.getString(SecureKeys.SESSION_PASSWORD_SALT, null) ?: return@withContext false
+        val hashValue = encryptedPrefs.getString(SecureKeys.SESSION_PASSWORD_HASH, null) ?: return@withContext false
+        runCatching {
+            val salt = Base64.decode(saltValue, Base64.NO_WRAP)
+            val expectedHash = Base64.decode(hashValue, Base64.NO_WRAP)
+            MessageDigest.isEqual(expectedHash, derivePasswordHash(password, salt))
+        }.getOrDefault(false)
+    }
+
+    suspend fun clearSessionPassword() = withContext(Dispatchers.Default) {
+        encryptedPrefs.edit()
+            .remove(SecureKeys.SESSION_PASSWORD_SALT)
+            .remove(SecureKeys.SESSION_PASSWORD_HASH)
+            .apply()
+    }
+
+    private fun derivePasswordHash(password: String, salt: ByteArray): ByteArray {
+        val spec = PBEKeySpec(password.toCharArray(), salt, SESSION_PASSWORD_ITERATIONS, SESSION_PASSWORD_KEY_BITS)
+        return try {
+            SecretKeyFactory.getInstance(sessionPasswordAlgorithm(Build.VERSION.SDK_INT))
+                .generateSecret(spec)
+                .encoded
+        } finally {
+            spec.clearPassword()
+        }
+    }
+
     suspend fun saveUserInfo(
         id: Int,
         username: String,
@@ -165,6 +213,13 @@ class UserPreferences @Inject constructor(
         context.userDataStore.edit { prefs ->
             prefs[Keys.SELECTED_PROJECT_ID] = projectId
             prefs[Keys.SELECTED_PROJECT_NAME] = projectName
+        }
+    }
+
+    suspend fun clearSelectedProject() {
+        context.userDataStore.edit { prefs ->
+            prefs.remove(Keys.SELECTED_PROJECT_ID)
+            prefs.remove(Keys.SELECTED_PROJECT_NAME)
         }
     }
 
@@ -222,4 +277,13 @@ class UserPreferences @Inject constructor(
         val accounts = getSavedAccounts()
         return accounts.firstOrNull()?.password
     }
+
+    private companion object {
+        const val SESSION_PASSWORD_SALT_BYTES = 16
+        const val SESSION_PASSWORD_ITERATIONS = 120_000
+        const val SESSION_PASSWORD_KEY_BITS = 256
+    }
 }
+
+internal fun sessionPasswordAlgorithm(sdkInt: Int): String =
+    if (sdkInt >= Build.VERSION_CODES.O) "PBKDF2WithHmacSHA256" else "PBKDF2WithHmacSHA1"

@@ -95,7 +95,7 @@ class ConnectionViewModelTest {
         every { blePreferences.autoReconnect } returns flowOf(false)
         every { blePreferences.lastDeviceAddress } returns flowOf(null)
         every { blePreferences.lastDeviceName } returns flowOf(null)
-        every { blePreferences.selectedChip } returns flowOf(chip)
+        every { blePreferences.activeChip } returns flowOf(chip)
 
         val userPreferences = mockk<UserPreferences>(relaxed = true)
         every { userPreferences.selectedProjectId } returns flowOf(0)

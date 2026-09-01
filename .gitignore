@@ -28,3 +28,8 @@ memory/
 .screenshots/
 .worktree/
 scripts/py/
+# CodeGraph local index and installer cache
+.codegraph/
+.codegraph-package-backup/
+.tools/codegraph/
+colbymchenry-codegraph-*.tgz

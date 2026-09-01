@@ -178,7 +178,7 @@ class FactoryViewModel @Inject constructor(
 
     private fun monitorChipChanges() {
         viewModelScope.launch {
-            blePreferences.effectiveChip.collect { chipName ->
+            blePreferences.activeChip.collect { chipName ->
                 _uiState.update { it.copy(chipType = chipName) }
             }
         }

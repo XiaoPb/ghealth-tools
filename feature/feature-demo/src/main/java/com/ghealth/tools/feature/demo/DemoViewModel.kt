@@ -149,11 +149,11 @@ class DemoViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            blePreferences.effectiveChip.map { chipName ->
+            blePreferences.activeChip.map { chipName ->
                 DeviceType.entries.find { it.chipName == chipName } ?: DeviceType.GH3036
             }.collect { deviceType ->
                 if (_uiState.value.chipType != deviceType) {
-                    Log.d("DemoViewModel", "Chip synced from effectiveChip: ${_uiState.value.chipType.chipName} -> ${deviceType.chipName}")
+                    Log.d("DemoViewModel", "Chip synced from activeChip: ${_uiState.value.chipType.chipName} -> ${deviceType.chipName}")
                 }
                 _uiState.update { it.copy(chipType = deviceType) }
             }

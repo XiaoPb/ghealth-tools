@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.core.datastore.BlePreferences
 import com.ghealth.tools.core.datastore.SavedAccount
+import com.ghealth.tools.core.datastore.SessionMode
 import com.ghealth.tools.core.datastore.UserPreferences
 import com.ghealth.tools.core.datastore.UserSessionManager
 import com.ghealth.tools.core.network.ApiErrorParser
@@ -125,6 +126,8 @@ class LoginViewModel @Inject constructor(
                 if (response.isSuccessful && response.body()?.data != null) {
                     val loginData = response.body()!!.data!!
                     tokenManager.saveTokens(loginData.access, loginData.refresh)
+                    blePreferences.setSessionMode(SessionMode.ONLINE)
+                    blePreferences.clearSelectedProjectChip()
                     loginData.user.let { user ->
                         userPreferences.saveUserInfo(
                             id = user.id,
@@ -138,6 +141,7 @@ class LoginViewModel @Inject constructor(
                         password = state.password,
                         remember = state.rememberMe
                     )
+                    userPreferences.saveSessionPassword(state.password)
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -176,7 +180,8 @@ class LoginViewModel @Inject constructor(
             Timber.e(e, "Logout API call failed")
         }
         tokenManager.clearTokens()
+        userPreferences.clearSessionPassword()
         userPreferences.clearUserInfo()
-        blePreferences.clearSelectedProjectChip()
+        blePreferences.clearSession()
     }
 }

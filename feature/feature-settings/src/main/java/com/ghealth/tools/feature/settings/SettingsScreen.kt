@@ -61,12 +61,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -74,6 +78,7 @@ import com.ghealth.tools.core.ui.component.ErrorEffect
 import com.ghealth.tools.core.ui.adaptive.CONTENT_MAX_WIDTH
 import com.ghealth.tools.core.ui.adaptive.isWide
 import com.ghealth.tools.core.ui.theme.ThemeMode
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
@@ -103,6 +108,8 @@ fun SettingsScreen(
     )
 
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var deletePassword by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -365,7 +372,7 @@ fun SettingsScreen(
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     ListItem(
                         headlineContent = { Text("管理项目") },
-                        supportingContent = { Text("编辑、删除项目，查看 CSV 文件") },
+                        supportingContent = { Text("编辑、归档项目，查看 CSV 文件") },
                         leadingContent = { Icon(Icons.Default.Settings, contentDescription = null) },
                         trailingContent = {
                             TextButton(onClick = onNavigateToProjectManage) { Text("管理") }
@@ -386,11 +393,11 @@ fun SettingsScreen(
                     ListItem(
                         headlineContent = {
                             Text(
-                                if (state.isDeletingProject) "删除中..." else "删除项目",
+                                if (state.isDeletingProject) "归档中..." else "归档项目",
                                 color = MaterialTheme.colorScheme.error
                             )
                         },
-                        supportingContent = { Text("删除当前项目（不可恢复）") },
+                        supportingContent = { Text("归档当前项目（之后可恢复）") },
                         leadingContent = {
                             Icon(
                                 Icons.Default.Delete,
@@ -403,7 +410,7 @@ fun SettingsScreen(
                                 onClick = { showDeleteDialog = true },
                                 enabled = !state.isDeletingProject
                             ) {
-                                Text("删除", color = MaterialTheme.colorScheme.error)
+                                Text("归档", color = MaterialTheme.colorScheme.error)
                             }
                         },
                         colors = listItemColors
@@ -413,19 +420,53 @@ fun SettingsScreen(
 
             if (showDeleteDialog) {
                 AlertDialog(
-                    onDismissRequest = { showDeleteDialog = false },
-                    title = { Text("确认删除项目") },
-                    text = { Text("确定要删除项目\"${state.selectedProjectName}\"吗？此操作不可恢复。") },
-                    confirmButton = {
-                        TextButton(onClick = {
+                    onDismissRequest = {
+                        if (!state.isVerifyingPassword) {
                             showDeleteDialog = false
-                            viewModel.deleteProject()
-                        }) {
-                            Text("确认删除", color = MaterialTheme.colorScheme.error)
+                            deletePassword = ""
+                        }
+                    },
+                    title = { Text("确认归档项目") },
+                    text = {
+                        Column {
+                            Text("归档项目\"${state.selectedProjectName}\"后，可在项目管理的已归档列表中恢复。")
+                            OutlinedTextField(
+                                value = deletePassword,
+                                onValueChange = { deletePassword = it },
+                                label = { Text("请输入当前密码") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                singleLine = true,
+                                enabled = !state.isVerifyingPassword,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            enabled = deletePassword.isNotBlank() &&
+                                !state.isVerifyingPassword &&
+                                !state.isDeletingProject,
+                            onClick = {
+                            scope.launch {
+                                if (viewModel.verifyPassword(deletePassword)) {
+                                    showDeleteDialog = false
+                                    deletePassword = ""
+                                    viewModel.deleteProject(onSwitchProject)
+                                }
+                            }
+                            },
+                        ) {
+                            Text(
+                                if (state.isVerifyingPassword) "验证中…" else "确认归档",
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showDeleteDialog = false }) {
+                        TextButton(
+                            enabled = !state.isVerifyingPassword,
+                            onClick = { showDeleteDialog = false; deletePassword = "" },
+                        ) {
                             Text("取消")
                         }
                     }

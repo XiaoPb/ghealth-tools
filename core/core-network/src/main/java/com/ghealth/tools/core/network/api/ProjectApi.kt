@@ -16,10 +16,13 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface ProjectApi {
     @GET("projects/")
-    suspend fun getProjects(): Response<ApiResponse<List<ProjectResponse>>>
+    suspend fun getProjects(
+        @Query("archived") archived: Int? = null,
+    ): Response<ApiResponse<List<ProjectResponse>>>
 
     @GET("projects/{id}/")
     suspend fun getProject(

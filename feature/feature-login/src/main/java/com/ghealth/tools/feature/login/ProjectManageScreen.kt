@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
@@ -52,11 +55,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -67,6 +75,7 @@ import com.ghealth.tools.core.ui.adaptive.isWide
 
 private enum class ProjectManageTab(val label: String) {
     PROJECTS("项目列表"),
+    ARCHIVED_PROJECTS("已归档"),
     PROD_CONFIG("产测配置"),
     REGULAR_CONFIG("常规配置"),
     CSV_FILES("CSV 文件")
@@ -79,13 +88,15 @@ fun ProjectManageScreen(
     onEditProject: (Int, String) -> Unit,
     onViewCsvFiles: (Int, String) -> Unit,
     onUploadProdConfig: (Int, String) -> Unit = { _, _ -> },
+    onCurrentProjectArchived: () -> Unit = {},
     viewModel: ProjectManageViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var selectedTab by remember { mutableStateOf(ProjectManageTab.PROJECTS) }
     var selectedProject by remember { mutableStateOf<ProjectResponse?>(null) }
-    var deleteTarget by remember { mutableStateOf<ProjectResponse?>(null) }
-    var archiveTarget by remember { mutableStateOf<ProjectResponse?>(null) }
+    var passwordTarget by remember { mutableStateOf<ProjectResponse?>(null) }
+    var password by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
 
     val context = LocalContext.current
     val windowSizeClass = calculateWindowSizeClass(context as Activity)
@@ -152,13 +163,41 @@ fun ProjectManageScreen(
                                     selectedProjectId = selectedProject?.id,
                                     modifier = Modifier,
                                     onEdit = { onEditProject(it.id, it.name) },
-                                    onDelete = { deleteTarget = it },
-                                    onArchive = { archiveTarget = it },
+                                    onArchive = { passwordTarget = it },
                                     onRestore = { viewModel.restoreProject(it) },
                                     onExport = { viewModel.exportProject(it) },
                                     onSelect = { selectedProject = it },
                                     onRetry = { viewModel.loadProjects() }
                                 )
+                            }
+                            ProjectManageTab.ARCHIVED_PROJECTS -> {
+                                if (uiState.isLoadingArchived) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator()
+                                    }
+                                } else {
+                                    ProjectListContent(
+                                        projects = uiState.archivedProjects,
+                                        isArchiving = uiState.isArchiving,
+                                        archivingProjectId = uiState.archivingProjectId,
+                                        isExporting = false,
+                                        exportingProjectId = null,
+                                        isDeleting = false,
+                                        deletingProjectId = null,
+                                        errorMessage = uiState.archivedErrorMessage,
+                                        isArchivedList = true,
+                                        modifier = Modifier,
+                                        onEdit = {},
+                                        onArchive = {},
+                                        onRestore = viewModel::restoreProject,
+                                        onExport = {},
+                                        onSelect = {},
+                                        onRetry = viewModel::loadArchivedProjects,
+                                    )
+                                }
                             }
                             ProjectManageTab.PROD_CONFIG -> {
                                 if (selectedProject != null) {
@@ -204,40 +243,61 @@ fun ProjectManageScreen(
             }
         }
 
-        if (deleteTarget != null) {
+        if (passwordTarget != null) {
             AlertDialog(
-                onDismissRequest = { deleteTarget = null },
-                title = { Text("确认删除项目") },
-                text = { Text("确定要删除项目「${deleteTarget!!.name}」吗？此操作不可恢复，将同时删除所有关联的 CSV 文件和配置。") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        deleteTarget?.let { viewModel.deleteProject(it) }
-                        deleteTarget = null
-                    }) {
-                        Text("确认删除", color = MaterialTheme.colorScheme.error)
+                onDismissRequest = {
+                    if (!uiState.isVerifyingPassword) {
+                        passwordTarget = null
+                        password = ""
                     }
                 },
-                dismissButton = {
-                    TextButton(onClick = { deleteTarget = null }) { Text("取消") }
-                }
-            )
-        }
-
-        if (archiveTarget != null) {
-            AlertDialog(
-                onDismissRequest = { archiveTarget = null },
                 title = { Text("确认归档项目") },
-                text = { Text("归档项目「${archiveTarget!!.name}」后，它将不再出现在默认项目列表中。可随时恢复。") },
+                text = {
+                    Column {
+                        Text("归档项目「${passwordTarget!!.name}」后，它将不再出现在默认项目列表中，可在已归档项目中恢复。")
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("请输入当前密码") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
+                            enabled = !uiState.isVerifyingPassword,
+                        )
+                    }
+                },
                 confirmButton = {
-                    TextButton(onClick = {
-                        archiveTarget?.let { viewModel.archiveProject(it) }
-                        archiveTarget = null
-                    }) {
-                        Text("确认归档")
+                    TextButton(
+                        enabled = password.isNotBlank() &&
+                            !uiState.isVerifyingPassword &&
+                            !uiState.isDeleting &&
+                            !uiState.isArchiving,
+                        onClick = {
+                        val target = passwordTarget ?: return@TextButton
+                        scope.launch {
+                            if (viewModel.verifyPassword(password)) {
+                                val onSuccess: (Boolean) -> Unit = { wasCurrentProject ->
+                                    selectedProject = null
+                                    if (wasCurrentProject) onCurrentProjectArchived()
+                                }
+                                viewModel.archiveProject(target, onSuccess)
+                                passwordTarget = null
+                                password = ""
+                            }
+                        }
+                        },
+                    ) {
+                        Text(
+                            if (uiState.isVerifyingPassword) "验证中…" else "验证并归档",
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { archiveTarget = null }) { Text("取消") }
+                    TextButton(
+                        enabled = !uiState.isVerifyingPassword,
+                        onClick = { passwordTarget = null; password = "" },
+                    ) { Text("取消") }
                 }
             )
         }
@@ -251,9 +311,9 @@ private fun ProjectManageTabRow(
 ) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         ProjectManageTab.entries.forEach { tab ->
             TextButton(onClick = { onTabSelected(tab) }) {
@@ -280,9 +340,9 @@ private fun ProjectListContent(
     deletingProjectId: Int?,
     errorMessage: String? = null,
     selectedProjectId: Int? = null,
+    isArchivedList: Boolean = false,
     modifier: Modifier = Modifier,
     onEdit: (ProjectResponse) -> Unit,
-    onDelete: (ProjectResponse) -> Unit,
     onArchive: (ProjectResponse) -> Unit,
     onRestore: (ProjectResponse) -> Unit,
     onExport: (ProjectResponse) -> Unit,
@@ -324,10 +384,13 @@ private fun ProjectListContent(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("暂无项目", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    if (isArchivedList) "暂无已归档项目" else "暂无项目",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "请确认已在项目选择页创建项目",
+                    if (isArchivedList) "归档的项目会显示在这里" else "请确认已在项目选择页创建项目",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -351,9 +414,10 @@ private fun ProjectListContent(
                 project = project,
                 isProcessing = isProcessing,
                 isSelected = project.id == selectedProjectId,
+                isArchived = isArchivedList,
                 onEdit = { onEdit(project) },
-                onDelete = { onDelete(project) },
                 onArchive = { onArchive(project) },
+                onRestore = { onRestore(project) },
                 onExport = { onExport(project) },
                 onSelect = { onSelect(project) }
             )
@@ -366,9 +430,10 @@ private fun ProjectManageCard(
     project: ProjectResponse,
     isProcessing: Boolean,
     isSelected: Boolean = false,
+    isArchived: Boolean = false,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
     onArchive: () -> Unit,
+    onRestore: () -> Unit,
     onExport: () -> Unit,
     onSelect: () -> Unit
 ) {
@@ -423,7 +488,18 @@ private fun ProjectManageCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                IconButton(onClick = onEdit, modifier = Modifier.size(40.dp)) {
+                if (isArchived) {
+                    TextButton(onClick = onRestore, enabled = !isProcessing) {
+                        Icon(
+                            imageVector = Icons.Default.Restore,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("恢复")
+                    }
+                } else {
+                IconButton(onClick = onEdit, modifier = Modifier.size(40.dp), enabled = !isProcessing) {
                     Icon(
                         imageVector = Icons.Default.Edit,
                         contentDescription = "编辑",
@@ -431,7 +507,7 @@ private fun ProjectManageCard(
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
-                IconButton(onClick = onArchive, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = onArchive, modifier = Modifier.size(40.dp), enabled = !isProcessing) {
                     Icon(
                         imageVector = Icons.Default.Archive,
                         contentDescription = "归档",
@@ -439,7 +515,7 @@ private fun ProjectManageCard(
                         tint = MaterialTheme.colorScheme.tertiary
                     )
                 }
-                IconButton(onClick = onExport, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = onExport, modifier = Modifier.size(40.dp), enabled = !isProcessing) {
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
                         contentDescription = "导出",
@@ -447,7 +523,7 @@ private fun ProjectManageCard(
                         tint = MaterialTheme.colorScheme.secondary
                     )
                 }
-                IconButton(onClick = onSelect, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = onSelect, modifier = Modifier.size(40.dp), enabled = !isProcessing) {
                     Icon(
                         imageVector = Icons.Default.Description,
                         contentDescription = "查看文件",
@@ -455,13 +531,6 @@ private fun ProjectManageCard(
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "删除",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.error
-                    )
                 }
             }
         }
