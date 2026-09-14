@@ -20,7 +20,12 @@ class CsvWriter(
         file.parentFile?.mkdirs()
         writer = BufferedWriter(FileWriter(file))
         if (infoJson.isNotEmpty()) {
-            writer?.write(infoJson)
+            writer?.write(
+                infoJson
+                    .replace("\r\n", "\\n")
+                    .replace("\r", "\\n")
+                    .replace("\n", "\\n")
+            )
             writer?.newLine()
         }
         writer?.write(rule.columns.joinToString(rule.delimiter))
