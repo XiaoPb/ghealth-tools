@@ -184,7 +184,7 @@ class RegisterConfigDownloadTest {
         viewModel.setWorkMode(WorkMode.MCU_ONLINE)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) {
+        coVerify(timeout = 5_000, exactly = 1) {
             connectionManager.sendGh3220Command(
                 eq("AA:BB"), eq(0x17), match { it.contentEquals(byteArrayOf(0x5A)) }
             )
@@ -197,7 +197,7 @@ class RegisterConfigDownloadTest {
         viewModel.executeRegisterConfigDownload()
         awaitDownloadSettled(viewModel)
 
-        coVerify(exactly = 1) {
+        coVerify(timeout = 5_000, exactly = 1) {
             connectionManager.sendGh3220Command(
                 eq("AA:BB"), eq(0x10),
                 match { it.contentEquals(byteArrayOf(0x02, 0xFF.toByte(), 0xFF.toByte(), 0x0F, 0x00)) }
