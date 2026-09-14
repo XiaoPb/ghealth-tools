@@ -4,10 +4,9 @@ import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_GET_MODE
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_SET_MODE
-import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_READ_CMD
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_SW_FUNCTION_CMD
-import com.ghealth.tools.ble.protocol.gh3036.RegisterCommandPayloadBuilder
 import com.ghealth.tools.feature.factory.model.AppComputeConfig
 import com.ghealth.tools.feature.factory.model.ComputeMode
 import com.ghealth.tools.feature.factory.model.FactoryConfig
@@ -193,7 +192,7 @@ class FactoryTestEngineTest {
     }
 
     @Test
-    fun `CHIP_INIT 空数据时寄存器回读一致则 PASS`() = runTest {
+    fun `CHIP_INIT 空数据时使用直接写接口且寄存器回读一致则 PASS`() = runTest {
         val manager = defaultManager()
         coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_READ_CMD, any()) } returns
             Result.success(byteArrayOf(1, 0, 0x19, 0x29))
@@ -208,8 +207,8 @@ class FactoryTestEngineTest {
         coVerify(exactly = 1) {
             manager.sendCommand(
                 any(),
-                KEY_GH3X_REGS_LIST_WRITE_CMD,
-                RegisterCommandPayloadBuilder.buildU16ArrayPayload(intArrayOf(0x0020, 0x2919))
+                KEY_GH3X_REGS_WRITE_CMD,
+                byteArrayOf(0x02, 0x00, 0x20, 0x00, 0x19, 0x29)
             )
         }
         coVerify(exactly = 1) {
@@ -261,7 +260,7 @@ class FactoryTestEngineTest {
     @Test
     fun `CHIP_INIT 空数据时寄存器写入失败则 FAIL`() = runTest {
         val manager = defaultManager()
-        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_LIST_WRITE_CMD, any()) } returns
+        coEvery { manager.sendCommand(any(), KEY_GH3X_REGS_WRITE_CMD, any()) } returns
             Result.failure(IllegalStateException("write failed"))
         val collector = defaultCollector()
         val evaluator = mockk<AppSideTestEvaluator>()
@@ -650,7 +649,18 @@ class FactoryTestEngineTest {
         every { collector.stop() } returns CollectedRawData(
             rawdataByChannel = mapOf(0 to List(300) { 8_388_608 }),
             ipdPaByChannel = emptyMap(),
-            ledCurrentSumMaByChannel = emptyMap(),
+            ledCurrentSumMaByChannel = mapOf(0 to 2.3),
+            agcPhysicalByChannel = mapOf(
+                0 to com.ghealth.tools.ble.protocol.gh3036.AgcPhysicalCodec.Physical(
+                    gain = 4,
+                    bgCancelLevel = 0,
+                    dcCancelLevel = 0,
+                    dcCancelCode = 0,
+                    ledCurrentSum = 23,
+                    ledCurrentDrv0 = 23,
+                    ledCurrentDrv1 = 0
+                )
+            ),
             frameCnts = (0 until 300).toList()
         )
         val evaluator = mockk<AppSideTestEvaluator>()
@@ -667,6 +677,11 @@ class FactoryTestEngineTest {
         val completed = events.filterIsInstance<TestEngineEvent.TestCompleted>()
             .single { it.type == TestType.BASE_NOISE }
         assertTrue(completed.results.all { it.passed })
+        val rawDataEvent = events.filterIsInstance<TestEngineEvent.RawDataCollected>().single()
+        assertEquals(TestType.BASE_NOISE, rawDataEvent.type)
+        assertEquals((0 until 300).toList(), rawDataEvent.data.frameCnts)
+        assertEquals(mapOf(0 to 23), rawDataEvent.ledCurrentTenthsMaByChannel)
+        assertEquals(mapOf(0 to 100.0), rawDataEvent.gainKOhmByChannel)
     }
 
     @Test
@@ -763,6 +778,7 @@ class FactoryTestEngineTest {
             listOf(TestEngineEvent.ComputationMode(ComputeMode.MCU)),
             events.filterIsInstance<TestEngineEvent.ComputationMode>()
         )
+        assertTrue(events.none { it is TestEngineEvent.RawDataCollected })
     }
 
     @Test

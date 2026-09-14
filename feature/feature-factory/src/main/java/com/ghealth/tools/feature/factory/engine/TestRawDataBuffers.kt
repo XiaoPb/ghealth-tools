@@ -38,7 +38,7 @@ class TestRawDataBuffers {
     /** 已去重有效帧数。 */
     fun frameCount(): Int = frameCnts.size
 
-    /** 末尾 AGC 完全不变的帧数；低位或高位数组中任一通道变化都会从当前帧重新计为 1。 */
+    /** 末尾有效 AGC 位不变的帧数；高位最高填充字节不参与比较。 */
     fun stableAgcFrameCount(): Int = stableAgcFrames
 
     /** 末尾连续帧号长度；空序列返回 0。`(cur - prev) and 0xFFFFFFFF == 1` 兼容 32 位回绕。 */
@@ -72,10 +72,17 @@ class TestRawDataBuffers {
             return
         }
 
+        val normalizedHigh = IntArray(frame.agcInfoHigh.size) { index ->
+            frame.agcInfoHigh[index] and AGC_HIGH_VALID_MASK
+        }
         val unchanged = previousAgcInfo?.contentEquals(frame.agcInfo) == true &&
-            previousAgcInfoHigh?.contentEquals(frame.agcInfoHigh) == true
+            previousAgcInfoHigh?.contentEquals(normalizedHigh) == true
         stableAgcFrames = if (unchanged) stableAgcFrames + 1 else 1
         previousAgcInfo = frame.agcInfo.copyOf()
-        previousAgcInfoHigh = frame.agcInfoHigh.copyOf()
+        previousAgcInfoHigh = normalizedHigh
+    }
+
+    private companion object {
+        const val AGC_HIGH_VALID_MASK = 0x00FFFFFF
     }
 }

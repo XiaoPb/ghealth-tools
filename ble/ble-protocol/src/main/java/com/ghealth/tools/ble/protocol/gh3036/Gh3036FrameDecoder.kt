@@ -33,11 +33,14 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
         val frames = mutableListOf<GhFuncFrame>()
         var pos = 0
         while (pos < param.size) {
+            val frameStart = pos
             try {
                 val (newPos, rawFrame) = decodeSingleFrame(param, pos)
                 pos = newPos
                 frames.add(processDelta(rawFrame))
-            } catch (_: DecodeException) { break }
+            } catch (e: DecodeException) {
+                throw DecodeException("Failed to decode G frame at offset $frameStart: ${e.message}", e)
+            }
         }
         return frames
     }
@@ -50,17 +53,25 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
 
         if (debugLogEnabled) Timber.v("decodeSingleFrame: startPos=$start, packHeader bits=${raw.packHeader.bits}")
 
-        if (raw.packHeader.rawdataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.rawdata = arr; if (debugLogEnabled) Timber.v("  rawdata: sz=$sz, values=${arr.take(3).toList()}...") }
-        if (raw.packHeader.phyValueEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.phyValue = arr; if (debugLogEnabled) Timber.v("  phyValue: sz=$sz, values=${arr.take(3).toList()}...") }
-        if (raw.packHeader.gsDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_GS_DATA)); pos = p2; raw.gsData = arr; if (debugLogEnabled) Timber.v("  gsData: sz=$sz, values=${arr.toList()}") }
-        if (raw.packHeader.flagsEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_CHANNELS)); pos = p2; raw.flags = arr; if (debugLogEnabled) Timber.v("  flags: sz=$sz") }
-        if (raw.packHeader.algDataEn) { val (sz, p) = readSigned(buf, pos); pos = p; val (arr, p2) = readSignedArray(buf, pos, sz.coerceIn(0, MAX_ALGO_DATA)); pos = p2; raw.algoData = arr; if (debugLogEnabled) Timber.v("  algoData: sz=$sz, values=${arr.toList()}") }
-        if (raw.packHeader.agcInfoEn) { val (sz, p) = readSigned(buf, pos); pos = p; val size = sz.coerceIn(0, MAX_CHANNELS); val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; val (arrH, p3) = readSignedArray(buf, pos, size); pos = p3; raw.agcInfo = arr; raw.agcInfoHigh = arrH; if (debugLogEnabled) Timber.v("  agcInfo: sz=$size") }
+        if (raw.packHeader.rawdataEn) { val (size, p) = readArraySize(buf, pos, "rawdata", MAX_CHANNELS); pos = p; val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; raw.rawdata = arr; if (debugLogEnabled) Timber.v("  rawdata: sz=$size, values=${arr.take(3).toList()}...") }
+        if (raw.packHeader.phyValueEn) { val (size, p) = readArraySize(buf, pos, "phyValue", MAX_CHANNELS); pos = p; val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; raw.phyValue = arr; if (debugLogEnabled) Timber.v("  phyValue: sz=$size, values=${arr.take(3).toList()}...") }
+        if (raw.packHeader.gsDataEn) { val (size, p) = readArraySize(buf, pos, "gsData", MAX_GS_DATA); pos = p; val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; raw.gsData = arr; if (debugLogEnabled) Timber.v("  gsData: sz=$size, values=${arr.toList()}") }
+        if (raw.packHeader.flagsEn) { val (size, p) = readArraySize(buf, pos, "flags", MAX_CHANNELS); pos = p; val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; raw.flags = arr; if (debugLogEnabled) Timber.v("  flags: sz=$size") }
+        if (raw.packHeader.algDataEn) { val (size, p) = readArraySize(buf, pos, "algoData", MAX_ALGO_DATA); pos = p; val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; raw.algoData = arr; if (debugLogEnabled) Timber.v("  algoData: sz=$size, values=${arr.toList()}") }
+        if (raw.packHeader.agcInfoEn) { val (size, p) = readArraySize(buf, pos, "agcInfo", MAX_CHANNELS); pos = p; val (arr, p2) = readSignedArray(buf, pos, size); pos = p2; val (arrH, p3) = readSignedArray(buf, pos, size); pos = p3; raw.agcInfo = arr; raw.agcInfoHigh = arrH; if (debugLogEnabled) Timber.v("  agcInfo: sz=$size") }
         if (raw.packHeader.timestampEn) { val (tsL, p) = readSigned(buf, pos); pos = p; val (tsH, p2) = readSigned(buf, pos); pos = p2; raw.timestamp = tsL; raw.timestampHigh = tsH; if (debugLogEnabled) Timber.v("  timestamp: tsL=$tsL, tsH=$tsH") }
         val (fid, pf) = readSigned(buf, pos); pos = pf; raw.frameId = fid
         if (raw.packHeader.funcIdEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.functionId = v; if (debugLogEnabled) Timber.v("  funcId: $v") }
         if (raw.packHeader.slotCfgEn) { val (v, p) = readSigned(buf, pos); pos = p; raw.slotCfg = v; if (debugLogEnabled) Timber.v("  slotCfg: $v") }
         return Pair(pos, raw)
+    }
+
+    private fun readArraySize(buf: ByteArray, pos: Int, field: String, maxSize: Int): Pair<Int, Int> {
+        val (size, newPos) = readSigned(buf, pos)
+        if (size !in 0..maxSize) {
+            throw DecodeException("$field size out of range: $size (expected 0..$maxSize)")
+        }
+        return Pair(size, newPos)
     }
 
     private fun processDelta(raw: RawFrame): GhFuncFrame {
@@ -85,27 +96,25 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
         frame.phyValue = applyDelta(raw.phyValue, lastPhyValue)
         frame.gsData = applyDelta(raw.gsData, lastGsData)
 
-        // Flags: delta-accumulated but fallback to last when absent
-        if (raw.flags.isNotEmpty() || lastFlagDataBits == 0) {
-            frame.flags = applyDelta(raw.flags, lastFlags)
-            if (raw.flags.isNotEmpty()) lastFlagDataBits = raw.flags.size
-        } else {
+        // Sparse metadata fields are absolute when present and reuse the last value when absent.
+        if (raw.packHeader.flagsEn) {
+            frame.flags = rememberAbsolute(raw.flags, lastFlags)
+            lastFlagDataBits = raw.flags.size
+        } else if (lastFlagDataBits > 0) {
             frame.flags = lastFlags.copyOf(lastFlagDataBits)
         }
 
-        // agc_info: delta-accumulated, fallback to last when absent
-        if (raw.agcInfo.isNotEmpty()) {
-            frame.agcInfo = applyDelta(raw.agcInfo, lastAgcInfo)
-            frame.agcInfoHigh = applyDelta(raw.agcInfoHigh, lastAgcInfoHigh)
+        if (raw.packHeader.agcInfoEn) {
+            frame.agcInfo = rememberAbsolute(raw.agcInfo, lastAgcInfo)
+            frame.agcInfoHigh = rememberAbsolute(raw.agcInfoHigh, lastAgcInfoHigh)
             lastAgcSize = raw.agcInfo.size
         } else if (lastAgcSize > 0) {
             frame.agcInfo = lastAgcInfo.copyOf(lastAgcSize)
             frame.agcInfoHigh = lastAgcInfoHigh.copyOf(lastAgcSize)
         }
 
-        // algo_data: delta-accumulated, fallback to last when absent
-        if (raw.algoData.isNotEmpty()) {
-            frame.algoData = applyDelta(raw.algoData, lastAlgoData)
+        if (raw.packHeader.algDataEn) {
+            frame.algoData = rememberAbsolute(raw.algoData, lastAlgoData)
             lastAlgoDataSize = raw.algoData.size
         } else if (lastAlgoDataSize > 0) {
             frame.algoData = lastAlgoData.copyOf(lastAlgoDataSize)
@@ -126,6 +135,11 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
         return result
     }
 
+    private fun rememberAbsolute(values: IntArray, last: IntArray): IntArray {
+        values.copyInto(last)
+        return values.copyOf()
+    }
+
     private class RawFrame {
         var packHeader = PackHeader(0)
         var rawdata = IntArray(0); var phyValue = IntArray(0); var gsData = IntArray(0)
@@ -140,6 +154,7 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
             while (true) {
                 if (pos >= buffer.size) throw DecodeException("Insufficient data")
                 val b = buffer[pos].toInt() and 0xFF; pos++
+                if (shift == 28 && (b and 0xF0) != 0) throw DecodeException("Varint exceeds 32 bits")
                 value = value or ((b and 0x7F) shl shift)
                 if ((b and 0x80) == 0) break
                 shift += 7; if (shift >= 35) throw DecodeException("Invalid varint")
@@ -156,4 +171,4 @@ class Gh3036FrameDecoder : ChipFrameDecoder<GhFuncFrame> {
     }
 }
 
-class DecodeException(message: String) : Exception(message)
+class DecodeException(message: String, cause: Throwable? = null) : Exception(message, cause)

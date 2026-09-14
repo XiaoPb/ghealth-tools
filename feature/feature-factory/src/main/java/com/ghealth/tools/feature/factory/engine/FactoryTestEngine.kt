@@ -2,10 +2,12 @@ package com.ghealth.tools.feature.factory.engine
 
 import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.ble.protocol.gh3036.KEY_DOWNLOAD_CONFIG
+import com.ghealth.tools.ble.protocol.gh3036.AgcPhysicalCodec
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_GET_MODE
 import com.ghealth.tools.ble.protocol.gh3036.KEY_F_SET_MODE
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_LIST_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_READ_CMD
+import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_REGS_WRITE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH3X_SW_FUNCTION_CMD
 import com.ghealth.tools.ble.protocol.gh3036.KEY_GH_SET_WORK_MODE_CMD
 import com.ghealth.tools.ble.protocol.gh3036.CommandPayloadBuilder
@@ -25,11 +27,18 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.roundToInt
 
 sealed class TestEngineEvent {
     data class StepStarted(val description: String) : TestEngineEvent()
     data class Progress(val currentStep: Int, val totalSteps: Int) : TestEngineEvent()
     data class TestCompleted(val type: TestType, val results: List<TestResult>) : TestEngineEvent()
+    data class RawDataCollected(
+        val type: TestType,
+        val data: CollectedRawData,
+        val ledCurrentTenthsMaByChannel: Map<Int, Int>,
+        val gainKOhmByChannel: Map<Int, Double>
+    ) : TestEngineEvent()
     data class LogMessage(val level: LogLevel, val message: String) : TestEngineEvent()
     data object ShowEnvironmentSwitchDialog : TestEngineEvent()
     data object ShowBluetoothUnstableDialog : TestEngineEvent()
@@ -600,6 +609,34 @@ class FactoryTestEngine @Inject constructor(
 
         // Evaluate results
         if (appSideFallback) {
+            val channels = (collected.rawdataByChannel.keys + collected.ipdPaByChannel.keys).toSet()
+            val isGh3036 = chip.equals("gh3036", ignoreCase = true)
+            val currentByChannel = channels.mapNotNull { channel ->
+                val current = if (isGh3036) {
+                    collected.agcPhysicalByChannel[channel]?.ledCurrentSum
+                        ?: collected.ledCurrentSumMaByChannel[channel]?.times(10.0)?.roundToInt()
+                        ?: testDef.compute?.ledCurrentMa?.times(10.0)?.roundToInt()
+                } else {
+                    testDef.compute?.ledCurrentMa?.times(10.0)?.roundToInt()
+                }
+                current?.let { channel to it }
+            }.toMap()
+            val gainByChannel = channels.mapNotNull { channel ->
+                val gain = if (isGh3036) {
+                    collected.agcPhysicalByChannel[channel]?.gain
+                        ?.let { AgcPhysicalCodec.gainResistanceKOhm(it)?.toDouble() }
+                        ?: testDef.compute?.gainK
+                } else {
+                    testDef.compute?.gainK
+                }
+                gain?.let { channel to it }
+            }.toMap()
+            onEvent(TestEngineEvent.RawDataCollected(
+                type = testType,
+                data = collected,
+                ledCurrentTenthsMaByChannel = currentByChannel,
+                gainKOhmByChannel = gainByChannel
+            ))
             return evaluateAppSide(testType, testDef, collected, chip,
                 "App 端计算模式，跳过 F_GetMode 直接计算", onEvent)
         }
@@ -737,7 +774,7 @@ class FactoryTestEngine @Inject constructor(
         val writeParam = RegisterCommandPayloadBuilder.buildU16ArrayPayload(
             intArrayOf(CHIP_COMM_CHECK_REG_ADDR, CHIP_COMM_CHECK_REG_VALUE)
         )
-        val writeResult = sendSimpleCommand(deviceAddress, KEY_GH3X_REGS_LIST_WRITE_CMD, writeParam)
+        val writeResult = sendSimpleCommand(deviceAddress, KEY_GH3X_REGS_WRITE_CMD, writeParam)
         if (writeResult.isFailure) {
             onEvent(TestEngineEvent.LogMessage(LogLevel.ERROR,
                 "${TestType.CHIP_INIT.displayName}: 通信校验寄存器写入失败"))

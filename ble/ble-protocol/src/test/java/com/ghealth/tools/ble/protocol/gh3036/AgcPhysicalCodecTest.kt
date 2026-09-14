@@ -1,9 +1,18 @@
 package com.ghealth.tools.ble.protocol.gh3036
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 class AgcPhysicalCodecTest {
+
+    @Test
+    fun `gain_code 映射为 TIA 增益电阻 kOhm`() {
+        assertEquals(10, AgcPhysicalCodec.gainResistanceKOhm(0))
+        assertEquals(100, AgcPhysicalCodec.gainResistanceKOhm(4))
+        assertEquals(2000, AgcPhysicalCodec.gainResistanceKOhm(12))
+        assertNull(AgcPhysicalCodec.gainResistanceKOhm(13))
+    }
 
     @Test
     fun `decode 提取 gain 位于低 4 位`() {

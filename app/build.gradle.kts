@@ -29,8 +29,8 @@ android {
         applicationId = "com.ghealth.tools"
         minSdk = 24
         targetSdk = 35
-        versionCode = 803
-        versionName = "0.8.3"
+        versionCode = 804
+        versionName = "0.8.4"
     }
 
     signingConfigs {

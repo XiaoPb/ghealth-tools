@@ -157,6 +157,15 @@ class TestRawDataBuffersTest {
     }
 
     @Test
+    fun `AGC 高位的最高填充字节变化不影响稳定计数`() {
+        val buffers = TestRawDataBuffers()
+        buffers.addFrame(frame(agcInfo = intArrayOf(0x00A00000), agcInfoHigh = intArrayOf(0x20000000)))
+        buffers.addFrame(frame(agcInfo = intArrayOf(0x00A00000), agcInfoHigh = intArrayOf(0)))
+
+        assertEquals(2, buffers.stableAgcFrameCount())
+    }
+
+    @Test
     fun `AGC 数组长度变化时稳定计数重置为 1`() {
         val buffers = TestRawDataBuffers()
         buffers.addFrame(frame(agcInfo = intArrayOf(10), agcInfoHigh = intArrayOf(30)))

@@ -30,9 +30,12 @@ package com.ghealth.tools.ble.protocol.gh3036
  */
 object AgcPhysicalCodec {
 
+    /** `gain_code`（4 bit）对应的 TIA 增益电阻，单位 kΩ；无效码返回 null。 */
+    fun gainResistanceKOhm(gainCode: Int): Int? = TIA_GAIN_K_OHM.getOrNull(gainCode)
+
     /** 从原始 AGC 值解码出的物理量字段集合。 */
     data class Physical(
-        val gain: Int,            // [3:0]   增益等级
+        val gain: Int,            // [3:0]   TIA 增益电阻码
         val bgCancelLevel: Int,   // [5:4]   背景抵消等级
         val dcCancelLevel: Int,   // [7:6]   DC 抵消等级
         val dcCancelCode: Int,    // [15:8]  DC 抵消校准码
@@ -108,4 +111,8 @@ object AgcPhysicalCodec {
         }
         return Pair(packedAgc, packedLed)
     }
+
+    private val TIA_GAIN_K_OHM = listOf(
+        10, 25, 50, 75, 100, 250, 500, 750, 1000, 1250, 1500, 1750, 2000
+    )
 }

@@ -14,6 +14,7 @@ import com.ghealth.tools.feature.factory.engine.FactoryTestEngine
 import com.ghealth.tools.feature.factory.engine.LogLevel
 import com.ghealth.tools.feature.factory.engine.TestEngineEvent
 import com.ghealth.tools.feature.factory.exporter.CsvResultExporter
+import com.ghealth.tools.feature.factory.exporter.FactoryRawDataExporter
 import com.ghealth.tools.feature.factory.model.FactoryConfig
 import com.ghealth.tools.feature.factory.model.RegisterConfig
 import com.ghealth.tools.feature.factory.model.TestResult
@@ -46,6 +47,7 @@ class FactoryViewModel @Inject constructor(
     private val configJsonParser: ConfigJsonParser,
     private val registerConfigParser: RegisterConfigParser,
     private val csvExporter: CsvResultExporter,
+    private val rawDataExporter: FactoryRawDataExporter,
     @Named("storageBaseDir") private val baseDir: File,
     private val configPathProvider: ConfigPathProvider,
     private val onlineProjectConfigLoader: OnlineProjectConfigLoader
@@ -220,6 +222,7 @@ class FactoryViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            val testStartedAt = System.currentTimeMillis()
             _uiState.update {
                 it.copy(
                     isTestRunning = true,
@@ -240,12 +243,16 @@ class FactoryViewModel @Inject constructor(
                 chip = project.chip,
                 factoryConfig = project.factoryConfig,
                 registerConfigs = project.registerConfigs,
-                onEvent = { event -> handleEngineEvent(event, project) }
+                onEvent = { event -> handleEngineEvent(event, project, testStartedAt) }
             )
         }
     }
 
-    private suspend fun handleEngineEvent(event: TestEngineEvent, project: ProjectConfig) {
+    private suspend fun handleEngineEvent(
+        event: TestEngineEvent,
+        project: ProjectConfig,
+        testStartedAt: Long
+    ) {
         when (event) {
             is TestEngineEvent.StepStarted -> {
                 _uiState.update { it.copy(currentStepDescription = event.description) }
@@ -267,6 +274,23 @@ class FactoryViewModel @Inject constructor(
                 val passCount = event.results.count { it.passed }
                 addLog(LogLevel.INFO,
                     "${event.type.displayName}: $passCount/${event.results.size} 通过")
+            }
+            is TestEngineEvent.RawDataCollected -> {
+                val file = rawDataExporter.export(
+                    projectName = project.projectName,
+                    chip = project.chip,
+                    testType = event.type,
+                    data = event.data,
+                    ledCurrentTenthsMaByChannel = event.ledCurrentTenthsMaByChannel,
+                    gainKOhmByChannel = event.gainKOhmByChannel,
+                    testStartedAt = testStartedAt,
+                    baseDir = baseDir
+                )
+                if (file != null) {
+                    addLog(LogLevel.INFO, "${event.type.displayName} 原始数据已导出: ${file.absolutePath}")
+                } else {
+                    addLog(LogLevel.ERROR, "${event.type.displayName} 原始数据导出失败")
+                }
             }
             is TestEngineEvent.LogMessage -> addLog(event.level, event.message)
             is TestEngineEvent.ShowEnvironmentSwitchDialog -> {
