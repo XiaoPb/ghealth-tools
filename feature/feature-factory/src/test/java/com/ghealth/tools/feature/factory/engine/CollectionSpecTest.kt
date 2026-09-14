@@ -15,6 +15,7 @@ class CollectionSpecTest {
         assertEquals(100, spec.minNumber)
         assertEquals(200, spec.skipNumber)
         assertTrue(spec.isContinuous)
+        assertTrue(spec.requireStableAgc)
         assertEquals(10_000L, spec.timeoutMs)
     }
 
@@ -24,6 +25,7 @@ class CollectionSpecTest {
         assertEquals(100, spec.minNumber)
         assertEquals(0, spec.skipNumber)
         assertFalse(spec.isContinuous)
+        assertFalse(spec.requireStableAgc)
         assertEquals(10_000L, spec.timeoutMs)
     }
 

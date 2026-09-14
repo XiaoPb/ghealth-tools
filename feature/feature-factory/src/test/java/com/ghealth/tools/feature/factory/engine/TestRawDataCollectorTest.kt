@@ -19,8 +19,18 @@ import org.junit.jupiter.api.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class TestRawDataCollectorTest {
 
-    private fun testFrame(rawdata: IntArray, frameCnt: Int = 1) = GhFuncFrame(
-        funcId = GhFuncId.TEST1, frameCnt = frameCnt, timestamp = 0L, rawdata = rawdata
+    private fun testFrame(
+        rawdata: IntArray,
+        frameCnt: Int = 1,
+        agcInfo: IntArray = intArrayOf(),
+        agcInfoHigh: IntArray = intArrayOf()
+    ) = GhFuncFrame(
+        funcId = GhFuncId.TEST1,
+        frameCnt = frameCnt,
+        timestamp = 0L,
+        rawdata = rawdata,
+        agcInfo = agcInfo,
+        agcInfoHigh = agcInfoHigh
     )
 
     private fun newCollector(flow: MutableSharedFlow<Pair<String, GhFuncFrame>>): Pair<TestRawDataCollector, CoroutineScope> {
@@ -138,6 +148,48 @@ class TestRawDataCollectorTest {
         listOf(0, 1, 2, 5, 6).forEach { flow.tryEmit("AA:BB" to testFrame(intArrayOf(it), frameCnt = it)) }
         val spec = CollectionSpec(minNumber = 2, skipNumber = 3, timeoutMs = 10_000L, isContinuous = true)
         assertTrue(collector.isCollectionComplete(spec))
+        scope.coroutineContext[Job]!!.cancel()
+    }
+
+    @Test
+    fun `要求 AGC 稳定时变化帧重新作为第 1 帧计数`() = runTest {
+        val flow = MutableSharedFlow<Pair<String, GhFuncFrame>>(extraBufferCapacity = 64)
+        val (collector, scope) = newCollector(flow)
+        collector.start("AA:BB")
+        flow.tryEmit("AA:BB" to testFrame(intArrayOf(0), frameCnt = 0, agcInfo = intArrayOf(10)))
+        flow.tryEmit("AA:BB" to testFrame(intArrayOf(1), frameCnt = 1, agcInfo = intArrayOf(10)))
+        flow.tryEmit("AA:BB" to testFrame(intArrayOf(2), frameCnt = 2, agcInfo = intArrayOf(11)))
+        flow.tryEmit("AA:BB" to testFrame(intArrayOf(3), frameCnt = 3, agcInfo = intArrayOf(11)))
+        val spec = CollectionSpec(
+            minNumber = 2,
+            skipNumber = 1,
+            timeoutMs = 10_000L,
+            isContinuous = true,
+            requireStableAgc = true
+        )
+        assertFalse(collector.isCollectionComplete(spec))
+
+        flow.tryEmit("AA:BB" to testFrame(intArrayOf(4), frameCnt = 4, agcInfo = intArrayOf(11)))
+
+        assertTrue(collector.isCollectionComplete(spec))
+        scope.coroutineContext[Job]!!.cancel()
+    }
+
+    @Test
+    fun `要求 AGC 稳定时缺少 AGC 数据不会完成`() = runTest {
+        val flow = MutableSharedFlow<Pair<String, GhFuncFrame>>(extraBufferCapacity = 64)
+        val (collector, scope) = newCollector(flow)
+        collector.start("AA:BB")
+        (0 until 3).forEach { flow.tryEmit("AA:BB" to testFrame(intArrayOf(it), frameCnt = it)) }
+        val spec = CollectionSpec(
+            minNumber = 2,
+            skipNumber = 1,
+            timeoutMs = 10_000L,
+            isContinuous = true,
+            requireStableAgc = true
+        )
+
+        assertFalse(collector.isCollectionComplete(spec))
         scope.coroutineContext[Job]!!.cancel()
     }
 }

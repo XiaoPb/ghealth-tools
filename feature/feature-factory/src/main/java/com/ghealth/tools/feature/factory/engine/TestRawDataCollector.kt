@@ -49,10 +49,15 @@ class TestRawDataCollector @Inject constructor(
         }
     }
 
-    /** 采集是否满足完成条件：去重帧数 >= skip+min，且要求连续时末尾连续帧数 >= min。 */
+    /**
+     * 采集是否满足完成条件：去重帧数 >= skip+min；噪声测试还要求末尾 AGC 稳定帧数 >= skip+min；
+     * 要求帧号连续时，末尾连续帧数 >= min。
+     */
     fun isCollectionComplete(spec: CollectionSpec): Boolean {
         synchronized(lock) {
-            if (buffers.frameCount().toLong() < spec.skipNumber.toLong() + spec.minNumber.toLong()) return false
+            val requiredFrames = spec.skipNumber.toLong() + spec.minNumber.toLong()
+            if (buffers.frameCount().toLong() < requiredFrames) return false
+            if (spec.requireStableAgc && buffers.stableAgcFrameCount().toLong() < requiredFrames) return false
             if (!spec.isContinuous) return true
             return buffers.lastConsecutiveCount() >= spec.minNumber
         }

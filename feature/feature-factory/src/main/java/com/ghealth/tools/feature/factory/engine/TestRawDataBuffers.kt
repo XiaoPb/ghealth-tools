@@ -14,9 +14,13 @@ class TestRawDataBuffers {
     private val ledSumMaByChannel = mutableMapOf<Int, Double>()
     private val agcPhysicalByChannel = mutableMapOf<Int, AgcPhysicalCodec.Physical>()
     private val frameCnts = mutableListOf<Int>()
+    private var previousAgcInfo: IntArray? = null
+    private var previousAgcInfoHigh: IntArray? = null
+    private var stableAgcFrames = 0
 
     fun addFrame(frame: GhFuncFrame) {
         frameCnts.add(frame.frameCnt)
+        updateStableAgcCount(frame)
         frame.rawdata.forEachIndexed { ch, v ->
             rawdataByChannel.getOrPut(ch) { mutableListOf() }.add(v)
         }
@@ -33,6 +37,9 @@ class TestRawDataBuffers {
 
     /** 已去重有效帧数。 */
     fun frameCount(): Int = frameCnts.size
+
+    /** 末尾 AGC 完全不变的帧数；低位或高位数组中任一通道变化都会从当前帧重新计为 1。 */
+    fun stableAgcFrameCount(): Int = stableAgcFrames
 
     /** 末尾连续帧号长度；空序列返回 0。`(cur - prev) and 0xFFFFFFFF == 1` 兼容 32 位回绕。 */
     fun lastConsecutiveCount(): Int {
@@ -56,4 +63,19 @@ class TestRawDataBuffers {
         agcPhysicalByChannel = agcPhysicalByChannel.toMap(),
         frameCnts = frameCnts.toList()
     )
+
+    private fun updateStableAgcCount(frame: GhFuncFrame) {
+        if (frame.agcInfo.isEmpty() && frame.agcInfoHigh.isEmpty()) {
+            previousAgcInfo = null
+            previousAgcInfoHigh = null
+            stableAgcFrames = 0
+            return
+        }
+
+        val unchanged = previousAgcInfo?.contentEquals(frame.agcInfo) == true &&
+            previousAgcInfoHigh?.contentEquals(frame.agcInfoHigh) == true
+        stableAgcFrames = if (unchanged) stableAgcFrames + 1 else 1
+        previousAgcInfo = frame.agcInfo.copyOf()
+        previousAgcInfoHigh = frame.agcInfoHigh.copyOf()
+    }
 }

@@ -5,13 +5,14 @@ import com.ghealth.tools.feature.factory.model.TestType
 
 /**
  * App 端计算采集参数：总帧数 = [skipNumber] + [minNumber]，计算只使用最后 [minNumber] 帧；
- * [isContinuous] 为 true 时要求末尾帧号连续。
+ * [isContinuous] 为 true 时要求末尾帧号连续；[requireStableAgc] 为 true 时要求 AGC 状态稳定。
  */
 data class CollectionSpec(
     val minNumber: Int,
     val skipNumber: Int,
     val timeoutMs: Long,
-    val isContinuous: Boolean
+    val isContinuous: Boolean,
+    val requireStableAgc: Boolean = false
 ) {
     companion object {
         const val DEFAULT_MIN_NUMBER = 100
@@ -25,7 +26,8 @@ data class CollectionSpec(
                 minNumber = (compute?.minNumber ?: DEFAULT_MIN_NUMBER).coerceAtLeast(1),
                 skipNumber = (compute?.skipNumber ?: if (isNoise) DEFAULT_SKIP_NOISE else DEFAULT_SKIP_CTR).coerceAtLeast(0),
                 timeoutMs = compute?.timeout ?: DEFAULT_TIMEOUT_MS,
-                isContinuous = compute?.isContinuous?.let { it == 1 } ?: isNoise
+                isContinuous = compute?.isContinuous?.let { it == 1 } ?: isNoise,
+                requireStableAgc = isNoise
             )
         }
     }

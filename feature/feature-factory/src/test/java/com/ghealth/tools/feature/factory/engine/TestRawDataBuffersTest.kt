@@ -121,4 +121,72 @@ class TestRawDataBuffersTest {
         buffers.addFrame(frame(frameCnt = 2))
         assertEquals(listOf(1), data.frameCnts)
     }
+
+    @Test
+    fun `AGC 首帧作为稳定区间第 1 帧且相同状态持续计数`() {
+        val buffers = TestRawDataBuffers()
+        buffers.addFrame(frame(agcInfo = intArrayOf(10, 20), agcInfoHigh = intArrayOf(30, 40)))
+        assertEquals(1, buffers.stableAgcFrameCount())
+
+        buffers.addFrame(frame(agcInfo = intArrayOf(10, 20), agcInfoHigh = intArrayOf(30, 40)))
+        assertEquals(2, buffers.stableAgcFrameCount())
+    }
+
+    @Test
+    fun `任一通道 AGC 低位变化时稳定计数重置为 1`() {
+        val buffers = TestRawDataBuffers()
+        repeat(3) {
+            buffers.addFrame(frame(agcInfo = intArrayOf(10, 20), agcInfoHigh = intArrayOf(30, 40)))
+        }
+
+        buffers.addFrame(frame(agcInfo = intArrayOf(10, 21), agcInfoHigh = intArrayOf(30, 40)))
+
+        assertEquals(1, buffers.stableAgcFrameCount())
+    }
+
+    @Test
+    fun `任一通道 AGC 高位变化时稳定计数重置为 1`() {
+        val buffers = TestRawDataBuffers()
+        repeat(3) {
+            buffers.addFrame(frame(agcInfo = intArrayOf(10, 20), agcInfoHigh = intArrayOf(30, 40)))
+        }
+
+        buffers.addFrame(frame(agcInfo = intArrayOf(10, 20), agcInfoHigh = intArrayOf(31, 40)))
+
+        assertEquals(1, buffers.stableAgcFrameCount())
+    }
+
+    @Test
+    fun `AGC 数组长度变化时稳定计数重置为 1`() {
+        val buffers = TestRawDataBuffers()
+        buffers.addFrame(frame(agcInfo = intArrayOf(10), agcInfoHigh = intArrayOf(30)))
+        buffers.addFrame(frame(agcInfo = intArrayOf(10), agcInfoHigh = intArrayOf(30)))
+
+        buffers.addFrame(frame(agcInfo = intArrayOf(10, 20), agcInfoHigh = intArrayOf(30)))
+
+        assertEquals(1, buffers.stableAgcFrameCount())
+    }
+
+    @Test
+    fun `缺少 AGC 数据时不计入稳定帧`() {
+        val buffers = TestRawDataBuffers()
+        buffers.addFrame(frame())
+        buffers.addFrame(frame())
+
+        assertEquals(0, buffers.stableAgcFrameCount())
+    }
+
+    @Test
+    fun `AGC 基线使用副本不受帧数组后续修改影响`() {
+        val agcInfo = intArrayOf(10)
+        val agcInfoHigh = intArrayOf(30)
+        val buffers = TestRawDataBuffers()
+        buffers.addFrame(frame(agcInfo = agcInfo, agcInfoHigh = agcInfoHigh))
+        agcInfo[0] = 11
+        agcInfoHigh[0] = 31
+
+        buffers.addFrame(frame(agcInfo = intArrayOf(11), agcInfoHigh = intArrayOf(31)))
+
+        assertEquals(1, buffers.stableAgcFrameCount())
+    }
 }

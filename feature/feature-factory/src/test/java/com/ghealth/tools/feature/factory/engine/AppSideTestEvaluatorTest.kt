@@ -238,4 +238,32 @@ class AppSideTestEvaluatorTest {
         val results = evaluator.evaluate(TestType.BASE_NOISE, noiseDef, data, "gh3036", ::log)
         assertNull(results)
     }
+
+    @Test
+    fun `噪声滤波忽略稳定窗口之前的调光数据`() {
+        val stableWindow = listOf(1000, 1010, 990, 1005, 995, 1000)
+        val def = noiseDef.copy(
+            channels = 1,
+            compute = AppComputeConfig(minNumber = 4, skipNumber = 2, sampleRateHz = 100)
+        )
+        fun data(series: List<Int>) = CollectedRawData(
+            rawdataByChannel = mapOf(0 to series),
+            ipdPaByChannel = emptyMap(),
+            ledCurrentSumMaByChannel = emptyMap(),
+            frameCnts = series.indices.toList()
+        )
+
+        val stableOnly = evaluator.evaluate(
+            TestType.BASE_NOISE, def, data(stableWindow), "gh3036", ::log
+        )!![0].computedValue!!
+        val withDimmingPrefix = evaluator.evaluate(
+            TestType.BASE_NOISE,
+            def,
+            data(listOf(1_000_000, -1_000_000) + stableWindow),
+            "gh3036",
+            ::log
+        )!![0].computedValue!!
+
+        assertEquals(stableOnly, withDimmingPrefix, 1e-9)
+    }
 }

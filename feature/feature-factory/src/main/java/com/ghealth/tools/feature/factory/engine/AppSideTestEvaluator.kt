@@ -64,8 +64,16 @@ class AppSideTestEvaluator @Inject constructor() {
                         log(LogLevel.WARN, "${testType.displayName}: 通道$ch 原始数据不足（不足${spec.minNumber}帧），标记 FAIL")
                         continue
                     }
-                    // 以均值为滤波器初态，消除直流阶跃瞬态；σ 只统计最后 min_number 帧
-                    val filtered = filter.filter(rawSeries, initialX = rawAvg)
+                    // 只让最后一个 AGC 稳定区间进入滤波器；skip 帧用于衰减稳定区间起点的滤波瞬态。
+                    val stableWindowSize = (spec.skipNumber.toLong() + spec.minNumber.toLong())
+                        .coerceAtMost(Int.MAX_VALUE.toLong())
+                        .toInt()
+                    val stableRawSeries = rawSeries.takeLast(stableWindowSize).toDoubleArray()
+                    val stableRawAvg = PpgMetricsCalculator.average(stableRawSeries)
+                    val stableRawWindowAvg = PpgMetricsCalculator.average(
+                        stableRawSeries.takeLast(spec.minNumber).toDoubleArray()
+                    )
+                    val filtered = filter.filter(stableRawSeries, initialX = stableRawAvg)
                     val sigma = PpgMetricsCalculator.stddev(filtered.takeLast(spec.minNumber).toDoubleArray())
                     if (sigma <= 0.0) {
                         results += failedResult(testType, ch, testDef)
@@ -73,10 +81,10 @@ class AppSideTestEvaluator @Inject constructor() {
                         continue
                     }
                     computed = PpgMetricsCalculator.noise(sigma, params)
-                    val snr = PpgMetricsCalculator.snr(rawWindowAvg, params.offset, sigma)
+                    val snr = PpgMetricsCalculator.snr(stableRawWindowAvg, params.offset, sigma)
                     Timber.d("PPG_DEBUG %s ch%d raw[last%d]=%s",
                         testType.displayName, ch, spec.minNumber,
-                        compactDoubles(rawSeries.takeLast(spec.minNumber)))
+                        compactDoubles(stableRawSeries.takeLast(spec.minNumber)))
                     Timber.d("PPG_DEBUG %s ch%d filt[last%d]=%s",
                         testType.displayName, ch, spec.minNumber,
                         compactDoubles(filtered.takeLast(spec.minNumber).toList()))
@@ -84,9 +92,9 @@ class AppSideTestEvaluator @Inject constructor() {
                         testType.displayName, ch,
                         TestResult.formatComputed(params.fullScale), TestResult.formatComputed(params.vref),
                         TestResult.formatComputed(params.offset), TestResult.formatComputed(params.tiaRatio),
-                        TestResult.formatComputed(rawAvg), TestResult.formatComputed(sigma))
+                        TestResult.formatComputed(stableRawAvg), TestResult.formatComputed(sigma))
                     log(LogLevel.INFO,
-                        "${testType.displayName}: 通道$ch Noise=${TestResult.formatComputed(computed)}μV SNR=${TestResult.formatComputed(snr)}dB rawAvg=${TestResult.formatComputed(rawAvg)} sigma=${TestResult.formatComputed(sigma)}")
+                        "${testType.displayName}: 通道$ch Noise=${TestResult.formatComputed(computed)}μV SNR=${TestResult.formatComputed(snr)}dB rawAvg=${TestResult.formatComputed(stableRawAvg)} sigma=${TestResult.formatComputed(sigma)}")
                 }
                 testType == TestType.LPCTR || testType == TestType.LPLCTR -> {
                     val ipdPaSeries = data.ipdPaByChannel[ch]
