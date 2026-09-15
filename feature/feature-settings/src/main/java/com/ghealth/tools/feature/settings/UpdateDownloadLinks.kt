@@ -4,7 +4,7 @@ import com.ghealth.tools.core.network.model.GitHubAsset
 
 object UpdateDownloadLinks {
 
-    const val PROXY_PREFIX = "https://gh-proxy.com/"
+    const val PROXY_PREFIX = "https://gh-proxy.org/"
 
     fun proxyUrl(githubUrl: String): String {
         return if (githubUrl.startsWith(PROXY_PREFIX)) githubUrl else PROXY_PREFIX + githubUrl

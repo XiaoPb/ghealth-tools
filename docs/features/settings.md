@@ -274,7 +274,7 @@ class UserPreferences @Inject constructor(
 
 ```text
 UpdateDialog（下载方式单选，默认勾选"代理下载"）
-  ├── 代理下载 → https://gh-proxy.com/ + APK browser_download_url
+  ├── 代理下载 → https://gh-proxy.org/ + APK browser_download_url
   ├── GitHub 下载 → 当前流程（打开 release 页面 html_url）
   ├── 前往下载 → UpdateDownloadLinks.effectiveDownloadUrl(useProxy, directUrl, proxyUrl)
   │     └── UpdateChecker.openDownloadUrl(选中地址)

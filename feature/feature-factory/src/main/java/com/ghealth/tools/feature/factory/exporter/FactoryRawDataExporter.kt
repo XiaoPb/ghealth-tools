@@ -37,7 +37,7 @@ class FactoryRawDataExporter @Inject constructor() {
             val timeDirectory = directoryTimeFormat.format(Date(testStartedAt))
             val outputDirectory = File(
                 baseDir,
-                "factory/${sanitizePathSegment(projectName)}/$timeDirectory"
+                "factory/${sanitizePathSegment(chip)}/${sanitizePathSegment(projectName)}/mp_raw/$timeDirectory"
             )
             if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
                 return@withContext null

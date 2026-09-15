@@ -11,14 +11,14 @@ class UpdateDownloadLinksTest {
     fun `proxyUrl 在 GitHub 地址前拼接代理前缀`() {
         val url = "https://github.com/XiaoPb/ghealth-tools/releases/download/v0.6.27/ghealth-tools-0.6.27.apk"
         assertEquals(
-            "https://gh-proxy.com/$url",
+            "https://gh-proxy.org/$url",
             UpdateDownloadLinks.proxyUrl(url)
         )
     }
 
     @Test
     fun `proxyUrl 对已是代理地址的输入保持原样`() {
-        val url = "https://gh-proxy.com/https://github.com/XiaoPb/ghealth-tools/releases/download/v0.6.27/ghealth-tools-0.6.27.apk"
+        val url = "https://gh-proxy.org/https://github.com/XiaoPb/ghealth-tools/releases/download/v0.6.27/ghealth-tools-0.6.27.apk"
         assertEquals(url, UpdateDownloadLinks.proxyUrl(url))
     }
 
@@ -53,11 +53,11 @@ class UpdateDownloadLinksTest {
     @Test
     fun `effectiveDownloadUrl 勾选代理且代理地址非空时返回代理地址`() {
         assertEquals(
-            "https://gh-proxy.com/https://github.com/XiaoPb/ghealth-tools/releases/download/v0.6.27/ghealth-tools-0.6.27.apk",
+            "https://gh-proxy.org/https://github.com/XiaoPb/ghealth-tools/releases/download/v0.6.27/ghealth-tools-0.6.27.apk",
             UpdateDownloadLinks.effectiveDownloadUrl(
                 useProxy = true,
                 directUrl = "https://github.com/XiaoPb/ghealth-tools/releases/tag/v0.6.27",
-                proxyUrl = "https://gh-proxy.com/https://github.com/XiaoPb/ghealth-tools/releases/download/v0.6.27/ghealth-tools-0.6.27.apk",
+                proxyUrl = "https://gh-proxy.org/https://github.com/XiaoPb/ghealth-tools/releases/download/v0.6.27/ghealth-tools-0.6.27.apk",
             )
         )
     }
@@ -69,7 +69,7 @@ class UpdateDownloadLinksTest {
             UpdateDownloadLinks.effectiveDownloadUrl(
                 useProxy = false,
                 directUrl = "https://github.com/XiaoPb/ghealth-tools/releases/tag/v0.6.27",
-                proxyUrl = "https://gh-proxy.com/https://github.com/XiaoPb/ghealth-tools/releases/download/v0.6.27/ghealth-tools-0.6.27.apk",
+                proxyUrl = "https://gh-proxy.org/https://github.com/XiaoPb/ghealth-tools/releases/download/v0.6.27/ghealth-tools-0.6.27.apk",
             )
         )
     }

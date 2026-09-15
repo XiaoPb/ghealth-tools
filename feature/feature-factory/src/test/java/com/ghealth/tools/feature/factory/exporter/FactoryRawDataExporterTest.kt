@@ -52,7 +52,7 @@ class FactoryRawDataExporterTest {
 
         val timeDir = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US).format(Date(timestamp))
         assertEquals(
-            File(baseDir, "factory/ProjectA/$timeDir/lpctr.csv").absolutePath,
+            File(baseDir, "factory/gh3036/ProjectA/mp_raw/$timeDir/lpctr.csv").absolutePath,
             file.absolutePath
         )
         assertEquals(
