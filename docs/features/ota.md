@@ -7,11 +7,11 @@
 | 协议 | 设备 | 实现 |
 |------|------|------|
 | Goodix DFU | GR5xxx 系列 | `external/libdfu2` 的 `GR5xxxDfu2` |
-| Nordic SMP | nRF54L15（MCUboot + Zephyr/NCS） | Nordic 官方 `no.nordicsemi.android:mcumgr-ble:2.8.0` |
+| Nordic SMP | nRF54L15（MCUboot + Zephyr/NCS） | Nordic 官方 `no.nordicsemi.android:mcumgr-ble:3.4.1` |
 
 进入页面后通过 GATT 服务 UUID 自动识别协议，不依赖设备名称。识别不到升级服务时仍可进入页面，但会提示“不支持”并禁止升级。
 
-> 说明：`mcumgr-ble` 依赖 `minCompileSdk=37`，而本项目当前 `compileSdk=36`，因此选用 2.8.0（`minCompileSdk=36`，API 与 3.x 一致，仅包名为 `io.runtime.mcumgr`）。后续升级 compileSdk 后可平滑切换。
+> `mcumgr-ble:3.4.1` 的 AAR 要求 `minCompileSdk=37`，因此项目 `compileSdk` 统一为 37、AGP 升至 9.2.1（API 37 最低要求 AGP 9.1.1）。设备运行门槛仍由 `minSdk 24` 决定。
 
 ## 2. 核心组件
 

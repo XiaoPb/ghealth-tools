@@ -21,7 +21,6 @@ import com.ghealth.tools.feature.ota.model.StorageType
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.runtime.mcumgr.dfu.mcuboot.model.ImageSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import no.nordicsemi.android.mcumgr.dfu.mcuboot.model.ImageSet
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject

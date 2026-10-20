@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.ghealth.tools.core.model"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig { minSdk = 24 }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

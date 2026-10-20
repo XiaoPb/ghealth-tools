@@ -26,7 +26,7 @@
 | [Connection 模块](features/connection.md) | 设备扫描/连接、命令交互、设备状态卡（电池/固件版本）、测试配置 |
 | [Demo 模块](features/demo.md) | G 协议实时数据、波形展示、算法结果、设备对比 |
 | [Factory 模块](features/factory.md) | 产测流程、配置加载、测试执行、CSV 导出 |
-| [OTA 模块](features/ota.md) | DFU 固件升级、资源升级、设备重连 |
+| [OTA 模块](features/ota.md) | Goodix DFU / Nordic SMP 协议识别与固件升级、资源升级、设备重连 |
 | [Settings 模块](features/settings.md) | BLE UUID 配置、主题（4 套 M3 调色板）、固件版本读取、设备信息、日志导出 |
 
 ### 核心模块文档 (Core)
@@ -38,6 +38,20 @@
 | [Database 模块](core/database.md) | Room 数据库、传感器记录实体、DAO |
 
 ## 快速入门
+
+### 环境要求
+
+| 项目 | 最低要求 | 说明 |
+|------|----------|------|
+| compileSdk | 37（Android 17，API 37） | `mcumgr-ble:3.4.1`（Nordic SMP OTA）的 AAR 要求 `minCompileSdk=37`，所有模块统一为 37 |
+| minSdk | 24（Android 7.0） | 应用实际可运行的最低 Android 版本 |
+| JDK | 17 | 编译与 Gradle 运行环境 |
+| Android Gradle Plugin | 9.2.1 | API 37 要求 AGP ≥ 9.1.1 |
+| Gradle | 9.4.1 | AGP 9.2 要求的最低 Gradle 版本 |
+| Kotlin | 2.3.20 | 与 KSP、Hilt 版本配套 |
+| Android SDK Platform | 37.0 | 另需 Build-Tools 37.0.0 |
+
+> 注意：编译使用的 `compileSdk 37` 不代表用户手机必须是 Android 17；运行门槛由 `minSdk 24` 决定（Android 7.0 及以上）。
 
 ### 构建与运行
 

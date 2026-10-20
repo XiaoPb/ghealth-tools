@@ -1,7 +1,7 @@
 package com.ghealth.tools.feature.ota.engine
 
-import io.runtime.mcumgr.dfu.mcuboot.model.ImageSet
-import io.runtime.mcumgr.dfu.mcuboot.model.TargetImage
+import no.nordicsemi.android.mcumgr.dfu.mcuboot.model.ImageSet
+import no.nordicsemi.android.mcumgr.dfu.mcuboot.model.TargetImage
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.IOException
