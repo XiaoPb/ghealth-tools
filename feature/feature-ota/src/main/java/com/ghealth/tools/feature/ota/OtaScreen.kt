@@ -52,6 +52,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -86,8 +87,10 @@ import com.ghealth.tools.core.ui.adaptive.isWide
 import com.ghealth.tools.feature.ota.engine.DebugResult
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
 import com.ghealth.tools.feature.ota.engine.OtaEngine
+import com.ghealth.tools.feature.ota.engine.OtaProtocol
 import com.ghealth.tools.feature.ota.engine.OtaState
 import com.ghealth.tools.feature.ota.model.DebugMenuAction
+import com.ghealth.tools.feature.ota.model.SmpUpgradeMode
 import com.ghealth.tools.feature.ota.model.StorageType
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 
@@ -120,6 +123,10 @@ fun OtaScreen(
     val resourceFilePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? -> uri?.let { viewModel.selectResourceFile(it) } }
+
+    val smpFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> uri?.let { viewModel.selectSmpFile(it) } }
 
     val logListState = rememberLazyListState()
     LaunchedEffect(Unit) {
@@ -235,7 +242,7 @@ fun OtaScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = when (state.otaState) {
+                        text = state.statusText ?: when (state.otaState) {
                             OtaState.IDLE -> "等待开始"
                             OtaState.PREPARING -> "准备中..."
                             OtaState.CONNECTING -> "连接设备中..."
@@ -247,24 +254,36 @@ fun OtaScreen(
                         },
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    if (!state.canCancelUpgrade) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "上传完成后无法回滚，请勿断开设备",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(
-                    onClick = { viewModel.cancelUpgrade() },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                ) {
-                    Text("取消升级")
+                if (state.canCancelUpgrade) {
+                    TextButton(
+                        onClick = { viewModel.cancelUpgrade() },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                    ) {
+                        Text("取消升级")
+                    }
                 }
             }
         )
     }
 
     BackHandler(enabled = state.isUpgrading) {
-        viewModel.cancelUpgrade()
+        if (state.canCancelUpgrade) {
+            viewModel.cancelUpgrade()
+        }
     }
 
     Box(
@@ -281,114 +300,136 @@ fun OtaScreen(
         ) {
             DeviceInfoBar(selectedDevice = state.selectedDevice)
 
-            FirmwareInfoCard(
+            ProtocolSection(
                 uiState = state,
-                onReadFwInfo = { viewModel.readFirmwareInfo() },
+                onSelectProtocol = viewModel::selectProtocol,
             )
 
-            FirmwareUpgradeCard(
-                fileInfo = state.firmwareFile,
-                upgradeRegion = state.otaConfig.upgradeRegion,
-                copyAddress = state.otaConfig.copyAddress,
-                copyAddressEnabled = state.otaConfig.copyAddressEnabled,
-                onSelectFile = { firmwareFilePicker.launch(arrayOf("*/*")) },
-                onSelectRegion = viewModel::selectUpgradeRegion,
-                onCopyAddressChange = viewModel::updateCopyAddress,
-                onStartUpgrade = viewModel::startFirmwareUpgrade,
-                enabled = !state.isUpgrading,
-            )
+            when (state.selectedProtocol) {
+                OtaProtocol.GOODIX_DFU -> {
+                    FirmwareInfoCard(
+                        uiState = state,
+                        onReadFwInfo = { viewModel.readFirmwareInfo() },
+                    )
 
-            ResourceUpgradeCard(
-                fileInfo = state.resourceFile,
-                startAddress = state.otaConfig.resourceStartAddress,
-                storageType = state.otaConfig.resourceStorageType,
-                onSelectFile = { resourceFilePicker.launch(arrayOf("*/*")) },
-                onStartAddressChange = viewModel::updateResourceStartAddress,
-                onStorageTypeChange = viewModel::updateResourceStorageType,
-                onStartUpgrade = viewModel::startResourceUpgrade,
-                enabled = !state.isUpgrading,
-            )
+                    FirmwareUpgradeCard(
+                        fileInfo = state.firmwareFile,
+                        upgradeRegion = state.otaConfig.upgradeRegion,
+                        copyAddress = state.otaConfig.copyAddress,
+                        copyAddressEnabled = state.otaConfig.copyAddressEnabled,
+                        onSelectFile = { firmwareFilePicker.launch(arrayOf("*/*")) },
+                        onSelectRegion = viewModel::selectUpgradeRegion,
+                        onCopyAddressChange = viewModel::updateCopyAddress,
+                        onStartUpgrade = viewModel::startFirmwareUpgrade,
+                        enabled = !state.isUpgrading,
+                    )
 
-            if (state.activeDebugActions.contains(DebugMenuAction.RAM_READ_WRITE)) {
-                RamReadWriteCard(
-                    address = state.ramAddress,
-                    length = state.ramLength,
-                    lengthUnit = state.ramLengthUnit,
-                    data = state.ramData,
-                    debugResult = state.debugResults[DebugMenuAction.RAM_READ_WRITE],
-                    onAddressChange = viewModel::updateRamAddress,
-                    onLengthChange = viewModel::updateRamLength,
-                    onLengthUnitChange = viewModel::updateRamLengthUnit,
-                    onDataChange = viewModel::updateRamData,
-                    onRead = viewModel::readRam,
-                    onWrite = viewModel::writeRam,
-                    onDownload = viewModel::downloadRam,
-                    enabled = !state.isUpgrading,
-                )
-            }
+                    ResourceUpgradeCard(
+                        fileInfo = state.resourceFile,
+                        startAddress = state.otaConfig.resourceStartAddress,
+                        storageType = state.otaConfig.resourceStorageType,
+                        onSelectFile = { resourceFilePicker.launch(arrayOf("*/*")) },
+                        onStartAddressChange = viewModel::updateResourceStartAddress,
+                        onStorageTypeChange = viewModel::updateResourceStorageType,
+                        onStartUpgrade = viewModel::startResourceUpgrade,
+                        enabled = !state.isUpgrading,
+                    )
 
-            if (state.activeDebugActions.contains(DebugMenuAction.FLASH_READ_WRITE)) {
-                FlashReadWriteCard(
-                    address = state.flashAddress,
-                    length = state.flashLength,
-                    lengthUnit = state.flashLengthUnit,
-                    data = state.flashData,
-                    debugResult = state.debugResults[DebugMenuAction.FLASH_READ_WRITE],
-                    onAddressChange = viewModel::updateFlashAddress,
-                    onLengthChange = viewModel::updateFlashLength,
-                    onLengthUnitChange = viewModel::updateFlashLengthUnit,
-                    onDataChange = viewModel::updateFlashData,
-                    onRead = viewModel::readFlash,
-                    onWrite = viewModel::writeFlash,
-                    onDownload = viewModel::downloadFlash,
-                    enabled = !state.isUpgrading,
-                )
-            }
+                    if (state.activeDebugActions.contains(DebugMenuAction.RAM_READ_WRITE)) {
+                        RamReadWriteCard(
+                            address = state.ramAddress,
+                            length = state.ramLength,
+                            lengthUnit = state.ramLengthUnit,
+                            data = state.ramData,
+                            debugResult = state.debugResults[DebugMenuAction.RAM_READ_WRITE],
+                            onAddressChange = viewModel::updateRamAddress,
+                            onLengthChange = viewModel::updateRamLength,
+                            onLengthUnitChange = viewModel::updateRamLengthUnit,
+                            onDataChange = viewModel::updateRamData,
+                            onRead = viewModel::readRam,
+                            onWrite = viewModel::writeRam,
+                            onDownload = viewModel::downloadRam,
+                            enabled = !state.isUpgrading,
+                        )
+                    }
 
-            if (state.activeDebugActions.contains(DebugMenuAction.REGISTER_READ_WRITE)) {
-                RegisterReadWriteCard(
-                    address = state.registerAddress,
-                    data = state.registerData,
-                    debugResult = state.debugResults[DebugMenuAction.REGISTER_READ_WRITE],
-                    onAddressChange = viewModel::updateRegisterAddress,
-                    onDataChange = viewModel::updateRegisterData,
-                    onRead = viewModel::readRegister,
-                    onWrite = viewModel::writeRegister,
-                    enabled = !state.isUpgrading,
-                )
-            }
+                    if (state.activeDebugActions.contains(DebugMenuAction.FLASH_READ_WRITE)) {
+                        FlashReadWriteCard(
+                            address = state.flashAddress,
+                            length = state.flashLength,
+                            lengthUnit = state.flashLengthUnit,
+                            data = state.flashData,
+                            debugResult = state.debugResults[DebugMenuAction.FLASH_READ_WRITE],
+                            onAddressChange = viewModel::updateFlashAddress,
+                            onLengthChange = viewModel::updateFlashLength,
+                            onLengthUnitChange = viewModel::updateFlashLengthUnit,
+                            onDataChange = viewModel::updateFlashData,
+                            onRead = viewModel::readFlash,
+                            onWrite = viewModel::writeFlash,
+                            onDownload = viewModel::downloadFlash,
+                            enabled = !state.isUpgrading,
+                        )
+                    }
 
-            if (state.activeDebugActions.contains(DebugMenuAction.NVDS_READ_WRITE)) {
-                NvdsReadWriteCard(
-                    tag = state.nvdsTag,
-                    data = state.nvdsData,
-                    debugResult = state.debugResults[DebugMenuAction.NVDS_READ_WRITE],
-                    onTagChange = viewModel::updateNvdsTag,
-                    onDataChange = viewModel::updateNvdsData,
-                    onRead = viewModel::readNvds,
-                    onWrite = viewModel::writeNvds,
-                    onDelete = viewModel::deleteNvds,
-                    enabled = !state.isUpgrading,
-                )
-            }
+                    if (state.activeDebugActions.contains(DebugMenuAction.REGISTER_READ_WRITE)) {
+                        RegisterReadWriteCard(
+                            address = state.registerAddress,
+                            data = state.registerData,
+                            debugResult = state.debugResults[DebugMenuAction.REGISTER_READ_WRITE],
+                            onAddressChange = viewModel::updateRegisterAddress,
+                            onDataChange = viewModel::updateRegisterData,
+                            onRead = viewModel::readRegister,
+                            onWrite = viewModel::writeRegister,
+                            enabled = !state.isUpgrading,
+                        )
+                    }
 
-            if (state.activeDebugActions.contains(DebugMenuAction.READ_EFUSE)) {
-                EfuseReadCard(
-                    debugResult = state.debugResults[DebugMenuAction.READ_EFUSE] ?: state.efuseResult,
-                    onRead = viewModel::readEfuse,
-                    onClear = viewModel::clearEfuseResult,
-                    enabled = !state.isUpgrading,
-                )
-            }
+                    if (state.activeDebugActions.contains(DebugMenuAction.NVDS_READ_WRITE)) {
+                        NvdsReadWriteCard(
+                            tag = state.nvdsTag,
+                            data = state.nvdsData,
+                            debugResult = state.debugResults[DebugMenuAction.NVDS_READ_WRITE],
+                            onTagChange = viewModel::updateNvdsTag,
+                            onDataChange = viewModel::updateNvdsData,
+                            onRead = viewModel::readNvds,
+                            onWrite = viewModel::writeNvds,
+                            onDelete = viewModel::deleteNvds,
+                            enabled = !state.isUpgrading,
+                        )
+                    }
 
-            if (state.activeDebugActions.contains(DebugMenuAction.READ_BOOT_INFO)) {
-                BootInfoCard(
-                    bootInfo = state.bootInfoData,
-                    debugResult = state.debugResults[DebugMenuAction.READ_BOOT_INFO],
-                    onRead = viewModel::readBootInfo,
-                    onReboot = viewModel::rebootDevice,
-                    enabled = !state.isUpgrading,
-                )
+                    if (state.activeDebugActions.contains(DebugMenuAction.READ_EFUSE)) {
+                        EfuseReadCard(
+                            debugResult = state.debugResults[DebugMenuAction.READ_EFUSE] ?: state.efuseResult,
+                            onRead = viewModel::readEfuse,
+                            onClear = viewModel::clearEfuseResult,
+                            enabled = !state.isUpgrading,
+                        )
+                    }
+
+                    if (state.activeDebugActions.contains(DebugMenuAction.READ_BOOT_INFO)) {
+                        BootInfoCard(
+                            bootInfo = state.bootInfoData,
+                            debugResult = state.debugResults[DebugMenuAction.READ_BOOT_INFO],
+                            onRead = viewModel::readBootInfo,
+                            onReboot = viewModel::rebootDevice,
+                            enabled = !state.isUpgrading,
+                        )
+                    }
+                }
+
+                OtaProtocol.NORDIC_SMP -> {
+                    SmpUpgradeCard(
+                        packageSummary = state.smpPackage,
+                        mode = state.smpMode,
+                        enabled = !state.isUpgrading,
+                        onSelectFile = { smpFilePicker.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                        onModeChange = viewModel::updateSmpMode,
+                        onStartUpgrade = viewModel::startSmpUpgrade,
+                    )
+                }
+
+                null -> Unit
             }
 
             LogCard(
@@ -423,6 +464,9 @@ fun OtaScreen(
 @Composable
 fun OtaTopBarMenu(viewModel: OtaViewModel) {
     val state by viewModel.uiState.collectAsState()
+    // Goodix 专属的快速模式、调试菜单等仅在 Goodix 协议下展示。
+    if (state.selectedProtocol != OtaProtocol.GOODIX_DFU) return
+
     var menuExpanded by remember { mutableStateOf(false) }
     val fastModeSupported = state.firmwareInfo?.isAppBootloaderSolution != false
 
@@ -480,6 +524,182 @@ fun OtaTopBarMenu(viewModel: OtaViewModel) {
                     viewModel.showControlPointDialog()
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun ProtocolSection(
+    uiState: OtaUiState,
+    onSelectProtocol: (OtaProtocol) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.SystemUpdate,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("升级协议", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            when {
+                uiState.isDetectingProtocol -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "正在识别升级协议…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                uiState.supportedProtocols.isEmpty() -> Text(
+                    "未发现升级服务（Goodix DFU / Nordic SMP），该设备不支持 OTA",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+
+                uiState.supportedProtocols.size == 1 -> Text(
+                    uiState.supportedProtocols.first().displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+
+                else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    uiState.supportedProtocols.forEach { protocol ->
+                        FilterChip(
+                            selected = uiState.selectedProtocol == protocol,
+                            onClick = { onSelectProtocol(protocol) },
+                            label = { Text(protocol.displayName) },
+                            enabled = !uiState.isUpgrading,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmpUpgradeCard(
+    packageSummary: SmpPackageSummary?,
+    mode: SmpUpgradeMode,
+    enabled: Boolean,
+    onSelectFile: () -> Unit,
+    onModeChange: (SmpUpgradeMode) -> Unit,
+    onStartUpgrade: () -> Unit,
+) {
+    val canStart = enabled && packageSummary != null && packageSummary.parseError == null &&
+        packageSummary.imageCount > 0
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("升级固件（Nordic SMP）", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (packageSummary != null && packageSummary.fileName.isNotEmpty()) {
+                Text(
+                    text = packageSummary.fileName,
+                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "大小: ${formatFileSize(packageSummary.fileSize)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (packageSummary.parseError == null && packageSummary.imageCount > 0) {
+                    Text(
+                        text = "镜像数量: ${packageSummary.imageCount} / 总大小: ${formatFileSize(packageSummary.totalBytes)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                Text(
+                    "请选择 Zephyr/NCS 构建产物 ZIP（含 manifest.json）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            packageSummary?.parseError?.let { error ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("升级模式", style = MaterialTheme.typography.labelMedium)
+            SmpUpgradeMode.entries.forEach { item ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
+                    RadioButton(
+                        selected = mode == item,
+                        onClick = { if (enabled) onModeChange(item) },
+                        enabled = enabled,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(item.label, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "升级期间将临时断开当前连接，完成后自动重连",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(onClick = onSelectFile, enabled = enabled, shape = ButtonShape) {
+                    Text("选择 ZIP", style = MaterialTheme.typography.labelMedium)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(onClick = onStartUpgrade, enabled = canStart, shape = ButtonShape) {
+                    Text("开始升级", style = MaterialTheme.typography.labelMedium)
+                }
+            }
         }
     }
 }

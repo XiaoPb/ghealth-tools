@@ -2,9 +2,12 @@ package com.ghealth.tools.feature.ota
 
 import com.ghealth.tools.ble.connection.DeviceRole
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
+import com.ghealth.tools.feature.ota.engine.OtaProtocol
 import com.ghealth.tools.feature.ota.engine.OtaState
 import com.ghealth.tools.feature.ota.model.DebugMenuAction
 import com.ghealth.tools.feature.ota.model.OtaConfig
+import com.ghealth.tools.feature.ota.model.SmpUpgradeMode
+import com.ghealth.tools.feature.ota.model.SmpUpgradeSettings
 
 data class ConnectedDeviceInfo(
     val address: String,
@@ -21,10 +24,33 @@ data class FirmwareFileInfo(
     val imgInfo: FirmwareInfo? = null,
 )
 
+/** SMP 固件包展示信息；原始镜像由 ViewModel 持有，不放进 UI state。 */
+data class SmpPackageSummary(
+    val fileName: String = "",
+    val fileSize: Long = 0,
+    val imageCount: Int = 0,
+    val totalBytes: Long = 0,
+    val manifestFormatVersion: Int = 0,
+    val parseError: String? = null,
+)
+
 data class OtaUiState(
     val availableDevices: List<ConnectedDeviceInfo> = emptyList(),
     val selectedDevice: ConnectedDeviceInfo? = null,
     val isDfuReady: Boolean = false,
+
+    val supportedProtocols: Set<OtaProtocol> = emptySet(),
+    val selectedProtocol: OtaProtocol? = null,
+    val isDetectingProtocol: Boolean = false,
+
+    val smpPackage: SmpPackageSummary? = null,
+    val smpMode: SmpUpgradeMode = SmpUpgradeMode.TEST_AND_CONFIRM,
+    val smpSettings: SmpUpgradeSettings = SmpUpgradeSettings(),
+
+    val otaState: OtaState = OtaState.IDLE,
+    val progressPercent: Float = 0f,
+    val statusText: String? = null,
+    val canCancelUpgrade: Boolean = false,
 
     val firmwareInfo: FirmwareInfo? = null,
     val isReadingFirmwareInfo: Boolean = false,
@@ -68,8 +94,6 @@ data class OtaUiState(
     val downloadData: ByteArray? = null,
     val downloadSavePath: String = "",
 
-    val otaState: OtaState = OtaState.IDLE,
-    val progressPercent: Float = 0f,
     val logLines: List<String> = emptyList(),
     val isUpgrading: Boolean = false,
 

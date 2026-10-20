@@ -29,6 +29,8 @@ data class OtaProgress(
     val progressPercent: Float = 0f,
     val logLines: List<String> = emptyList(),
     val errorMessage: String? = null,
+    /** 细阶段文案（Nordic SMP 使用；Goodix 保持为空）。 */
+    val statusText: String? = null,
 )
 
 enum class OtaState {
@@ -82,6 +84,23 @@ class OtaEngine @Inject constructor(private val connectionManager: BleConnection
     private var upgradeThread: Thread? = null
 
     val isDfuReady: Boolean get() = dfuProfile != null
+
+    /**
+     * 读取已连接设备的 GATT 服务并识别升级协议。
+     * 设备未连接或服务发现失败时抛出异常，由调用方转为页面提示。
+     */
+    suspend fun detectProtocols(address: String): Set<OtaProtocol> = withContext(Dispatchers.IO) {
+        val channel = connectionManager.getRawChannel(address)
+            ?: throw IllegalStateException("设备未连接")
+        val services = channel.discoverServices()
+        val protocols = OtaProtocolDetector.detect(services)
+        Timber.i("OTA 协议识别: $address -> $protocols")
+        _logEvents.tryEmit(
+            "已识别升级协议: " +
+                if (protocols.isEmpty()) "无" else protocols.joinToString { it.displayName }
+        )
+        protocols
+    }
 
     suspend fun bindDfuProfile(context: Context, address: String) = withContext(Dispatchers.IO) {
         unbindDfuProfile()

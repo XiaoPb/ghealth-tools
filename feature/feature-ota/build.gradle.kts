@@ -22,6 +22,7 @@ dependencies {
     implementation(project(":ble:ble-connection"))
     implementation(project(":external:libcom"))
     implementation(project(":external:libdfu2"))
+    implementation(libs.mcumgr.ble)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.navigation.compose)
@@ -36,4 +37,5 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(libs.mockk)
     testImplementation(libs.coroutines.test)
+    testImplementation("org.json:json:20240303")
 }

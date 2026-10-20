@@ -8,14 +8,20 @@ import com.ghealth.tools.ble.connection.BleConnectionManager
 import com.ghealth.tools.core.network.TokenManager
 import com.ghealth.tools.feature.ota.engine.DebugResult
 import com.ghealth.tools.feature.ota.engine.FirmwareInfo
+import com.ghealth.tools.feature.ota.engine.NordicSmpEngine
 import com.ghealth.tools.feature.ota.engine.OtaEngine
+import com.ghealth.tools.feature.ota.engine.OtaProgress
+import com.ghealth.tools.feature.ota.engine.OtaProtocol
 import com.ghealth.tools.feature.ota.engine.OtaState
+import com.ghealth.tools.feature.ota.engine.SmpZipPackage
 import com.ghealth.tools.feature.ota.model.DebugMenuAction
 import com.ghealth.tools.feature.ota.model.OtaConfig
+import com.ghealth.tools.feature.ota.model.SmpUpgradeMode
 import com.ghealth.tools.feature.ota.model.StorageType
 import com.ghealth.tools.feature.ota.model.UpgradeRegion
 import com.goodix.ble.gr.lib.dfu.v2.pojo.DfuFile
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.runtime.mcumgr.dfu.mcuboot.model.ImageSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +38,7 @@ import javax.inject.Inject
 class OtaViewModel @Inject constructor(
     application: Application,
     private val otaEngine: OtaEngine,
+    private val nordicSmpEngine: NordicSmpEngine,
     private val connectionManager: BleConnectionManager,
     private val tokenManager: TokenManager,
 ) : AndroidViewModel(application) {
@@ -43,29 +50,61 @@ class OtaViewModel @Inject constructor(
     private var upgradeJob: Job? = null
     private var hasAutoWrittenControlPoint = false
 
+    /** 已解析的 SMP 镜像；字节数组较大，仅由 ViewModel 持有。 */
+    private var smpImages: ImageSet? = null
+
     init {
         viewModelScope.launch {
             otaEngine.progress.collect { progress ->
-                _uiState.update {
-                    it.copy(
-                        otaState = progress.state,
-                        progressPercent = progress.progressPercent,
-                        logLines = progress.logLines,
-                        isUpgrading = when (progress.state) {
-                            OtaState.COMPLETED, OtaState.CANCELLED, OtaState.ERROR, OtaState.IDLE -> false
-                            else -> it.isUpgrading
-                        },
-                        successMessage = if (progress.state == OtaState.COMPLETED) "升级成功！" else it.successMessage,
-                        showResultDialog = progress.state == OtaState.COMPLETED || progress.state == OtaState.ERROR,
-                        errorMessage = progress.errorMessage ?: it.errorMessage,
-                    )
-                }
+                applyProgress(progress, canCancel = progress.state.isActive())
             }
         }
         viewModelScope.launch {
             otaEngine.logEvents.collect { log ->
                 _uiState.update { it.copy(logLines = it.logLines + log) }
             }
+        }
+        viewModelScope.launch {
+            nordicSmpEngine.progress.collect { progress ->
+                applyProgress(progress, canCancel = nordicSmpEngine.isUploadPhase.value)
+            }
+        }
+        viewModelScope.launch {
+            nordicSmpEngine.isUploadPhase.collect { canCancel ->
+                _uiState.update { it.copy(canCancelUpgrade = canCancel) }
+            }
+        }
+        viewModelScope.launch {
+            nordicSmpEngine.logEvents.collect { log ->
+                _uiState.update { it.copy(logLines = it.logLines + log) }
+            }
+        }
+    }
+
+    private fun applyProgress(progress: OtaProgress, canCancel: Boolean) {
+        _uiState.update {
+            it.copy(
+                otaState = progress.state,
+                progressPercent = progress.progressPercent,
+                statusText = progress.statusText,
+                canCancelUpgrade = canCancel,
+                isUpgrading = when (progress.state) {
+                    OtaState.COMPLETED, OtaState.CANCELLED, OtaState.ERROR -> false
+                    OtaState.IDLE -> it.isUpgrading
+                    else -> true
+                },
+                successMessage = if (progress.state == OtaState.COMPLETED) {
+                    if (it.selectedProtocol == OtaProtocol.NORDIC_SMP) {
+                        "升级成功，新固件已确认，正在重新连接设备"
+                    } else {
+                        "升级成功！"
+                    }
+                } else {
+                    it.successMessage
+                },
+                showResultDialog = progress.state == OtaState.COMPLETED || progress.state == OtaState.ERROR,
+                errorMessage = progress.errorMessage ?: it.errorMessage,
+            )
         }
     }
 
@@ -77,7 +116,89 @@ class OtaViewModel @Inject constructor(
                 selectedDevice = selectedDevice,
             )
         }
-        selectedDevice?.let { bindDfuProfile(it) }
+        selectedDevice?.let { detectProtocols(it) }
+    }
+
+    /** 进入页面后识别升级协议，并按识别结果绑定对应引擎。 */
+    private fun detectProtocols(device: ConnectedDeviceInfo) {
+        _uiState.update {
+            it.copy(
+                isDetectingProtocol = true,
+                supportedProtocols = emptySet(),
+                selectedProtocol = null,
+                isDfuReady = false,
+                errorMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            val protocols = try {
+                otaEngine.detectProtocols(device.address)
+            } catch (e: Throwable) {
+                Timber.e(e, "Failed to detect OTA protocols")
+                _uiState.update {
+                    it.copy(
+                        isDetectingProtocol = false,
+                        supportedProtocols = emptySet(),
+                        selectedProtocol = null,
+                        isDfuReady = false,
+                        errorMessage = "无法读取设备服务，请重新连接：${e.message}",
+                    )
+                }
+                return@launch
+            }
+
+            val preferred = when {
+                OtaProtocol.GOODIX_DFU in protocols -> OtaProtocol.GOODIX_DFU
+                OtaProtocol.NORDIC_SMP in protocols -> OtaProtocol.NORDIC_SMP
+                else -> null
+            }
+            _uiState.update {
+                it.copy(
+                    isDetectingProtocol = false,
+                    supportedProtocols = protocols,
+                    selectedProtocol = preferred,
+                    errorMessage = if (protocols.isEmpty()) {
+                        "未发现升级服务（Goodix DFU / Nordic SMP），该设备不支持 OTA"
+                    } else {
+                        null
+                    },
+                )
+            }
+            when (preferred) {
+                OtaProtocol.GOODIX_DFU -> bindDfuProfile(device)
+                OtaProtocol.NORDIC_SMP -> {
+                    otaEngine.unbindDfuProfile()
+                    _uiState.update { it.copy(isDfuReady = false) }
+                }
+                null -> {
+                    otaEngine.unbindDfuProfile()
+                    _uiState.update { it.copy(isDfuReady = false) }
+                }
+            }
+        }
+    }
+
+    fun selectProtocol(protocol: OtaProtocol) {
+        val state = _uiState.value
+        if (state.isUpgrading || state.selectedProtocol == protocol) return
+        if (protocol !in state.supportedProtocols) return
+
+        _uiState.update {
+            it.copy(
+                selectedProtocol = protocol,
+                firmwareInfo = null,
+                isDfuReady = false,
+                errorMessage = null,
+            )
+        }
+        val device = state.selectedDevice ?: return
+        when (protocol) {
+            OtaProtocol.GOODIX_DFU -> bindDfuProfile(device)
+            OtaProtocol.NORDIC_SMP -> {
+                otaEngine.unbindDfuProfile()
+                _uiState.update { it.copy(firmwareFile = FirmwareFileInfo()) }
+            }
+        }
     }
 
     private fun bindDfuProfile(device: ConnectedDeviceInfo) {
@@ -210,6 +331,103 @@ class OtaViewModel @Inject constructor(
         }
     }
 
+    fun selectSmpFile(uri: Uri) {
+        val fileName = readFileName(uri)
+        val fileSize = readFileSize(uri)
+        smpImages = null
+        _uiState.update {
+            it.copy(
+                smpPackage = SmpPackageSummary(fileName = fileName, fileSize = fileSize),
+                errorMessage = null,
+            )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val parsed = try {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IllegalStateException("无法读取文件")
+                SmpZipPackage.parse(bytes)
+            } catch (e: Throwable) {
+                Timber.e(e, "Failed to parse SMP package")
+                val message = e.message ?: "固件包解析失败"
+                _uiState.update {
+                    it.copy(
+                        smpPackage = SmpPackageSummary(
+                            fileName = fileName,
+                            fileSize = fileSize,
+                            parseError = message,
+                        ),
+                        errorMessage = message,
+                    )
+                }
+                return@launch
+            }
+            smpImages = parsed.images
+            _uiState.update {
+                it.copy(
+                    smpPackage = SmpPackageSummary(
+                        fileName = fileName,
+                        fileSize = fileSize,
+                        imageCount = parsed.info.imageCount,
+                        totalBytes = parsed.info.totalBytes,
+                        manifestFormatVersion = parsed.info.manifestFormatVersion,
+                    ),
+                    errorMessage = null,
+                )
+            }
+        }
+    }
+
+    fun updateSmpMode(mode: SmpUpgradeMode) {
+        _uiState.update { it.copy(smpMode = mode) }
+    }
+
+    fun startSmpUpgrade() {
+        val state = _uiState.value
+        val device = state.selectedDevice
+        val images = smpImages
+        when {
+            state.selectedProtocol != OtaProtocol.NORDIC_SMP -> {
+                _uiState.update { it.copy(errorMessage = "当前协议不是 Nordic SMP") }
+                return
+            }
+            state.isUpgrading -> return
+            device == null -> {
+                _uiState.update { it.copy(errorMessage = "请先选择设备") }
+                return
+            }
+            images == null || state.smpPackage?.parseError != null -> {
+                _uiState.update { it.copy(errorMessage = "请先选择有效的 Zephyr/NCS 固件包") }
+                return
+            }
+        }
+
+        // SMP 使用独立 transport，先释放 Goodix DFU 绑定。
+        otaEngine.unbindDfuProfile()
+        _uiState.update {
+            it.copy(
+                isUpgrading = true,
+                otaState = OtaState.PREPARING,
+                progressPercent = 0f,
+                statusText = "准备升级",
+                canCancelUpgrade = false,
+                logLines = emptyList(),
+                errorMessage = null,
+                successMessage = null,
+                showResultDialog = false,
+            )
+        }
+        upgradeJob = viewModelScope.launch {
+            nordicSmpEngine.upgrade(
+                context = context,
+                address = device.address,
+                deviceName = device.name,
+                images = images,
+                mode = state.smpMode,
+                settings = state.smpSettings,
+            )
+        }
+    }
+
     fun startFirmwareUpgrade() {
         val fileInfo = _uiState.value.firmwareFile
         if (!fileInfo.isValid) {
@@ -255,6 +473,8 @@ class OtaViewModel @Inject constructor(
             it.copy(
                 isUpgrading = true,
                 otaState = OtaState.PREPARING,
+                statusText = null,
+                canCancelUpgrade = true,
                 logLines = emptyList(),
                 errorMessage = null,
                 successMessage = null,
@@ -287,6 +507,12 @@ class OtaViewModel @Inject constructor(
     }
 
     fun cancelUpgrade() {
+        if (_uiState.value.selectedProtocol == OtaProtocol.NORDIC_SMP) {
+            // 仅上传阶段可取消，其余阶段由引擎忽略，避免误以为可回滚。
+            if (!_uiState.value.canCancelUpgrade) return
+            nordicSmpEngine.cancel()
+            return
+        }
         upgradeJob?.cancel()
         upgradeJob = null
         otaEngine.cancel()
@@ -295,10 +521,13 @@ class OtaViewModel @Inject constructor(
 
     fun resetState() {
         otaEngine.reset()
+        nordicSmpEngine.reset()
         _uiState.update {
             it.copy(
                 otaState = OtaState.IDLE,
                 progressPercent = 0f,
+                statusText = null,
+                canCancelUpgrade = false,
                 logLines = emptyList(),
                 errorMessage = null,
                 successMessage = null,
@@ -345,6 +574,7 @@ class OtaViewModel @Inject constructor(
      * - 失败仅记日志,不弹出错误,避免打扰用户。
      */
     fun autoWriteDefaultControlPoint() {
+        if (_uiState.value.selectedProtocol != OtaProtocol.GOODIX_DFU) return
         if (hasAutoWrittenControlPoint) return
         hasAutoWrittenControlPoint = true
         viewModelScope.launch {
@@ -654,8 +884,13 @@ class OtaViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        otaEngine.unbindDfuProfile()
         val device = _uiState.value.selectedDevice
+        if (_uiState.value.selectedProtocol == OtaProtocol.NORDIC_SMP) {
+            // SMP 的 transport 释放与连接恢复由升级协程 finally 统一完成。
+            nordicSmpEngine.close()
+            return
+        }
+        otaEngine.unbindDfuProfile()
         if (shouldReconnectOnCleared(tokenManager.isLoggedInSync(), device) && device != null) {
             connectionManager.reconnectInBackground(device.address, device.name)
         }
@@ -689,3 +924,8 @@ internal fun shouldReconnectOnCleared(
     isLoggedIn: Boolean,
     device: ConnectedDeviceInfo?
 ): Boolean = isLoggedIn && device != null
+
+private fun OtaState.isActive(): Boolean = when (this) {
+    OtaState.PREPARING, OtaState.CONNECTING, OtaState.TRANSFERRING, OtaState.VERIFYING -> true
+    else -> false
+}
