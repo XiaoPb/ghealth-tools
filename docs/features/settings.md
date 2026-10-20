@@ -284,4 +284,4 @@ UpdateDialog（下载方式单选，默认勾选"代理下载"）
 
 代理前缀常量位于 `UpdateDownloadLinks.PROXY_PREFIX`；代理地址基于 release APK asset 的 `browser_download_url` 拼接，无 APK asset 时回退 release 页面地址。忽略版本持久化于 `UpdatePreferences`（DataStore `update_prefs`，按 `versionCode` 精确匹配）：忽略后自动检查不再弹对应版本，出现更新的版本时重新弹窗；设置页手动检查始终显示。弹窗由 `MainActivity` 在 Compose 根层统一托管，覆盖所有页面。
 
-更新说明（release body）由 `MarkdownParser` / `MarkdownText` 以轻量 Markdown 渲染：支持标题、有序/无序列表、引用、代码块、分割线和行内粗体/斜体/代码/链接，不引入第三方 Markdown 依赖。说明区域高度上限 260dp 并支持上下滚动，保证下载方式选项与按钮始终可见；内部标记 `[force]` 在展示前被移除。
+更新说明（release body）由 `MarkdownParser` / `MarkdownText` 以轻量 Markdown 渲染：支持标题、有序/无序列表、引用、代码块、分割线、表格和行内粗体/斜体/代码/链接，不引入第三方 Markdown 依赖。说明区域按弹窗可用高度约束并支持上下滚动，下载方式选项与操作按钮固定，始终可见；内部标记 `[force]` 在展示前被移除。

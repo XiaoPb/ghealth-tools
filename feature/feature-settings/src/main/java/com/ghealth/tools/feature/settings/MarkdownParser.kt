@@ -19,18 +19,30 @@ internal sealed interface MarkdownBlock {
     data class CodeBlock(val code: String) : MarkdownBlock
 
     data object Divider : MarkdownBlock
+
+    data class Table(val header: List<String>, val rows: List<List<String>>) : MarkdownBlock
 }
 
 private val HEADING_REGEX = Regex("""^(#{1,6})\s+(.*)$""")
 private val BULLET_REGEX = Regex("""^(\s*)[-*+]\s+(.*)$""")
 private val ORDERED_REGEX = Regex("""^(\s*)(\d{1,3})[.)]\s+(.*)$""")
 private val DIVIDER_REGEX = Regex("""^(-{3,}|\*{3,}|_{3,})$""")
+private val TABLE_SEPARATOR_REGEX =
+    Regex("""^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$""")
 private const val INDENT_WIDTH = 2
+
+private fun isTableRow(line: String): Boolean {
+    val trimmed = line.trim()
+    return trimmed.length > 2 && trimmed.startsWith('|') && trimmed.endsWith('|')
+}
+
+private fun splitTableRow(line: String): List<String> =
+    line.trim().removePrefix("|").removeSuffix("|").split('|').map { it.trim() }
 
 /**
  * 将 Markdown 文本解析为块列表。
  *
- * 解析保持无状态、纯函数，便于单元测试；不处理 HTML、表格等复杂语法。
+ * 解析保持无状态、纯函数，便于单元测试；不处理 HTML 等复杂语法。
  */
 internal fun parseMarkdown(markdown: String): List<MarkdownBlock> {
     if (markdown.isBlank()) return emptyList()
@@ -52,6 +64,23 @@ internal fun parseMarkdown(markdown: String): List<MarkdownBlock> {
         val trimmed = line.trim()
         when {
             trimmed.isEmpty() -> flushParagraph()
+
+            isTableRow(line) &&
+                index + 1 < lines.size &&
+                TABLE_SEPARATOR_REGEX.matches(lines[index + 1].trim()) -> {
+                flushParagraph()
+                val header = splitTableRow(line)
+                val rows = mutableListOf<List<String>>()
+                var lastConsumed = index + 1
+                index += 2
+                while (index < lines.size && isTableRow(lines[index])) {
+                    rows += splitTableRow(lines[index])
+                    lastConsumed = index
+                    index++
+                }
+                blocks += MarkdownBlock.Table(header, rows)
+                index = lastConsumed
+            }
 
             trimmed.startsWith("```") -> {
                 flushParagraph()

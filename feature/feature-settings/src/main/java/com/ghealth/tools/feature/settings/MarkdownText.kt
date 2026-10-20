@@ -1,6 +1,7 @@
 package com.ghealth.tools.feature.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -192,8 +193,73 @@ internal fun MarkdownText(
                         .padding(8.dp),
                 )
 
+                is MarkdownBlock.Table -> MarkdownTableView(block, linkColor, codeBackground)
+
                 MarkdownBlock.Divider -> HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun MarkdownTableView(
+    table: MarkdownBlock.Table,
+    linkColor: Color,
+    codeBackground: Color,
+) {
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
+    val headerBackground = MaterialTheme.colorScheme.surfaceVariant
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, borderColor, RoundedCornerShape(4.dp)),
+    ) {
+        MarkdownTableRow(
+            cells = table.header,
+            isHeader = true,
+            headerBackground = headerBackground,
+            linkColor = linkColor,
+            codeBackground = codeBackground,
+        )
+        table.rows.forEach { row ->
+            HorizontalDivider(color = borderColor)
+            MarkdownTableRow(
+                cells = row,
+                isHeader = false,
+                headerBackground = headerBackground,
+                linkColor = linkColor,
+                codeBackground = codeBackground,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MarkdownTableRow(
+    cells: List<String>,
+    isHeader: Boolean,
+    headerBackground: Color,
+    linkColor: Color,
+    codeBackground: Color,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (isHeader) headerBackground else Color.Transparent),
+    ) {
+        cells.forEachIndexed { column, cell ->
+            Text(
+                text = buildInlineMarkdown(cell, linkColor, codeBackground),
+                style = if (isHeader) {
+                    MaterialTheme.typography.labelLarge
+                } else {
+                    MaterialTheme.typography.bodySmall
+                },
+                modifier = Modifier
+                    .weight(if (column == 0) 0.45f else 1f)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
         }
     }
 }
